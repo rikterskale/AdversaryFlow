@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.env
+*.log
+.DS_Store
+
+# Local ATT&CK snapshots can be large and should be pinned separately.
+data/enterprise-attack.json
+
+# Keep the canonical demo artifacts; ignore additional generated reports.
+reports/*
+!reports/apt29_scenario.md
+!reports/apt29_scenario.trace.json

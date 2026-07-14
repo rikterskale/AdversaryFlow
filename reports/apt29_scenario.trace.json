@@ -1,0 +1,488 @@
+{
+  "nodes": {
+    "actor_identity": {
+      "status": "success",
+      "schema": "ActorIdentityOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 2.9,
+          "raw_output": {
+            "canonical_name": "APT29",
+            "attack_id": null,
+            "aliases": [],
+            "confidence": "low",
+            "ambiguity_notes": [
+              "Demo mode does not perform live identity resolution."
+            ],
+            "queries": [
+              "APT29 ATT&CK techniques",
+              "APT29 detection guidance"
+            ]
+          }
+        }
+      ],
+      "parsed_output": {
+        "canonical_name": "APT29",
+        "attack_id": null,
+        "aliases": [],
+        "confidence": "low",
+        "ambiguity_notes": [
+          "Demo mode does not perform live identity resolution."
+        ],
+        "queries": [
+          "APT29 ATT&CK techniques",
+          "APT29 detection guidance"
+        ]
+      }
+    },
+    "attack_extraction": {
+      "status": "success",
+      "schema": "AttackExtractionOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 6.72,
+          "raw_output": {
+            "techniques": [],
+            "software": [],
+            "campaigns": [],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "techniques": [],
+        "software": [],
+        "campaigns": [],
+        "claims": []
+      }
+    },
+    "advisory_extraction": {
+      "status": "success",
+      "schema": "AdvisoryExtractionOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 6.1,
+          "raw_output": {
+            "observations": [],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "observations": [],
+        "claims": []
+      }
+    },
+    "detection_extraction": {
+      "status": "success",
+      "schema": "DetectionExtractionOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 5.19,
+          "raw_output": {
+            "detections": [],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "detections": [],
+        "claims": []
+      }
+    },
+    "dossier_synthesis": {
+      "status": "success",
+      "schema": "DossierSynthesisOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 5.47,
+          "raw_output": {
+            "techniques": [],
+            "software": [],
+            "campaigns": [],
+            "excluded_techniques": [],
+            "caveats": [
+              "Demo mode intentionally omits live-grounded actor claims.",
+              "Connect a local ATT&CK bundle and Brave search for production use."
+            ],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "techniques": [],
+        "software": [],
+        "campaigns": [],
+        "excluded_techniques": [],
+        "caveats": [
+          "Demo mode intentionally omits live-grounded actor claims.",
+          "Connect a local ATT&CK bundle and Brave search for production use."
+        ],
+        "claims": []
+      }
+    },
+    "environment_fit": {
+      "status": "success",
+      "schema": "EnvironmentFitOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 0.43,
+          "raw_output": {
+            "applicable_surfaces": [
+              "Windows",
+              "Linux",
+              "Microsoft 365"
+            ],
+            "excluded_surfaces": [],
+            "feasible_technique_ids": [],
+            "assumptions": [
+              "The exercise uses only designated test assets."
+            ]
+          }
+        }
+      ],
+      "parsed_output": {
+        "applicable_surfaces": [
+          "Windows",
+          "Linux",
+          "Microsoft 365"
+        ],
+        "excluded_surfaces": [],
+        "feasible_technique_ids": [],
+        "assumptions": [
+          "The exercise uses only designated test assets."
+        ]
+      }
+    },
+    "roe_translation": {
+      "status": "success",
+      "schema": "RoeTranslationOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 0.32,
+          "raw_output": {
+            "mandatory_controls": [
+              "No destructive execution",
+              "No real funds or live transactions",
+              "Phishing only against explicitly authorized recipients",
+              "Use safe equivalents when literal behavior conflicts with RoE"
+            ],
+            "prohibited_actions": [
+              "Production access",
+              "Credential collection from real users",
+              "Destructive execution",
+              "External data exfiltration"
+            ],
+            "safe_equivalents": [
+              "Use synthetic data and reversible test artifacts."
+            ],
+            "approval_requirements": [
+              "Exercise Director",
+              "System Owner"
+            ]
+          }
+        }
+      ],
+      "parsed_output": {
+        "mandatory_controls": [
+          "No destructive execution",
+          "No real funds or live transactions",
+          "Phishing only against explicitly authorized recipients",
+          "Use safe equivalents when literal behavior conflicts with RoE"
+        ],
+        "prohibited_actions": [
+          "Production access",
+          "Credential collection from real users",
+          "Destructive execution",
+          "External data exfiltration"
+        ],
+        "safe_equivalents": [
+          "Use synthetic data and reversible test artifacts."
+        ],
+        "approval_requirements": [
+          "Exercise Director",
+          "System Owner"
+        ]
+      }
+    },
+    "telemetry_mapping": {
+      "status": "success",
+      "schema": "TelemetryMappingOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 0.28,
+          "raw_output": {
+            "telemetry": [
+              "Identity authentication logs",
+              "Endpoint process and network telemetry",
+              "DNS and proxy logs",
+              "Cloud control-plane audit logs where applicable"
+            ],
+            "collection_gaps": [],
+            "evidence_requirements": [
+              "Preserve timestamps, alert IDs, and test identities."
+            ]
+          }
+        }
+      ],
+      "parsed_output": {
+        "telemetry": [
+          "Identity authentication logs",
+          "Endpoint process and network telemetry",
+          "DNS and proxy logs",
+          "Cloud control-plane audit logs where applicable"
+        ],
+        "collection_gaps": [],
+        "evidence_requirements": [
+          "Preserve timestamps, alert IDs, and test identities."
+        ]
+      }
+    },
+    "path_candidate_a": {
+      "status": "success",
+      "schema": "PathCandidateOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 6.03,
+          "raw_output": {
+            "name": "observable-first validation path",
+            "strategy": "Prioritize telemetry-rich, reversible actions.",
+            "steps": [
+              {
+                "phase": "Initial Access Validation",
+                "objective": "Validate an approved access-control path.",
+                "technique_ids": [],
+                "action_summary": "Use a pre-created exercise identity.",
+                "safe_equivalent": "Target only the designated test asset and synthetic content.",
+                "rationale": "Maximizes defender-visible identity evidence.",
+                "source_urls": []
+              }
+            ],
+            "tradeoffs": [
+              "Demo mode does not map actor-specific techniques."
+            ],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "name": "observable-first validation path",
+        "strategy": "Prioritize telemetry-rich, reversible actions.",
+        "steps": [
+          {
+            "phase": "Initial Access Validation",
+            "objective": "Validate an approved access-control path.",
+            "technique_ids": [],
+            "action_summary": "Use a pre-created exercise identity.",
+            "safe_equivalent": "Target only the designated test asset and synthetic content.",
+            "rationale": "Maximizes defender-visible identity evidence.",
+            "source_urls": []
+          }
+        ],
+        "tradeoffs": [
+          "Demo mode does not map actor-specific techniques."
+        ],
+        "claims": []
+      }
+    },
+    "path_candidate_b": {
+      "status": "success",
+      "schema": "PathCandidateOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 6.1,
+          "raw_output": {
+            "name": "identity-led validation path",
+            "strategy": "Prioritize authorization and identity-control testing.",
+            "steps": [
+              {
+                "phase": "Identity Boundary Validation",
+                "objective": "Validate authorization boundaries with an exercise account.",
+                "technique_ids": [],
+                "action_summary": "Attempt an approved access path using test credentials.",
+                "safe_equivalent": "Do not collect or reuse real credentials.",
+                "rationale": "Provides a materially different identity-led path.",
+                "source_urls": []
+              }
+            ],
+            "tradeoffs": [
+              "Demo mode does not map actor-specific techniques."
+            ],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "name": "identity-led validation path",
+        "strategy": "Prioritize authorization and identity-control testing.",
+        "steps": [
+          {
+            "phase": "Identity Boundary Validation",
+            "objective": "Validate authorization boundaries with an exercise account.",
+            "technique_ids": [],
+            "action_summary": "Attempt an approved access path using test credentials.",
+            "safe_equivalent": "Do not collect or reuse real credentials.",
+            "rationale": "Provides a materially different identity-led path.",
+            "source_urls": []
+          }
+        ],
+        "tradeoffs": [
+          "Demo mode does not map actor-specific techniques."
+        ],
+        "claims": []
+      }
+    },
+    "path_adjudication": {
+      "status": "success",
+      "schema": "PathAdjudicationOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 6.25,
+          "raw_output": {
+            "selected": "observable-first validation path",
+            "rationale": "It maximizes defender-visible evidence while remaining inside the supplied RoE.",
+            "sequence": [
+              {
+                "phase": "Initial Access Validation",
+                "objective": "Validate an approved access-control path.",
+                "technique_ids": [],
+                "action_summary": "Use a pre-created exercise identity.",
+                "safe_equivalent": "Target only the designated test asset and synthetic content.",
+                "rationale": "Maximizes defender-visible identity evidence.",
+                "source_urls": []
+              }
+            ],
+            "rejected_elements": [],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "selected": "observable-first validation path",
+        "rationale": "It maximizes defender-visible evidence while remaining inside the supplied RoE.",
+        "sequence": [
+          {
+            "phase": "Initial Access Validation",
+            "objective": "Validate an approved access-control path.",
+            "technique_ids": [],
+            "action_summary": "Use a pre-created exercise identity.",
+            "safe_equivalent": "Target only the designated test asset and synthetic content.",
+            "rationale": "Maximizes defender-visible identity evidence.",
+            "source_urls": []
+          }
+        ],
+        "rejected_elements": [],
+        "claims": []
+      }
+    },
+    "final_composition": {
+      "status": "success",
+      "schema": "FinalCompositionOutput",
+      "attempt_count": 1,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "success",
+          "duration_ms": 10.19,
+          "raw_output": {
+            "executive_summary": "This is a safe, threat-informed exercise shell for APT29. Demo mode validates orchestration and policy controls but does not assert live actor TTPs.",
+            "assumptions": [
+              "All actions occur in the approved exercise window.",
+              "Only designated test assets and exercise identities are used.",
+              "Synthetic data replaces production-sensitive data."
+            ],
+            "metrics": [
+              "Time to first high-confidence alert",
+              "Percentage of expected telemetry observed",
+              "Analyst time to correctly map activity to ATT&CK",
+              "Containment decision quality",
+              "Cleanup completion and evidence integrity"
+            ],
+            "attack_path": [],
+            "injects": [],
+            "claims": []
+          }
+        }
+      ],
+      "parsed_output": {
+        "executive_summary": "This is a safe, threat-informed exercise shell for APT29. Demo mode validates orchestration and policy controls but does not assert live actor TTPs.",
+        "assumptions": [
+          "All actions occur in the approved exercise window.",
+          "Only designated test assets and exercise identities are used.",
+          "Synthetic data replaces production-sensitive data."
+        ],
+        "metrics": [
+          "Time to first high-confidence alert",
+          "Percentage of expected telemetry observed",
+          "Analyst time to correctly map activity to ATT&CK",
+          "Containment decision quality",
+          "Cleanup completion and evidence integrity"
+        ],
+        "attack_path": [],
+        "injects": [],
+        "claims": []
+      }
+    }
+  },
+  "retrieval": {
+    "queries": [
+      "APT29 ATT&CK techniques",
+      "APT29 detection guidance"
+    ],
+    "search_errors": [],
+    "candidate_count": 0,
+    "validated_count": 0,
+    "document_count": 0,
+    "local_attack": {
+      "available": false,
+      "reason": "No local ATT&CK bundle configured"
+    }
+  },
+  "citation_graph": {
+    "sources": [],
+    "claims": [],
+    "edges": []
+  },
+  "factuality": {
+    "passed": true,
+    "score": 1.0,
+    "citation_coverage": 1.0,
+    "evaluated_claims": 0,
+    "supported_claims": 0,
+    "unsupported_claims": [],
+    "findings": []
+  }
+}

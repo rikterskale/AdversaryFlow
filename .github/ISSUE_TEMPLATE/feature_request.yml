@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a grounded, safety-preserving enhancement
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Explain the authorized training or engineering need.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: controls
+    attributes:
+      label: Safety, RoE, provenance, and factuality considerations
+      description: Explain how the proposal preserves or improves the existing controls.
+    validations:
+      required: true

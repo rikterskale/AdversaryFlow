@@ -1,0 +1,66 @@
+{
+  "actor": "APT29",
+  "objective": "Validate identity, endpoint, and data-access detections using a safe threat-informed exercise.",
+  "mode": "emulation_plan",
+  "environment": {
+    "name": "Isolated Purple Team Lab",
+    "platforms": [
+      "Windows",
+      "Linux",
+      "Microsoft 365"
+    ],
+    "identity_systems": [
+      "Microsoft Entra ID",
+      "Active Directory"
+    ],
+    "cloud_services": [
+      "Microsoft 365"
+    ],
+    "security_tools": [
+      "EDR",
+      "SIEM",
+      "Identity Protection"
+    ],
+    "crown_jewels": [
+      "Synthetic finance share",
+      "Canary executive mailbox"
+    ],
+    "designated_test_assets": [
+      "LAB-WIN-01"
+    ],
+    "notes": "No production connectivity. Synthetic identities and data only."
+  },
+  "roe": {
+    "authorized_assets": [
+      "LAB-WIN-01"
+    ],
+    "authorized_users": [
+      "exercise-user@example.invalid"
+    ],
+    "authorized_phishing_recipients": [
+      "exercise-user@example.invalid"
+    ],
+    "prohibited_actions": [
+      "Production access",
+      "Credential collection from real users",
+      "Destructive execution",
+      "External data exfiltration"
+    ],
+    "no_real_funds_or_transactions": true,
+    "no_destructive_execution": true,
+    "real_brand_impersonation_requires_written_consent": true,
+    "required_approvals": [
+      "Exercise Director",
+      "System Owner"
+    ],
+    "exercise_window": "Approved four-hour lab window"
+  },
+  "post_2020_tradecraft_only": true,
+  "minimum_source_date": "2020-01-01",
+  "max_attack_path_steps": 8,
+  "output_audience": [
+    "red_team",
+    "blue_team",
+    "exercise_control"
+  ]
+}

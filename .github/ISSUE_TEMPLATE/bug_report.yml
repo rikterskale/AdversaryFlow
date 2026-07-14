@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible defect in AdversaryFlow
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, proprietary targets, live access tokens, or sensitive assessment evidence.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.2.1 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Execution mode
+      options:
+        - Deterministic demo
+        - Production model with live search
+        - Production model without live search
+        - Tests or development tooling
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide a sanitized minimal reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or trace excerpt
+      render: shell
