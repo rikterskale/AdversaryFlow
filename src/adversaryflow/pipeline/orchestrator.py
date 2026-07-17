@@ -522,30 +522,6 @@ class ScenarioOrchestrator:
         )
 
     @staticmethod
-    def _filter_recent_sources(
-        documents: list[Any], request: ScenarioRequest
-    ) -> tuple[list[Any], list[str]]:
-        if not request.post_2020_tradecraft_only:
-            return documents, []
-        accepted = []
-        excluded = []
-        for document in documents:
-            published_at = document.source.published_at
-            if published_at is not None and published_at >= request.minimum_source_date:
-                accepted.append(document)
-            else:
-                excluded.append(str(document.source.final_url or document.source.url))
-        return accepted, excluded
-
-    @staticmethod
-    def _filter_recent_techniques(
-        techniques: list[TechniqueEvidence], request: ScenarioRequest
-    ) -> list[TechniqueEvidence]:
-        if not request.post_2020_tradecraft_only:
-            return techniques
-        return [technique for technique in techniques if technique.observed_after_2020 is True]
-
-    @staticmethod
     def _build_identity(
         identity: ActorIdentityOutput,
         local_attack: dict[str, Any],
