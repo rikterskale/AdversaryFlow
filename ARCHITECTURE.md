@@ -18,7 +18,9 @@ The production search path has four controls:
 
 1. Query-time `site:` restrictions generated from the configured domain allowlist.
 2. Post-search HTTPS and hostname allowlist filtering.
-3. Redirect-by-redirect scheme, hostname, and public-IP validation.
+3. Redirect-by-redirect scheme and hostname validation, followed by a single public-IP
+   resolution whose selected address is pinned for the connection while the original host
+   remains the TLS SNI and certificate-validation name.
 4. Response-size limits, content hashing, extraction status, and content-type handling.
 
 Search syntax is never treated as a security boundary.
@@ -53,7 +55,7 @@ The citation graph contains:
 
 - `CitationSource` nodes for validated documents;
 - `CitationClaim` nodes for extracted and final claims;
-- `CitationEdge` relationships containing the supporting excerpt, chunk ID, support method, and lexical support score.
+- `CitationEdge` relationships containing the supporting excerpt, chunk ID, support method, and lexical evidence-support score.
 
 Supported methods are:
 
@@ -71,7 +73,7 @@ The deterministic evaluator audits:
 - every technique in the synthesized dossier;
 - every technique ID retained in the selected exercise path.
 
-A claim is supported when it has a validated citation edge above the configured support threshold or an exact technique relationship in the pinned ATT&CK bundle. The evaluator emits per-claim findings, support score, citation coverage, supported count, unsupported list, and final pass/fail.
+A claim is supported when it has a validated citation edge above the configured lexical evidence-support threshold or an exact technique relationship in the pinned ATT&CK bundle. This is an anti-hallucination evidence-link check, not semantic entailment verification. The evaluator emits per-claim findings, support score, citation coverage, supported count, unsupported list, and final pass/fail. Runs with no factual claims are reported as not applicable rather than as 100% verified.
 
 By default, unsupported actor claims block report generation. This behavior can be changed for research runs with `ADVERSARYFLOW_FAIL_ON_FACTUALITY=false`, but the failed result remains visible in the report and trace.
 
@@ -82,7 +84,7 @@ Prompt constraints are guidance, not the security boundary. Enforcement remains 
 1. request and RoE validation;
 2. retrieval allowlist and SSRF resistance;
 3. strict node schemas;
-4. deterministic safety policy;
+4. deterministic rule-based safety policy;
 5. safe-equivalent requirements;
 6. explicit stop conditions and cleanup;
 7. claim-level factuality evaluation;
@@ -98,6 +100,10 @@ Individual query failures are recorded and generation can continue with other li
 ### Source failure
 
 Invalid, oversized, private-address, redirect-escape, unreachable, or unextractable sources are excluded from model grounding. Unused failures are warnings; cited-source failures cause source-validation or factuality failure.
+
+When `post_2020_tradecraft_only` is enabled, sources without an extractable publication date or
+published before `minimum_source_date` are excluded from grounding. Techniques must explicitly be
+marked as observed after 2020 before they are retained.
 
 ### Model failure
 

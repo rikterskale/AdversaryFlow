@@ -9,12 +9,15 @@ def render_markdown(pack: ScenarioPack) -> str:
     lines.append("")
     lines.append(f"- Generated: {pack.generated_at.isoformat()}")
     lines.append(f"- Actor input: {pack.request.actor}")
+    lines.append(f"- Scenario kind: {pack.request.scenario_kind.value}")
     lines.append(f"- Exercise mode: {pack.request.mode.value}")
     lines.append(f"- Safety gate: {'PASS' if pack.qa.safety_gate_passed else 'FAIL'}")
-    lines.append(
-        f"- Factuality gate: {'PASS' if pack.qa.factuality_passed else 'FAIL'} "
-        f"({pack.qa.factuality_score:.0%})"
+    factuality_status = (
+        f"{'PASS' if pack.qa.factuality_passed else 'FAIL'} ({pack.qa.factuality_score:.0%})"
+        if pack.factuality.evaluated
+        else "N/A (no factual claims evaluated)"
     )
+    lines.append(f"- Claim-evidence gate: {factuality_status}")
     lines.append(f"- Citation coverage: {pack.qa.citation_coverage:.0%}")
     lines.append(f"- Source validation: {'PASS' if pack.qa.source_validation_passed else 'FAIL'}")
     lines.append(f"- Model calls: {pack.qa.model_call_count}")
@@ -22,6 +25,9 @@ def render_markdown(pack: ScenarioPack) -> str:
     lines.append("")
 
     lines.extend(["## Executive Summary", "", pack.executive_summary, ""])
+
+    if pack.request.ad_hoc_scenario:
+        lines.extend(["## Ad Hoc Scenario Premise", "", pack.request.ad_hoc_scenario, ""])
 
     lines.extend(["## Actor and Grounding Status", ""])
     lines.append(f"- Canonical name: {pack.dossier.identity.canonical_name}")
@@ -65,7 +71,12 @@ def render_markdown(pack: ScenarioPack) -> str:
         lines.append("")
         lines.append(f"**Objective:** {step.objective}")
         lines.append("")
-        lines.append(f"**ATT&CK:** {', '.join(step.technique_ids) or 'Not actor-mapped in demo'}")
+        fallback = (
+            "Not applicable for ad hoc scenario"
+            if pack.request.is_ad_hoc
+            else "Not actor-mapped in demo"
+        )
+        lines.append(f"**ATT&CK:** {', '.join(step.technique_ids) or fallback}")
         lines.append("")
         lines.append(f"**Action summary:** {step.action_summary}")
         lines.append("")
@@ -140,9 +151,13 @@ def render_markdown(pack: ScenarioPack) -> str:
                     lines.append(f"  - Excerpt: {edge.excerpt}")
             lines.append("")
 
-    lines.extend(["## Factuality Evaluation", ""])
-    lines.append(f"- Result: {'PASS' if pack.factuality.passed else 'FAIL'}")
-    lines.append(f"- Score: {pack.factuality.score:.0%}")
+    lines.extend(["## Claim-Evidence Support Evaluation", ""])
+    lines.append(
+        f"- Result: {'PASS' if pack.factuality.passed else 'FAIL'}"
+        if pack.factuality.evaluated
+        else "- Result: N/A (no factual claims evaluated)"
+    )
+    lines.append(f"- Lexical evidence-support score: {pack.factuality.score:.0%}")
     lines.append(f"- Citation coverage: {pack.factuality.citation_coverage:.0%}")
     lines.append(f"- Claims evaluated: {pack.factuality.evaluated_claims}")
     lines.append(f"- Claims supported: {pack.factuality.supported_claims}")

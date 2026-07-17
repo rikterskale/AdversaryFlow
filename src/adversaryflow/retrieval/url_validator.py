@@ -5,7 +5,9 @@ import hashlib
 import ipaddress
 import socket
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlparse
+from datetime import date
+from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -33,16 +35,17 @@ class URLValidator:
         self.max_bytes = max_bytes
         self.transport = transport
 
-    async def _host_is_public(self, host: str) -> bool:
+    async def _resolve_public_ips(self, host: str) -> list[str]:
         if not host:
-            return False
+            return []
         loop = asyncio.get_running_loop()
         infos = await loop.run_in_executor(
             None,
             lambda: socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM),
         )
         if not infos:
-            return False
+            return []
+        resolved: list[str] = []
         for info in infos:
             ip = ipaddress.ip_address(info[4][0])
             if (
@@ -53,8 +56,26 @@ class URLValidator:
                 or ip.is_reserved
                 or ip.is_unspecified
             ):
-                return False
-        return True
+                return []
+            if str(ip) not in resolved:
+                resolved.append(str(ip))
+        return resolved
+
+    @staticmethod
+    def _pinned_url(url: str, ip: str) -> str:
+        parsed = urlparse(url)
+        address = f"[{ip}]" if ":" in ip else ip
+        netloc = address if parsed.port is None else f"{address}:{parsed.port}"
+        return urlunparse(parsed._replace(netloc=netloc))
+
+    @staticmethod
+    def _header_date(value: str | None) -> date | None:
+        if not value:
+            return None
+        try:
+            return parsedate_to_datetime(value).date()
+        except (TypeError, ValueError, IndexError):
+            return None
 
     async def fetch(self, record: SourceRecord) -> FetchResult:
         current_url = str(record.url)
@@ -63,6 +84,7 @@ class URLValidator:
             async with httpx.AsyncClient(
                 timeout=timeout,
                 follow_redirects=False,
+                trust_env=False,
                 headers={"User-Agent": "AdversaryFlow-SourceValidator/0.2.1"},
                 transport=self.transport,
             ) as client:
@@ -70,9 +92,22 @@ class URLValidator:
                     if not url_is_allowlisted(current_url, self.allowed_domains):
                         raise ValueError("URL or redirect is outside the allowlist")
                     parsed = urlparse(current_url)
-                    if not await self._host_is_public(parsed.hostname or ""):
+                    hostname = parsed.hostname or ""
+                    resolved_ips = await self._resolve_public_ips(hostname)
+                    if not resolved_ips:
                         raise ValueError("Host resolved to a non-public IP")
-                    async with client.stream("GET", current_url) as response:
+                    # Connect to the address validated above rather than resolving the
+                    # hostname again inside httpx. Preserve Host and SNI so HTTPS
+                    # certificate verification remains bound to the original hostname.
+                    host_header = hostname
+                    if parsed.port is not None:
+                        host_header = f"{host_header}:{parsed.port}"
+                    async with client.stream(
+                        "GET",
+                        self._pinned_url(current_url, resolved_ips[0]),
+                        headers={"Host": host_header},
+                        extensions={"sni_hostname": hostname},
+                    ) as response:
                         if response.is_redirect:
                             location = response.headers.get("location")
                             if not location:
@@ -95,6 +130,8 @@ class URLValidator:
                                 "status_code": response.status_code,
                                 "content_type": content_type or None,
                                 "content_sha256": digest.hexdigest(),
+                                "published_at": record.published_at
+                                or self._header_date(response.headers.get("last-modified")),
                                 "validation_error": None,
                             }
                         )

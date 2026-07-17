@@ -37,22 +37,30 @@ def node_prompt(node_name: str, schema: type[SchemaT]) -> str:
             "Build a claim-level cited dossier from the supplied evidence graph. Exclude or mark "
             "anything that lacks support."
         ),
-        "environment_fit": "Map supported behaviors to the supplied environment without inventing access.",
+        "environment_fit": (
+            "Map supported behaviors to the supplied environment without inventing access. "
+            "For ad hoc scenarios, use the supplied scenario premise rather than actor TTPs."
+        ),
         "roe_translation": "Translate literal adversary behavior into enforceable safe exercise equivalents.",
         "telemetry_mapping": "Map steps to expected telemetry, collection prerequisites, and evidence.",
         "path_candidate_a": (
             "Create a realistic candidate path optimized for observability and learning value. "
-            "Use only dossier-supported techniques."
+            "For TTP-based scenarios, use only dossier-supported techniques. For ad hoc "
+            "scenarios, do not force ATT&CK mappings; leave technique_ids empty unless the "
+            "request explicitly asks for a technique mapping."
         ),
         "path_candidate_b": (
-            "Create a materially different candidate path using only dossier-supported behavior."
+            "Create a materially different candidate path. For TTP-based scenarios, use only "
+            "dossier-supported behavior; for ad hoc scenarios, use the supplied premise and RoE."
         ),
         "path_adjudication": (
             "Select or merge candidates based on evidence, RoE, environment fit, and safety."
         ),
         "final_composition": (
             "Produce the final structured scenario. Include a claims array for every actor-specific "
-            "statement retained in the final output so deterministic factuality evaluation can audit it."
+            "statement retained in the final output so deterministic factuality evaluation can audit it. "
+            "For ad hoc scenarios, avoid actor-specific claims and ATT&CK/TTP assertions unless "
+            "supported evidence was supplied."
         ),
     }
     schema_json = json.dumps(schema.model_json_schema(), ensure_ascii=False, separators=(",", ":"))

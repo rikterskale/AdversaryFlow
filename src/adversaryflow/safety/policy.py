@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from adversaryflow.models import (
@@ -18,7 +19,7 @@ class SafetyDecision:
 
 
 class SafetyPolicy:
-    """Deterministic final gate. Prompts are guidance; this policy is enforcement."""
+    """Deterministic rule-based gate. Prompts are guidance, not enforcement."""
 
     destructive_markers = {
         "encrypt production files",
@@ -30,6 +31,24 @@ class SafetyPolicy:
         "execute live transaction",
         "exfiltrate real customer data",
     }
+    _destructive_action = re.compile(
+        r"\b(?:delete|destroy|erase|wipe|encrypt|ransom|corrupt|sabotage|transfer)\b"
+    )
+    _destructive_target = re.compile(
+        r"\b(?:disk|drive|data|database|backup|file(?:share)?|production|prod|funds?|transaction)\b"
+    )
+    _disable_impact = re.compile(
+        r"\b(?:render|make|leave)\b.{0,40}\b(?:unusable|unavailable|inoperable)\b"
+    )
+
+    @classmethod
+    def _contains_destructive_intent(cls, text: str) -> bool:
+        if any(marker in text for marker in cls.destructive_markers):
+            return True
+        return bool(
+            cls._disable_impact.search(text)
+            or (cls._destructive_action.search(text) and cls._destructive_target.search(text))
+        )
 
     def evaluate_request(self, request: ScenarioRequest) -> SafetyDecision:
         blocked: list[str] = []
@@ -59,7 +78,7 @@ class SafetyPolicy:
             combined = f"{step.action_summary} {step.safe_equivalent}".casefold()
             if step.safety_classification == SafetyClassification.PROHIBITED:
                 blocked.append(f"{label} is classified as prohibited")
-            if any(marker in combined for marker in self.destructive_markers):
+            if self._contains_destructive_intent(combined):
                 blocked.append(f"{label} contains a blocked destructive or financial action")
             if request.mode != ExerciseMode.TABLETOP:
                 if not step.designated_test_asset:

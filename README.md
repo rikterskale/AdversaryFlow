@@ -9,21 +9,21 @@ Version 0.2.1 is the GitHub-ready AdversaryFlow release, including the renamed p
 The production-grounding slice is now implemented:
 
 - real Brave Web Search adapter with query-time domain restrictions and mandatory post-result allowlist filtering;
-- source fetching with HTTPS enforcement, redirect-by-redirect allowlist checks, DNS/IP checks, response-size limits, content hashes, and extraction status;
+- source fetching with HTTPS enforcement, redirect-by-redirect allowlist checks, DNS/IP checks with connection pinning, response-size limits, content hashes, publication-date extraction, and extraction status;
 - HTML, text, JSON, XML, and PDF source extraction;
 - claim-level source excerpts and a claim-to-source citation graph;
 - a strict Pydantic response schema for every one of the 12 model nodes;
 - bounded provider retries and schema-repair calls with complete attempt traces;
-- deterministic final factuality evaluation with citation coverage and unsupported-claim blocking;
+- deterministic claim-evidence support validation with citation coverage and unsupported-claim blocking;
 - richer Markdown reporting for dossier evidence, claim edges, factuality findings, retries, and source manifests.
 
 ## Design principles
 
 - **Grounded before generated:** scenario construction depends on a documented TTP dossier.
 - **Hybrid retrieval:** stable ATT&CK data can be pinned locally; fast-moving detections, advisories, and tool documentation are retrieved live.
-- **Prompt guidance plus hard controls:** cached philosophy and operational constraints are backed by typed schemas, deterministic RoE checks, safety linting, source provenance, URL validation, factuality evaluation, and human approval gates.
+- **Prompt guidance plus hard controls:** cached philosophy and operational constraints are backed by typed schemas, deterministic RoE checks, rule-based safety checks, source provenance, URL validation, claim-evidence support validation, and human approval gates.
 - **Safe equivalence:** when an observed adversary behavior cannot be performed safely, the system produces a proof-of-capability simulation on a designated test asset.
-- **No silent invention:** unsupported final actor claims fail the factuality gate by default.
+- **No silent invention:** unsupported final actor claims fail the claim-evidence gate by default. This lexical evidence-link check is not semantic entailment verification.
 - **No dead citations:** cited sources must be allowlisted, fetched, hashed, extracted, and connected to the exact claim they support.
 
 ## Twelve-call orchestration DAG
@@ -65,7 +65,20 @@ Call 12: final structured composition
  deterministic safety + factuality gates -> rendering
 ```
 
-Calls 2–4, 6–8, and 9–10 run concurrently. A successful run remains exactly 12 model calls. Additional calls occur only when a provider error or schema-validation failure triggers the bounded repair loop.
+Calls 2–4, 6–8, and 9–10 run concurrently. A successful TTP-based run remains exactly 12 model calls. Additional calls occur only when a provider error or schema-validation failure triggers the bounded repair loop.
+
+## Ad hoc scenarios
+
+AdversaryFlow can also generate authorized red team scenarios that are not tied to a threat actor or ATT&CK TTP dossier. Set `scenario_kind` to `ad_hoc` and provide `ad_hoc_scenario`; the orchestrator skips actor identity resolution, live source retrieval, ATT&CK extraction, and dossier synthesis while keeping RoE translation, telemetry mapping, candidate-path adjudication, safety checks, factuality checks for any emitted claims, trace output, and Markdown rendering.
+
+```bash
+adversaryflow generate \
+  --request examples/ad_hoc_request.json \
+  --output reports/ad_hoc_scenario.md \
+  --demo
+```
+
+Ad hoc reports intentionally show no grounded TTP dossier unless you explicitly include supported technique mappings in the request.
 
 ## Quick start: deterministic demo
 
@@ -80,7 +93,7 @@ adversaryflow generate \
   --demo
 ```
 
-Demo mode validates the 12-node DAG, strict schemas, trace generation, safety policy, factuality evaluator, and renderer without external services. It intentionally emits no live actor claims.
+Demo mode validates the 12-node DAG, strict schemas, trace generation, safety policy, claim-evidence evaluator, and renderer without external services. It intentionally emits no live actor claims, so its factuality status is reported as N/A rather than 100% verified.
 
 Run tests and lint:
 

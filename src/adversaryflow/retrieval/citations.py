@@ -38,11 +38,10 @@ def lexical_support(claim: GroundedClaim, text: str) -> float:
     claim_tokens = _tokens(claim.text)
     if not claim_tokens:
         return 0.0
-    text_folded = text.casefold()
-    technique_hits = sum(1 for item in claim.technique_ids if item.casefold() in text_folded)
     overlap = len(claim_tokens & _tokens(text)) / len(claim_tokens)
-    boost = min(0.35, technique_hits * 0.2)
-    return min(1.0, overlap + boost)
+    # Mentioning a technique ID does not, by itself, support the surrounding
+    # proposition. Exact ATT&CK relationships are evaluated separately.
+    return overlap
 
 
 class CitationGraphBuilder:

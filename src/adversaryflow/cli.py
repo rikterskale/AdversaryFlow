@@ -99,10 +99,14 @@ def generate(
         )
         console.print(f"[green]Generated[/green] {output}")
         console.print(f"[green]Trace[/green] {trace_path}")
+        factuality_status = (
+            f"{'PASS' if pack.qa.factuality_passed else 'FAIL'} ({pack.qa.factuality_score:.0%})"
+            if pack.factuality.evaluated
+            else "N/A (no factual claims evaluated)"
+        )
         console.print(
             f"Safety: {'PASS' if pack.qa.safety_gate_passed else 'FAIL'} | "
-            f"Factuality: {'PASS' if pack.qa.factuality_passed else 'FAIL'} "
-            f"({pack.qa.factuality_score:.0%}) | "
+            f"Claim evidence: {factuality_status} | "
             f"Model calls: {pack.qa.model_call_count} "
             f"(repairs: {pack.qa.repair_call_count})"
         )

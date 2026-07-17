@@ -17,6 +17,11 @@ class ExerciseMode(str, Enum):
     CONTROLLED_VALIDATION = "controlled_validation"
 
 
+class ScenarioKind(str, Enum):
+    TTP_BASED = "ttp_based"
+    AD_HOC = "ad_hoc"
+
+
 class SafetyClassification(str, Enum):
     SAFE_SIMULATION = "safe_simulation"
     CONTROLLED_EMULATION = "controlled_emulation"
@@ -61,6 +66,15 @@ class RulesOfEngagement(StrictModel):
 class ScenarioRequest(StrictModel):
     actor: str = Field(min_length=2)
     objective: str = Field(min_length=5)
+    scenario_kind: ScenarioKind = ScenarioKind.TTP_BASED
+    ad_hoc_scenario: str | None = Field(
+        default=None,
+        min_length=10,
+        description=(
+            "Free-form scenario premise for ad hoc exercises that should not be grounded "
+            "in a threat actor or ATT&CK TTP dossier."
+        ),
+    )
     mode: ExerciseMode = ExerciseMode.EMULATION_PLAN
     environment: EnvironmentProfile
     roe: RulesOfEngagement
@@ -72,12 +86,18 @@ class ScenarioRequest(StrictModel):
     )
 
     @model_validator(mode="after")
-    def require_test_asset(self) -> "ScenarioRequest":
+    def validate_request_shape(self) -> "ScenarioRequest":
         if self.mode != ExerciseMode.TABLETOP and not self.environment.designated_test_assets:
             raise ValueError(
                 "At least one designated test asset is required for non-tabletop modes"
             )
+        if self.scenario_kind == ScenarioKind.AD_HOC and not self.ad_hoc_scenario:
+            raise ValueError("ad_hoc_scenario is required when scenario_kind is ad_hoc")
         return self
+
+    @property
+    def is_ad_hoc(self) -> bool:
+        return self.scenario_kind == ScenarioKind.AD_HOC
 
 
 class SourceRecord(StrictModel):
@@ -260,9 +280,16 @@ class FactualityFinding(StrictModel):
 
 
 class FactualityResult(StrictModel):
+    """Result of claim-evidence support validation.
+
+    A run with no factual claims is not a successful verification; it is not
+    applicable to this gate.
+    """
+
+    evaluated: bool = False
     passed: bool = True
-    score: float = Field(default=1.0, ge=0.0, le=1.0)
-    citation_coverage: float = Field(default=1.0, ge=0.0, le=1.0)
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    citation_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
     evaluated_claims: int = 0
     supported_claims: int = 0
     unsupported_claims: list[str] = Field(default_factory=list)
