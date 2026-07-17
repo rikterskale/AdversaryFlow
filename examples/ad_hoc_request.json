@@ -1,0 +1,27 @@
+{
+  "actor": "Ad Hoc Exercise",
+  "objective": "Validate response to a suspicious insider-style data access event using synthetic records.",
+  "scenario_kind": "ad_hoc",
+  "ad_hoc_scenario": "A contractor exercise identity accesses an unusual volume of synthetic customer records from an approved lab workstation, triggering identity, endpoint, and data-loss monitoring without using actor-specific TTPs.",
+  "mode": "emulation_plan",
+  "environment": {
+    "name": "Insider Risk Lab",
+    "platforms": ["Windows", "SaaS CRM"],
+    "identity_systems": ["Microsoft Entra ID"],
+    "security_tools": ["SIEM", "EDR", "DLP"],
+    "crown_jewels": ["Synthetic customer record set"],
+    "designated_test_assets": ["LAB-WIN-02"],
+    "notes": "Synthetic records and exercise identities only."
+  },
+  "roe": {
+    "authorized_assets": ["LAB-WIN-02"],
+    "authorized_users": ["contractor-exercise@example.invalid"],
+    "prohibited_actions": ["Production access", "Real customer data access", "Destructive execution"],
+    "no_real_funds_or_transactions": true,
+    "no_destructive_execution": true,
+    "required_approvals": ["Exercise Director", "Data Owner"],
+    "exercise_window": "Approved two-hour lab window"
+  },
+  "max_attack_path_steps": 6,
+  "output_audience": ["red_team", "blue_team", "exercise_control"]
+}

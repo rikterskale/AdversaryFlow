@@ -65,7 +65,20 @@ Call 12: final structured composition
  deterministic safety + factuality gates -> rendering
 ```
 
-Calls 2–4, 6–8, and 9–10 run concurrently. A successful run remains exactly 12 model calls. Additional calls occur only when a provider error or schema-validation failure triggers the bounded repair loop.
+Calls 2–4, 6–8, and 9–10 run concurrently. A successful TTP-based run remains exactly 12 model calls. Additional calls occur only when a provider error or schema-validation failure triggers the bounded repair loop.
+
+## Ad hoc scenarios
+
+AdversaryFlow can also generate authorized red team scenarios that are not tied to a threat actor or ATT&CK TTP dossier. Set `scenario_kind` to `ad_hoc` and provide `ad_hoc_scenario`; the orchestrator skips actor identity resolution, live source retrieval, ATT&CK extraction, and dossier synthesis while keeping RoE translation, telemetry mapping, candidate-path adjudication, safety checks, factuality checks for any emitted claims, trace output, and Markdown rendering.
+
+```bash
+adversaryflow generate \
+  --request examples/ad_hoc_request.json \
+  --output reports/ad_hoc_scenario.md \
+  --demo
+```
+
+Ad hoc reports intentionally show no grounded TTP dossier unless you explicitly include supported technique mappings in the request.
 
 ## Quick start: deterministic demo
 

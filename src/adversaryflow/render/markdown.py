@@ -9,6 +9,7 @@ def render_markdown(pack: ScenarioPack) -> str:
     lines.append("")
     lines.append(f"- Generated: {pack.generated_at.isoformat()}")
     lines.append(f"- Actor input: {pack.request.actor}")
+    lines.append(f"- Scenario kind: {pack.request.scenario_kind.value}")
     lines.append(f"- Exercise mode: {pack.request.mode.value}")
     lines.append(f"- Safety gate: {'PASS' if pack.qa.safety_gate_passed else 'FAIL'}")
     lines.append(
@@ -22,6 +23,9 @@ def render_markdown(pack: ScenarioPack) -> str:
     lines.append("")
 
     lines.extend(["## Executive Summary", "", pack.executive_summary, ""])
+
+    if pack.request.ad_hoc_scenario:
+        lines.extend(["## Ad Hoc Scenario Premise", "", pack.request.ad_hoc_scenario, ""])
 
     lines.extend(["## Actor and Grounding Status", ""])
     lines.append(f"- Canonical name: {pack.dossier.identity.canonical_name}")
@@ -65,7 +69,12 @@ def render_markdown(pack: ScenarioPack) -> str:
         lines.append("")
         lines.append(f"**Objective:** {step.objective}")
         lines.append("")
-        lines.append(f"**ATT&CK:** {', '.join(step.technique_ids) or 'Not actor-mapped in demo'}")
+        fallback = (
+            "Not applicable for ad hoc scenario"
+            if pack.request.is_ad_hoc
+            else "Not actor-mapped in demo"
+        )
+        lines.append(f"**ATT&CK:** {', '.join(step.technique_ids) or fallback}")
         lines.append("")
         lines.append(f"**Action summary:** {step.action_summary}")
         lines.append("")
