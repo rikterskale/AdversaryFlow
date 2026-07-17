@@ -15,6 +15,7 @@ from adversaryflow.models import (
     ScenarioRequest,
     SourceRecord,
     TTPDossier,
+    CitationGraph,
     TechniqueEvidence,
 )
 from adversaryflow.pipeline.factuality import FactualityEvaluator
@@ -125,6 +126,10 @@ class ScenarioOrchestrator:
             )
 
         runner = NodeRunner(llm=self.llm, retry_policy=self.retry_policy)
+        if request.is_ad_hoc:
+            return await self._generate_ad_hoc(
+                request, runner, initial_call_count, request_decision
+            )
 
         identity_out = ActorIdentityOutput.model_validate(
             (
@@ -349,6 +354,158 @@ class ScenarioOrchestrator:
             injects=final_out.injects or self._demo_injects(),
             metrics=final_out.metrics,
             source_manifest=source_records,
+            citation_graph=citation_graph,
+            factuality=factuality,
+            qa=qa,
+            trace=self.trace,
+        )
+
+    async def _generate_ad_hoc(
+        self,
+        request: ScenarioRequest,
+        runner: NodeRunner,
+        initial_call_count: int,
+        request_decision: Any,
+    ) -> ScenarioPack:
+        """Generate a red team scenario from a free-form premise without TTP grounding."""
+        identity = ActorIdentity(
+            canonical_name=request.actor,
+            attack_id=None,
+            aliases=[],
+            confidence="low",
+            ambiguity_notes=[
+                "Ad hoc scenario: threat actor identity and ATT&CK grounding were not requested."
+            ],
+        )
+        dossier = TTPDossier(
+            identity=identity,
+            techniques=[],
+            software=[],
+            campaigns=[],
+            excluded_techniques=[],
+            caveats=[
+                "Ad hoc scenario generated from the supplied premise, not a TTP dossier.",
+                "ATT&CK technique IDs are intentionally omitted unless explicitly supplied.",
+            ],
+            source_manifest=[],
+        )
+        citation_graph = CitationGraph()
+        shared = {
+            "request": request.model_dump(mode="json"),
+            "ad_hoc": True,
+            "ad_hoc_scenario": request.ad_hoc_scenario,
+            "dossier": dossier.model_dump(mode="json"),
+            "citation_graph": citation_graph.model_dump(mode="json"),
+        }
+
+        environment_model, roe_model, telemetry_model = await asyncio.gather(
+            runner.run("environment_fit", shared),
+            runner.run("roe_translation", shared),
+            runner.run("telemetry_mapping", shared),
+        )
+        environment_out = EnvironmentFitOutput.model_validate(
+            environment_model.model_dump(mode="json")
+        )
+        roe_out = RoeTranslationOutput.model_validate(roe_model.model_dump(mode="json"))
+        telemetry_out = TelemetryMappingOutput.model_validate(
+            telemetry_model.model_dump(mode="json")
+        )
+        path_payload = {
+            **shared,
+            "environment_fit": environment_out.model_dump(mode="json"),
+            "roe_translation": roe_out.model_dump(mode="json"),
+            "telemetry": telemetry_out.model_dump(mode="json"),
+        }
+        path_a_model, path_b_model = await asyncio.gather(
+            runner.run("path_candidate_a", path_payload),
+            runner.run("path_candidate_b", path_payload),
+        )
+        path_a = PathCandidateOutput.model_validate(path_a_model.model_dump(mode="json"))
+        path_b = PathCandidateOutput.model_validate(path_b_model.model_dump(mode="json"))
+        adjudicated = PathAdjudicationOutput.model_validate(
+            (
+                await runner.run(
+                    "path_adjudication",
+                    {
+                        **path_payload,
+                        "candidate_a": path_a.model_dump(mode="json"),
+                        "candidate_b": path_b.model_dump(mode="json"),
+                    },
+                )
+            ).model_dump(mode="json")
+        )
+        final_out = FinalCompositionOutput.model_validate(
+            (
+                await runner.run(
+                    "final_composition",
+                    {
+                        **path_payload,
+                        "adjudicated_path": adjudicated.model_dump(mode="json"),
+                        "citation_graph": citation_graph.model_dump(mode="json"),
+                        "validated_sources": [],
+                    },
+                )
+            ).model_dump(mode="json")
+        )
+
+        steps = final_out.attack_path[: request.max_attack_path_steps] or self._safe_demo_steps(
+            request
+        )
+        step_decision = self.safety_policy.evaluate_steps(request, steps)
+        if not step_decision.passed:
+            raise ValueError(
+                "Generated scenario failed safety policy: " + "; ".join(step_decision.blocked_items)
+            )
+        factuality = self.factuality_evaluator.evaluate(
+            graph=citation_graph,
+            final_claims=final_out.claims,
+            techniques=[],
+            steps=steps,
+            local_attack={"available": False, "ad_hoc": True},
+        )
+        if self.fail_on_factuality_error and not factuality.passed:
+            raise ValueError(
+                "Generated scenario failed factuality policy: "
+                + "; ".join(factuality.unsupported_claims)
+            )
+        warnings = request_decision.warnings + step_decision.warnings
+        model_calls = self.llm.call_count - initial_call_count
+        qa = QAResult(
+            unsupported_claims=factuality.unsupported_claims,
+            blocked_items=step_decision.blocked_items,
+            warnings=warnings,
+            source_validation_passed=True,
+            factuality_passed=factuality.passed,
+            factuality_score=factuality.score,
+            citation_coverage=factuality.citation_coverage,
+            safety_gate_passed=step_decision.passed,
+            model_call_count=model_calls,
+            repair_call_count=runner.repair_call_count,
+        )
+        self.trace = {
+            "nodes": runner.trace,
+            "retrieval": {
+                "ad_hoc": True,
+                "queries": [],
+                "search_errors": [],
+                "candidate_count": 0,
+                "validated_count": 0,
+                "document_count": 0,
+                "local_attack": {"available": False, "ad_hoc": True},
+            },
+            "citation_graph": citation_graph.model_dump(mode="json"),
+            "factuality": factuality.model_dump(mode="json"),
+        }
+        return ScenarioPack(
+            title=f"{request.actor} Ad Hoc Red Team Exercise",
+            request=request,
+            dossier=dossier,
+            executive_summary=final_out.executive_summary,
+            exercise_assumptions=final_out.assumptions,
+            attack_path=steps,
+            injects=final_out.injects or self._demo_injects(),
+            metrics=final_out.metrics,
+            source_manifest=[],
             citation_graph=citation_graph,
             factuality=factuality,
             qa=qa,
