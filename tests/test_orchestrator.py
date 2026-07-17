@@ -93,7 +93,10 @@ async def test_ad_hoc_pipeline_skips_ttp_retrieval_and_grounding() -> None:
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 =======
@@ -177,6 +180,9 @@ def test_post_2020_policy_excludes_unknown_and_old_sources() -> None:
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
