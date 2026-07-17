@@ -84,7 +84,34 @@ async def test_ad_hoc_pipeline_skips_ttp_retrieval_and_grounding() -> None:
     assert pack.dossier.techniques == []
     assert "Ad Hoc" in pack.title
 <<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 
 
 def test_post_2020_policy_excludes_unknown_and_old_sources() -> None:
@@ -141,4 +168,31 @@ def test_post_2020_policy_excludes_unknown_and_old_sources() -> None:
 
     assert [str(document.source.url) for document in accepted] == ["https://example.com/new"]
     assert excluded == ["https://example.com/old"]
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
 >>>>>>> theirs
