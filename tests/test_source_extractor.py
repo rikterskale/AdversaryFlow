@@ -6,7 +6,7 @@ from adversaryflow.retrieval.url_validator import FetchResult
 class FakeValidator:
     async def fetch(self, record: SourceRecord) -> FetchResult:
         html = b"""
-        <html><head><title>Test</title><script>ignore me</script></head>
+        <html><head><title>Test</title><meta property="article:published_time" content="2023-08-04T12:00:00Z"><script>ignore me</script></head>
         <body><h1>APT29</h1><p>Uses T1059.001 PowerShell.</p></body></html>
         """
         updated = record.model_copy(
@@ -35,3 +35,4 @@ async def test_html_source_extraction_and_chunking() -> None:
     assert "Uses T1059.001 PowerShell" in document.text
     assert "ignore me" not in document.text
     assert document.chunks
+    assert str(updated.published_at) == "2023-08-04"

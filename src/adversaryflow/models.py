@@ -280,9 +280,16 @@ class FactualityFinding(StrictModel):
 
 
 class FactualityResult(StrictModel):
+    """Result of claim-evidence support validation.
+
+    A run with no factual claims is not a successful verification; it is not
+    applicable to this gate.
+    """
+
+    evaluated: bool = False
     passed: bool = True
-    score: float = Field(default=1.0, ge=0.0, le=1.0)
-    citation_coverage: float = Field(default=1.0, ge=0.0, le=1.0)
+    score: float = Field(default=0.0, ge=0.0, le=1.0)
+    citation_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
     evaluated_claims: int = 0
     supported_claims: int = 0
     unsupported_claims: list[str] = Field(default_factory=list)

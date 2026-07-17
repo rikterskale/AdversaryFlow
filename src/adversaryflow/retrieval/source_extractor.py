@@ -5,6 +5,7 @@ import hashlib
 import io
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 from html.parser import HTMLParser
 
 from pypdf import PdfReader
@@ -82,6 +83,38 @@ class SourceExtractor:
             return "\n".join(parser.parts)
         return decoded
 
+    @staticmethod
+    def _published_at(body: bytes, content_type: str | None) -> date | None:
+        """Extract an explicit publication date from common HTML metadata."""
+        kind = (content_type or "").casefold()
+        if "html" not in kind:
+            return None
+        text = body.decode("utf-8", errors="replace")[:100_000]
+        for tag in re.findall(r"<meta\b[^>]*>", text, flags=re.IGNORECASE):
+            attributes = {
+                key.casefold(): value
+                for key, _, value in re.findall(
+                    r"([\w:-]+)\s*=\s*([\"'])(.*?)\2", tag, flags=re.IGNORECASE
+                )
+            }
+            name = attributes.get("property", attributes.get("name", "")).casefold()
+            if name not in {
+                "article:published_time",
+                "datepublished",
+                "publishdate",
+                "publication_date",
+            }:
+                continue
+            value = attributes.get("content", "").strip().replace("Z", "+00:00")
+            try:
+                return datetime.fromisoformat(value).date()
+            except ValueError:
+                try:
+                    return date.fromisoformat(value[:10])
+                except ValueError:
+                    continue
+        return None
+
     def _chunks(self, url: str, text: str) -> list[SourceChunk]:
         paragraphs = [part.strip() for part in text.splitlines() if part.strip()]
         chunks: list[SourceChunk] = []
@@ -133,6 +166,8 @@ class SourceExtractor:
                 update={
                     "word_count": len(text.split()),
                     "excerpt": fetched.record.excerpt or (text[:500] if text else None),
+                    "published_at": fetched.record.published_at
+                    or self._published_at(fetched.body, fetched.record.content_type),
                 }
             )
             return SourceDocument(source=updated, text=text, chunks=chunks), updated

@@ -14,7 +14,12 @@ from adversaryflow.models import (
 
 
 class FactualityEvaluator:
-    def __init__(self, *, threshold: float = 1.0, edge_support_threshold: float = 0.12) -> None:
+    """Validate that claims have sufficiently strong, claim-level evidence.
+
+    This is a lexical evidence-support check, not a semantic entailment engine.
+    """
+
+    def __init__(self, *, threshold: float = 1.0, edge_support_threshold: float = 0.5) -> None:
         self.threshold = threshold
         self.edge_support_threshold = edge_support_threshold
 
@@ -92,7 +97,7 @@ class FactualityEvaluator:
             deduped[(item[1].casefold(), tuple(sorted(item[2])))] = item
         items = list(deduped.values())
         if not items:
-            return FactualityResult()
+            return FactualityResult(evaluated=False, passed=True)
 
         findings: list[FactualityFinding] = []
         supported_count = 0
@@ -138,6 +143,7 @@ class FactualityEvaluator:
         citation_coverage = cited / total
         unsupported = [finding.claim_text for finding in findings if not finding.supported]
         return FactualityResult(
+            evaluated=True,
             passed=score >= self.threshold,
             score=round(score, 4),
             citation_coverage=round(citation_coverage, 4),

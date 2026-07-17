@@ -100,3 +100,17 @@ def test_factuality_rejects_unsupported_technique() -> None:
     )
     assert not result.passed
     assert result.unsupported_claims
+
+
+def test_empty_factuality_result_is_not_evaluated() -> None:
+    result = FactualityEvaluator().evaluate(
+        graph=CitationGraphBuilder([]).build(),
+        final_claims=[],
+        techniques=[],
+        steps=[],
+        local_attack={"resolved": False},
+    )
+
+    assert result.passed
+    assert not result.evaluated
+    assert result.score == 0.0

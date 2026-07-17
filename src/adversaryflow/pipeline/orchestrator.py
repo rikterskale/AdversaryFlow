@@ -144,7 +144,9 @@ class ScenarioOrchestrator:
         queries = identity_out.queries or [f"{request.actor} ATT&CK techniques"]
         source_candidates, search_errors = await self._search_sources(queries)
         extraction = await self.source_extractor.extract_many(source_candidates)
-        source_documents = extraction.documents
+        source_documents, excluded_by_date = self._filter_recent_sources(
+            extraction.documents, request
+        )
         source_records = extraction.records
 
         retrieval_payload = {
@@ -261,7 +263,9 @@ class ScenarioOrchestrator:
         citation_graph = graph_builder.build()
 
         identity = self._build_identity(identity_out, local_attack, request.actor)
-        techniques = self._build_techniques(dossier_out, attack_out, local_attack)
+        techniques = self._filter_recent_techniques(
+            self._build_techniques(dossier_out, attack_out, local_attack), request
+        )
         if self.require_grounded_dossier and not techniques:
             raise ValueError(
                 "Grounding policy failed: no source-supported ATT&CK techniques were resolved"
@@ -310,6 +314,10 @@ class ScenarioOrchestrator:
             if not record.validated and str(record.url) not in cited_urls
         ]
         warnings = request_decision.warnings + step_decision.warnings
+        if excluded_by_date:
+            warnings.append(
+                f"{len(excluded_by_date)} validated source(s) were excluded by the minimum source date."
+            )
         warnings.extend(f"Search error: {item}" for item in search_errors)
         if invalid_unused:
             warnings.append(
@@ -338,6 +346,7 @@ class ScenarioOrchestrator:
                 "candidate_count": len(source_candidates),
                 "validated_count": sum(1 for item in source_records if item.validated),
                 "document_count": len(source_documents),
+                "excluded_by_minimum_source_date": excluded_by_date,
                 "local_attack": local_attack,
             },
             "citation_graph": citation_graph.model_dump(mode="json"),
