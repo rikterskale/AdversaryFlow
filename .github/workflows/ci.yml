@@ -12,6 +12,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check for unresolved merge conflict markers
+        run: |
+          if git grep -nP '^(<{7}|={7}|>{7})( |$)' -- . ':!*.lock'; then
+            echo "::error::Unresolved merge conflict markers found"; exit 1
+          fi
       - run: pip install -e '.[dev]'
       - run: ruff check src tests
       - run: ruff format --check src tests
