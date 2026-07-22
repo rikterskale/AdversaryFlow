@@ -1,6 +1,6 @@
 # AdversaryFlow v0.3.0
 
-![CI](https://github.com/YOUR-ACCOUNT/adversaryflow/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/rikterskale/adversaryflow/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
