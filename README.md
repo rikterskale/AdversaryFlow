@@ -56,7 +56,7 @@ fit          translator  mapper
            |               |
         Call 9          Call 10
         path A          path B
-           +------+- ------+
+           +------+------+
                   |
 Call 11: path adjudication + exercise sequence
                   |
@@ -86,6 +86,7 @@ Ad hoc reports intentionally show no grounded TTP dossier unless you explicitly 
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+cp .env.example .env  # optional: edit only for live providers/search
 
 adversaryflow generate \
   --request examples/apt29_request.json \
@@ -141,6 +142,18 @@ adversaryflow generate \
   --attack-bundle data/enterprise-attack.json
 ```
 
+### CLI options
+
+| Option | Purpose |
+|---|---|
+| `--request PATH` | Required scenario request JSON file. |
+| `--output PATH` | Markdown report path; the trace is written next to it with `.trace.json`. |
+| `--demo` | Use the deterministic demo provider and disable live search. |
+| `--search-provider brave|null` | Override `ADVERSARYFLOW_SEARCH_PROVIDER` for the run. |
+| `--attack-bundle PATH` | Optional pinned Enterprise ATT&CK STIX bundle for local actor/TTP grounding. |
+
+For local configuration, copy `.env.example` to `.env` and export the variables needed by your shell or process manager before running the CLI.
+
 ## Configuration reference
 
 | Variable | Default | Purpose |
@@ -166,7 +179,7 @@ Place a pinned Enterprise ATT&CK STIX 2.1 bundle at:
 data/enterprise-attack.json
 ```
 
-The loader resolves intrusion sets by name, alias, or external ATT&CK ID and extracts `uses` relationships to techniques, software, and campaigns. Claims supported by the pinned bundle are accepted by the factuality evaluator as local authoritative evidence even when the live ATT&CK page is unavailable.
+`data/enterprise-attack.json` is intentionally ignored by Git because the bundle can be large; keep `data/.gitkeep` so the directory exists. The loader resolves intrusion sets by name, alias, or external ATT&CK ID and extracts `uses` relationships to techniques, software, and campaigns. Claims supported by the pinned bundle are accepted by the factuality evaluator as local authoritative evidence even when the live ATT&CK page is unavailable.
 
 ## Claim-level evidence model
 
