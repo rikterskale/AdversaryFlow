@@ -12,7 +12,7 @@ Usage:
     python tasks.py format     # apply ruff formatting
     python tasks.py check      # lint + test (what CI runs)
     python tasks.py demo       # generate the deterministic demo report
-    python tasks.py clean      # remove caches, build artifacts, and generated reports
+    python tasks.py clean      # remove development caches/build output; preserve stored runs
     python tasks.py help       # show this message
 
 Every command runs inside the project's virtual environment when one exists.
@@ -135,7 +135,7 @@ def task_clean() -> None:
             if item.is_file() and item.name not in keep:
                 print(f"Removing {item}")
                 item.unlink()
-    print("Clean complete.")
+    print("Clean complete. Durable runs and caches under .adversaryflow were preserved.")
 
 
 TASKS = {
@@ -155,6 +155,13 @@ def task_help() -> None:
 
 
 def main(argv: list[str]) -> int:
+    if sys.version_info < (3, 11):
+        print(
+            "AdversaryFlow requires Python 3.11 or newer. "
+            f"This interpreter is Python {sys.version_info.major}.{sys.version_info.minor}.",
+            file=sys.stderr,
+        )
+        return 1
     if not argv or argv[0] in {"help", "-h", "--help"}:
         task_help()
         return 0

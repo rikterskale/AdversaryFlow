@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 PYTHON="${PYTHON:-python3}"
 command -v "$PYTHON" >/dev/null 2>&1 || PYTHON=python
 
-if [ ! -d ".venv" ]; then
+if [ ! -x ".venv/bin/python" ]; then
   echo "No virtual environment found; running setup first ..."
   "$PYTHON" tasks.py setup
 fi

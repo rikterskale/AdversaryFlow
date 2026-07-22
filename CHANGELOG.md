@@ -13,6 +13,11 @@
 - Add content-addressed source caching with URL freshness indexes and per-source trace provenance.
 - Add schema-, prompt-, input-, and provider-aware model-node caching.
 - Add forward-only store migrations plus cache inspection, selective clearing, and refresh controls.
+- Add comprehensive beginner and expert installation and usage guides.
+- Exclude local credentials, Codex settings, virtual environments, run stores, and test artifacts from distributions and Docker build contexts.
+- Run the Docker image as a non-root user and document persistent-volume permissions.
+- Add an early Python 3.11 version check and clarify that development cleanup preserves durable runs.
+- Build package artifacts in CI and verify installation from a wheel during review.
 
 ## 0.3.0 — 2026-07-22
 

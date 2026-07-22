@@ -16,7 +16,7 @@ if (-not $python) {
     exit 1
 }
 
-if (-not (Test-Path ".venv")) {
+if (-not (Test-Path ".venv\Scripts\python.exe")) {
     Write-Host "No virtual environment found; running setup first ..."
     & $python tasks.py setup
 }

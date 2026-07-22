@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 from pathlib import Path
 
 import httpx
@@ -99,6 +100,19 @@ def _configuration_issues(settings: Settings, selected_search: str) -> list[str]
     elif selected_search == "brave" and not settings.brave_api_key:
         issues.append("ADVERSARYFLOW_BRAVE_API_KEY is not set (or select search provider 'null')")
     return issues
+
+
+def _ensure_writable_directory(path: Path, *, label: str) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=".adversaryflow-write-test-", dir=path):
+            pass
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"{label} is not writable: {path} ({exc}). "
+            "Check directory ownership, container UID, and mount permissions.",
+            param_hint=label,
+        ) from exc
 
 
 @cache_app.command("inspect")
@@ -354,7 +368,7 @@ def doctor(
 @app.command()
 def generate(
     request: Path = typer.Option(..., exists=True, readable=True, help="Scenario request JSON"),
-    output: Path = typer.Option(Path("reports/scenario.md"), help="Markdown output path"),
+    output: Path = typer.Option(Path("reports/scenario.md"), help="Markdown or HTML output path"),
     demo: bool = typer.Option(False, help="Use deterministic demo model and disable live search"),
     search_provider: str | None = typer.Option(
         None,
@@ -372,8 +386,10 @@ def generate(
     store_dir: Path | None = typer.Option(
         None, help="Run store directory; defaults to ADVERSARYFLOW_STORE_DIR"
     ),
-    no_store: bool = typer.Option(False, help="Do not persist an immutable run bundle"),
-    no_cache: bool = typer.Option(False, help="Disable source and model-node caches"),
+    no_store: bool = typer.Option(
+        False, "--no-store", help="Do not persist an immutable run bundle"
+    ),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable source and model-node caches"),
     refresh_sources: bool = typer.Option(False, help="Refetch sources and replace cache entries"),
     refresh_nodes: bool = typer.Option(
         False, help="Regenerate model nodes and replace cache entries"
@@ -385,6 +401,11 @@ def generate(
         settings = _load_settings()
         scenario_request = _read_request(request)
         resolved_store = store_dir or Path(settings.store_dir)
+        if output.exists() and not output.is_file():
+            raise typer.BadParameter(f"Output path is not a file: {output}", param_hint="--output")
+        _ensure_writable_directory(output.parent, label="output directory")
+        if not (no_store and no_cache):
+            _ensure_writable_directory(resolved_store, label="store directory")
 
         if demo:
             llm = DemoLLMProvider()

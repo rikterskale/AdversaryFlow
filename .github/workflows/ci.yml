@@ -30,5 +30,7 @@ jobs:
       - run: ruff check src tests
       - run: ruff format --check src tests
       - run: pytest -q
+      - name: Build wheel and source distribution
+        run: python -m build
       - name: Smoke-test the deterministic demo
         run: adversaryflow generate --request examples/apt29_request.json --output reports/ci_demo.md --demo

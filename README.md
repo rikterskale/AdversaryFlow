@@ -10,6 +10,13 @@ AdversaryFlow is a threat-informed red team scenario generator for authorized, c
 Version 0.3.0 runs the same way on Windows, Linux, and macOS, with a stdlib-only
 task runner, one-command bootstrap scripts, and a cross-platform CI matrix.
 
+New users should follow the detailed [`INSTALLATION.md`](INSTALLATION.md) and
+[`USAGE.md`](USAGE.md) guides. They cover Windows, Linux, macOS, Docker, offline
+deployment, live provider setup, request design, storage, caching, automation,
+upgrades, and troubleshooting. [`INSTALLATION_REVIEW.md`](INSTALLATION_REVIEW.md)
+records the tested paths, findings, fixes, and remaining coverage. The sections
+below remain a compact reference.
+
 ## Try it in three commands
 
 The demo is deterministic, makes no network requests, and needs no API keys:
@@ -182,7 +189,7 @@ The same commands run on every platform. Replace `python` with `python3` on Linu
 | `python tasks.py format` | Apply Ruff formatting. |
 | `python tasks.py check` | Lint + test (the same gates CI runs). |
 | `python tasks.py demo` | Generate the deterministic demo report. |
-| `python tasks.py clean` | Remove caches, build artifacts, and generated reports. |
+| `python tasks.py clean` | Remove development caches/build output and untracked reports; preserve `.adversaryflow`. |
 
 Unix users who prefer `make` can use the identical targets (`make setup`, `make test`, `make demo`, …); the Makefile simply forwards to `tasks.py`. There are also one-command bootstrap helpers in `scripts/` (`scripts/setup.ps1` / `scripts/setup.sh` and `scripts/demo.ps1` / `scripts/demo.sh`).
 
@@ -293,6 +300,9 @@ completion and validation to compatible editors.
 
 | Variable | Default | Purpose |
 |---|---:|---|
+| `ADVERSARYFLOW_LLM_BASE_URL` | empty | OpenAI-compatible API base ending before `/chat/completions` |
+| `ADVERSARYFLOW_LLM_API_KEY` | empty | Model-provider credential; never persisted |
+| `ADVERSARYFLOW_LLM_MODEL` | empty | Provider model identifier |
 | `ADVERSARYFLOW_SEARCH_PROVIDER` | `brave` | `brave` or `null` |
 | `ADVERSARYFLOW_ALLOWED_DOMAINS` | empty | Comma-separated domains added to the built-in catalog allowlist |
 | `ADVERSARYFLOW_BRAVE_API_KEY` | empty | Brave Search credential |

@@ -13,6 +13,9 @@ python tasks.py setup   # use python3 on Linux/macOS if that is your interpreter
 
 This creates `.venv`, installs the project with its dev extras, and copies
 `.env.example` to `.env` (edit it only for live provider/search configuration).
+See [`INSTALLATION.md`](INSTALLATION.md) for platform-specific setup, wheel,
+offline, and Docker procedures; see [`USAGE.md`](USAGE.md) for complete CLI and
+configuration behavior.
 
 Run the local quality gates — these are exactly what CI runs on both Windows and
 Linux:

@@ -17,6 +17,16 @@ def test_doctor_demo_requires_no_credentials() -> None:
     assert "Ready" in result.stdout
 
 
+def test_generate_help_has_unambiguous_disable_flags() -> None:
+    result = runner.invoke(app, ["generate", "--help"])
+
+    assert result.exit_code == 0
+    assert "--no-store" in result.stdout
+    assert "--no-cache" in result.stdout
+    assert "--no-no-store" not in result.stdout
+    assert "--no-no-cache" not in result.stdout
+
+
 def test_doctor_loads_dotenv_from_current_directory(tmp_path, monkeypatch) -> None:
     (tmp_path / ".env").write_text(
         "\n".join(
@@ -101,6 +111,18 @@ def test_live_generate_fails_with_actionable_configuration_error(tmp_path, monke
 
     assert result.exit_code == 2
     assert "Edit .env or run with --demo" in result.stderr
+
+
+def test_generate_rejects_directory_as_output_before_model_calls(tmp_path) -> None:
+    example = Path(__file__).parents[1] / "examples" / "tabletop_request.json"
+
+    result = runner.invoke(
+        app,
+        ["generate", "--request", str(example), "--output", str(tmp_path), "--demo"],
+    )
+
+    assert result.exit_code == 2
+    assert "Output path is not a file" in result.stderr
 
 
 def test_init_creates_valid_safe_request(tmp_path) -> None:
