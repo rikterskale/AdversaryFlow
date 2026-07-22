@@ -7,7 +7,22 @@
 
 AdversaryFlow is a threat-informed red team scenario generator for authorized, collaborative purple-team exercises. It resolves a threat actor, builds a claim-level cited TTP dossier, adapts observed behaviors to the target environment and Rules of Engagement (RoE), and produces safe exercise equivalents rather than literal destructive or criminal actions.
 
-Version 0.3.0 makes the project run the same way on Windows, Linux, and macOS: a stdlib-only `tasks.py` runner, one-command bootstrap scripts for both shells, and a cross-platform CI matrix. (Replace `YOUR-ACCOUNT` in the CI badge above with your GitHub org/user after publishing.)
+Version 0.3.0 runs the same way on Windows, Linux, and macOS, with a stdlib-only
+task runner, one-command bootstrap scripts, and a cross-platform CI matrix.
+
+## Try it in three commands
+
+The demo is deterministic, makes no network requests, and needs no API keys:
+
+```bash
+python tasks.py setup
+python -m adversaryflow.cli validate-request --request examples/apt29_request.json
+python tasks.py demo
+```
+
+Use `python3` on Linux/macOS or `py` on Windows if `python` is not the name of
+your interpreter. The generated report is `reports/apt29_scenario.md`; its audit
+trace is beside it at `reports/apt29_scenario.trace.json`.
 
 ## What changed in v0.2
 
@@ -116,6 +131,15 @@ extras, copies `.env.example` to `.env` if you do not have one yet, and then run
 the demo. You do not need to activate the environment manually — every task runs
 inside `.venv` automatically.
 
+Before editing an example request, validate it without spending model calls:
+
+```bash
+.venv/bin/adversaryflow validate-request --request examples/apt29_request.json
+```
+
+On Windows, use `.venv\Scripts\adversaryflow` for commands that directly invoke
+the installed CLI.
+
 Prefer the classic manual steps? They work too:
 
 <details>
@@ -167,6 +191,10 @@ Unix users who prefer `make` can use the identical targets (`make setup`, `make 
 ### 1. Model provider
 
 The included model adapter works with OpenAI-compatible chat-completion APIs that support JSON-object output. The simplest cross-platform way to configure it is to copy `.env.example` to `.env` and fill in the values (`python tasks.py setup` does the copy for you). To set the variables directly in a shell instead:
+
+AdversaryFlow automatically loads `.env` from the current project directory.
+Values already exported in the process environment take precedence. After editing
+the file, run `adversaryflow doctor` to catch missing credentials before generation.
 
 **Linux / macOS:**
 
@@ -224,7 +252,15 @@ adversaryflow generate --request examples/apt29_request.json --output reports/ap
 | `--search-provider brave|null` | Override `ADVERSARYFLOW_SEARCH_PROVIDER` for the run. |
 | `--attack-bundle PATH` | Optional pinned Enterprise ATT&CK STIX bundle for local actor/TTP grounding. |
 
-For local configuration, copy `.env.example` to `.env` and export the variables needed by your shell or process manager before running the CLI.
+Other useful commands:
+
+| Command | Purpose |
+|---|---|
+| `adversaryflow doctor [--demo]` | Check credentials and provider selection before a run. |
+| `adversaryflow validate-request --request PATH` | Validate JSON and request rules without external calls. |
+| `adversaryflow --version` | Print the installed version. |
+
+For local configuration, copy `.env.example` to `.env` and fill in the variables needed by your provider before running the CLI.
 
 ## Configuration reference
 
@@ -297,6 +333,14 @@ Each run produces:
 - a `.trace.json` audit record containing node attempts, retrieval statistics, local ATT&CK context, citation graph, and factuality result.
 
 The renderer intentionally emits operator-level summaries, evidence requirements, telemetry expectations, stop conditions, and cleanup—not exploit code or destructive commands.
+
+## Troubleshooting
+
+- **`python` is not found:** try `py` on Windows or `python3` on Linux/macOS.
+- **PowerShell blocks a setup script:** run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then rerun `scripts/setup.ps1`.
+- **Live generation says configuration is incomplete:** edit `.env` and run `adversaryflow doctor`. For an offline smoke test, use `--demo`.
+- **A request is rejected:** run `adversaryflow validate-request --request your-request.json` for field-level errors.
+- **Actor grounding fails:** provide Brave Search credentials, a pinned ATT&CK bundle with `--attack-bundle`, or both. Demo and ad hoc modes do not require live actor grounding.
 
 ## Remaining production hardening
 

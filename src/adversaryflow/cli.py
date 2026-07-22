@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
+from pydantic import ValidationError
 from rich.console import Console
 
 from adversaryflow.config import Settings
@@ -19,13 +21,102 @@ from adversaryflow.render.markdown import render_markdown
 from adversaryflow.retrieval.url_validator import URLValidator
 from adversaryflow.safety.policy import SafetyPolicy
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, help="Build safe, evidence-grounded red team exercises.")
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        from adversaryflow import __version__
+
+        console.print(f"AdversaryFlow {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
-def main() -> None:
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
     """AdversaryFlow command-line interface."""
+    # The setup task creates this file; existing process environment variables win.
+    load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
+
+
+def _read_request(path: Path) -> ScenarioRequest:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter(
+            f"Invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}",
+            param_hint="--request",
+        ) from exc
+    try:
+        return ScenarioRequest.model_validate(payload)
+    except ValidationError as exc:
+        details = "; ".join(
+            f"{'.'.join(str(item) for item in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        )
+        raise typer.BadParameter(details, param_hint="--request") from exc
+
+
+def _configuration_issues(settings: Settings, selected_search: str) -> list[str]:
+    issues: list[str] = []
+    if not settings.llm_base_url:
+        issues.append("ADVERSARYFLOW_LLM_BASE_URL is not set")
+    if not settings.llm_api_key:
+        issues.append("ADVERSARYFLOW_LLM_API_KEY is not set")
+    if not settings.llm_model:
+        issues.append("ADVERSARYFLOW_LLM_MODEL is not set")
+    if selected_search not in {"brave", "null"}:
+        issues.append("ADVERSARYFLOW_SEARCH_PROVIDER must be 'brave' or 'null'")
+    elif selected_search == "brave" and not settings.brave_api_key:
+        issues.append("ADVERSARYFLOW_BRAVE_API_KEY is not set (or select search provider 'null')")
+    return issues
+
+
+@app.command("validate-request")
+def validate_request(
+    request: Path = typer.Option(..., exists=True, readable=True, help="Scenario request JSON"),
+) -> None:
+    """Validate a request without calling models or search services."""
+    scenario_request = _read_request(request)
+    console.print(
+        f"[green]Valid request[/green]: {scenario_request.objective} "
+        f"([cyan]{scenario_request.scenario_kind.value}[/cyan])"
+    )
+
+
+@app.command()
+def doctor(
+    demo: bool = typer.Option(False, help="Check readiness for credential-free demo mode"),
+    search_provider: str | None = typer.Option(
+        None, help="Override search provider: brave or null"
+    ),
+) -> None:
+    """Check local configuration before generating a scenario."""
+    settings = Settings()
+    if demo:
+        console.print("[green]Ready[/green] for deterministic demo mode (no credentials required).")
+        return
+    selected_search = (search_provider or settings.search_provider).casefold()
+    issues = _configuration_issues(settings, selected_search)
+    if issues:
+        console.print("[red]Configuration is incomplete:[/red]")
+        for issue in issues:
+            console.print(f"  - {issue}")
+        console.print("Edit .env, then run this command again. Use --demo to check demo mode.")
+        raise typer.Exit(code=1)
+    console.print(
+        f"[green]Ready[/green] for live generation with model '{settings.llm_model}' "
+        f"and search provider '{selected_search}'."
+    )
 
 
 @app.command()
@@ -46,20 +137,25 @@ def generate(
 
     async def _run() -> None:
         settings = Settings()
-        payload = json.loads(request.read_text(encoding="utf-8"))
-        scenario_request = ScenarioRequest.model_validate(payload)
+        scenario_request = _read_request(request)
 
         if demo:
             llm = DemoLLMProvider()
             search = NullSearchProvider()
         else:
+            selected_search = (search_provider or settings.search_provider).casefold()
+            issues = _configuration_issues(settings, selected_search)
+            if issues:
+                raise typer.BadParameter(
+                    "; ".join(issues) + ". Edit .env or run with --demo.",
+                    param_hint="configuration",
+                )
             llm = OpenAICompatibleProvider(
                 base_url=settings.llm_base_url,
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
                 timeout_seconds=settings.request_timeout_seconds,
             )
-            selected_search = (search_provider or settings.search_provider).casefold()
             if selected_search == "brave":
                 search = BraveSearchProvider(
                     api_key=settings.brave_api_key,
@@ -67,7 +163,7 @@ def generate(
                 )
             elif selected_search == "null":
                 search = NullSearchProvider()
-            else:
+            else:  # Guarded by _configuration_issues; retained for type narrowing.
                 raise typer.BadParameter("search_provider must be 'brave' or 'null'")
 
         validator = URLValidator(

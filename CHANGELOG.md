@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Load project `.env` files automatically while preserving exported environment variables.
+- Add `doctor`, `validate-request`, and `--version` CLI paths for safer first-run setup.
+- Report actionable JSON, schema, and missing-credential errors before external calls.
+- Streamline the README quick start and add troubleshooting guidance.
+
 ## 0.3.0 — 2026-07-22
 
 - Added `tasks.py`, a stdlib-only cross-platform developer task runner (`setup`, `test`, `lint`, `format`, `check`, `demo`, `clean`) that works identically on Windows, Linux, and macOS with no manual virtual-environment activation.
