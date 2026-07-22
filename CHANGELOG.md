@@ -6,6 +6,9 @@
 - Add `doctor`, `validate-request`, and `--version` CLI paths for safer first-run setup.
 - Report actionable JSON, schema, and missing-credential errors before external calls.
 - Streamline the README quick start and add troubleshooting guidance.
+- Add an interactive `init` wizard, JSON Schema export, and a tabletop template.
+- Add safe, self-contained HTML reports with automatic format inference.
+- Add optional authenticated service-connectivity checks to `doctor`.
 
 ## 0.3.0 — 2026-07-22
 

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -99,3 +100,54 @@ def test_live_generate_fails_with_actionable_configuration_error(tmp_path, monke
 
     assert result.exit_code == 2
     assert "Edit .env or run with --demo" in result.stderr
+
+
+def test_init_creates_valid_safe_request(tmp_path) -> None:
+    output = tmp_path / "starter.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "--output",
+            str(output),
+            "--actor",
+            "Example Actor",
+            "--objective",
+            "Validate response procedures in a tabletop exercise.",
+            "--environment",
+            "Example Lab",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["mode"] == "tabletop"
+    assert payload["roe"]["no_destructive_execution"] is True
+
+
+def test_export_schema_writes_scenario_request_schema(tmp_path) -> None:
+    output = tmp_path / "request.schema.json"
+
+    result = runner.invoke(app, ["export-schema", "--output", str(output)])
+
+    assert result.exit_code == 0
+    schema = json.loads(output.read_text(encoding="utf-8"))
+    assert schema["title"] == "ScenarioRequest"
+    assert "environment" in schema["properties"]
+
+
+def test_generate_html_report(tmp_path) -> None:
+    output = tmp_path / "scenario.html"
+    example = Path(__file__).parents[1] / "examples" / "apt29_request.json"
+
+    result = runner.invoke(
+        app,
+        ["generate", "--request", str(example), "--output", str(output), "--demo"],
+    )
+
+    assert result.exit_code == 0
+    html = output.read_text(encoding="utf-8")
+    assert html.startswith("<!doctype html>")
+    assert "<h1>APT29 Safe Red Team Exercise</h1>" in html
+    assert (tmp_path / "scenario.trace.json").exists()

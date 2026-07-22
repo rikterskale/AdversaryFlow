@@ -1,0 +1,31 @@
+{
+  "actor": "Example Threat Actor",
+  "objective": "Validate escalation, decision-making, and communications during a simulated identity compromise.",
+  "scenario_kind": "ttp_based",
+  "mode": "tabletop",
+  "environment": {
+    "name": "Corporate Tabletop Environment",
+    "platforms": ["Windows", "Microsoft 365"],
+    "identity_systems": ["Microsoft Entra ID"],
+    "cloud_services": ["Microsoft 365"],
+    "security_tools": ["SIEM", "EDR"],
+    "crown_jewels": ["Synthetic executive mailbox"],
+    "designated_test_assets": [],
+    "notes": "Planning discussion only; no technical actions will be executed."
+  },
+  "roe": {
+    "authorized_assets": [],
+    "authorized_users": [],
+    "authorized_phishing_recipients": [],
+    "prohibited_actions": ["Production changes", "Contacting real users", "Destructive execution"],
+    "no_real_funds_or_transactions": true,
+    "no_destructive_execution": true,
+    "real_brand_impersonation_requires_written_consent": true,
+    "required_approvals": ["Exercise Director"],
+    "exercise_window": "Set the approved tabletop window"
+  },
+  "post_2020_tradecraft_only": true,
+  "minimum_source_date": "2020-01-01",
+  "max_attack_path_steps": 6,
+  "output_audience": ["red_team", "blue_team", "exercise_control"]
+}

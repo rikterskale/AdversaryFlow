@@ -247,7 +247,8 @@ adversaryflow generate --request examples/apt29_request.json --output reports/ap
 | Option | Purpose |
 |---|---|
 | `--request PATH` | Required scenario request JSON file. |
-| `--output PATH` | Markdown report path; the trace is written next to it with `.trace.json`. |
+| `--output PATH` | Markdown or HTML report path; the trace is written next to it with `.trace.json`. |
+| `--format markdown|html` | Override format inference from the output file extension. |
 | `--demo` | Use the deterministic demo provider and disable live search. |
 | `--search-provider brave|null` | Override `ADVERSARYFLOW_SEARCH_PROVIDER` for the run. |
 | `--attack-bundle PATH` | Optional pinned Enterprise ATT&CK STIX bundle for local actor/TTP grounding. |
@@ -256,11 +257,28 @@ Other useful commands:
 
 | Command | Purpose |
 |---|---|
-| `adversaryflow doctor [--demo]` | Check credentials and provider selection before a run. |
+| `adversaryflow init` | Interactively create a safe starter request. |
+| `adversaryflow export-schema` | Export the complete request JSON Schema for editors and integrations. |
+| `adversaryflow doctor [--demo] [--check-network]` | Check configuration and optionally verify service credentials. |
 | `adversaryflow validate-request --request PATH` | Validate JSON and request rules without external calls. |
 | `adversaryflow --version` | Print the installed version. |
 
 For local configuration, copy `.env.example` to `.env` and fill in the variables needed by your provider before running the CLI.
+
+## Create your own request
+
+Run `adversaryflow init` for an interactive starter, or supply options for a
+repeatable non-interactive workflow:
+
+```bash
+adversaryflow init --output my-request.json --actor "Example Actor" --objective "Validate identity incident response" --environment "Purple Team Lab" --mode tabletop
+adversaryflow validate-request --request my-request.json
+```
+
+The wizard creates conservative RoE defaults that must be reviewed and customized.
+The `examples/` directory contains TTP-based, ad hoc, and tabletop templates. Use
+`adversaryflow export-schema --output scenario-request.schema.json` to add field
+completion and validation to compatible editors.
 
 ## Configuration reference
 
@@ -329,8 +347,13 @@ Each attempt records status, duration, raw output, validation error, parsed outp
 
 Each run produces:
 
-- a Markdown scenario report;
+- a Markdown report by default, or a self-contained, printable HTML report when
+  the output ends in `.html` or `--format html` is selected;
 - a `.trace.json` audit record containing node attempts, retrieval statistics, local ATT&CK context, citation graph, and factuality result.
+
+```bash
+adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.html --demo
+```
 
 The renderer intentionally emits operator-level summaries, evidence requirements, telemetry expectations, stop conditions, and cleanup—not exploit code or destructive commands.
 
@@ -350,6 +373,7 @@ The renderer intentionally emits operator-level summaries, evidence requirements
 4. Add reviewer identity, approval state, and immutable release records.
 5. Add an evaluation corpus for actor precision/recall, citation entailment, safety, realism, and environment fit.
 6. Add ATT&CK Navigator export and optional execution-framework export behind separate approval policies.
+7. Add a local web interface for request editing, generation progress, and report review.
 
 ## Publish to GitHub
 

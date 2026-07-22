@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import httpx
 import typer
 from dotenv import load_dotenv
 from pydantic import ValidationError
@@ -17,7 +18,7 @@ from adversaryflow.pipeline.orchestrator import ScenarioOrchestrator
 from adversaryflow.providers.demo import DemoLLMProvider
 from adversaryflow.providers.openai_compatible import OpenAICompatibleProvider
 from adversaryflow.providers.search import BraveSearchProvider, NullSearchProvider
-from adversaryflow.render.markdown import render_markdown
+from adversaryflow.render import render_html, render_markdown
 from adversaryflow.retrieval.url_validator import URLValidator
 from adversaryflow.safety.policy import SafetyPolicy
 
@@ -59,11 +60,23 @@ def _read_request(path: Path) -> ScenarioRequest:
     try:
         return ScenarioRequest.model_validate(payload)
     except ValidationError as exc:
-        details = "; ".join(
-            f"{'.'.join(str(item) for item in error['loc'])}: {error['msg']}"
-            for error in exc.errors()
-        )
-        raise typer.BadParameter(details, param_hint="--request") from exc
+        raise typer.BadParameter(_validation_details(exc), param_hint="--request") from exc
+
+
+def _validation_details(exc: ValidationError) -> str:
+    return "; ".join(
+        f"{'.'.join(str(item) for item in error['loc'])}: {error['msg']}" for error in exc.errors()
+    )
+
+
+def _load_settings() -> Settings:
+    try:
+        return Settings()
+    except ValueError as exc:
+        raise typer.BadParameter(
+            f"Invalid value in .env: {exc}. Check numeric timeout, size, retry, and threshold settings.",
+            param_hint="configuration",
+        ) from exc
 
 
 def _configuration_issues(settings: Settings, selected_search: str) -> list[str]:
@@ -79,6 +92,102 @@ def _configuration_issues(settings: Settings, selected_search: str) -> list[str]
     elif selected_search == "brave" and not settings.brave_api_key:
         issues.append("ADVERSARYFLOW_BRAVE_API_KEY is not set (or select search provider 'null')")
     return issues
+
+
+@app.command("export-schema")
+def export_schema(
+    output: Path = typer.Option(
+        Path("scenario-request.schema.json"), help="Destination for the JSON Schema"
+    ),
+    force: bool = typer.Option(False, help="Overwrite an existing file"),
+) -> None:
+    """Export the complete scenario-request JSON Schema."""
+    if output.exists() and not force:
+        raise typer.BadParameter(f"{output} already exists; use --force to overwrite")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(ScenarioRequest.model_json_schema(), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    console.print(f"[green]Exported request schema[/green] {output}")
+
+
+@app.command("init")
+def initialize_request(
+    output: Path = typer.Option(Path("scenario-request.json"), help="New request file"),
+    actor: str | None = typer.Option(None, help="Threat actor or exercise label"),
+    objective: str | None = typer.Option(None, help="Defensive validation objective"),
+    environment: str | None = typer.Option(None, help="Environment name"),
+    kind: str = typer.Option("ttp_based", help="ttp_based or ad_hoc"),
+    premise: str | None = typer.Option(None, help="Required free-form premise for ad_hoc requests"),
+    mode: str = typer.Option("tabletop", help="tabletop, emulation_plan, or controlled_validation"),
+    test_asset: str | None = typer.Option(
+        None, help="Designated test asset for non-tabletop modes"
+    ),
+    force: bool = typer.Option(False, help="Overwrite an existing file"),
+) -> None:
+    """Interactively create a safe starter scenario request."""
+    if output.exists() and not force:
+        raise typer.BadParameter(f"{output} already exists; use --force to overwrite")
+    if mode not in {"tabletop", "emulation_plan", "controlled_validation"}:
+        raise typer.BadParameter(
+            "mode must be tabletop, emulation_plan, or controlled_validation", param_hint="--mode"
+        )
+    if kind not in {"ttp_based", "ad_hoc"}:
+        raise typer.BadParameter("kind must be ttp_based or ad_hoc", param_hint="--kind")
+    actor = actor or typer.prompt("Threat actor or exercise label", default="Ad Hoc Exercise")
+    objective = objective or typer.prompt("Defensive validation objective")
+    environment = environment or typer.prompt("Environment name", default="Purple Team Lab")
+    if kind == "ad_hoc" and not premise:
+        premise = typer.prompt("Ad hoc scenario premise")
+    if mode != "tabletop" and not test_asset:
+        test_asset = typer.prompt("Designated test asset")
+    assets = [test_asset] if test_asset else []
+    payload = {
+        "actor": actor,
+        "objective": objective,
+        "scenario_kind": kind,
+        "mode": mode,
+        "environment": {
+            "name": environment,
+            "platforms": [],
+            "identity_systems": [],
+            "cloud_services": [],
+            "security_tools": [],
+            "crown_jewels": [],
+            "designated_test_assets": assets,
+            "notes": "Replace placeholders with approved exercise details.",
+        },
+        "roe": {
+            "authorized_assets": assets,
+            "authorized_users": [],
+            "authorized_phishing_recipients": [],
+            "prohibited_actions": [
+                "Production access",
+                "Destructive execution",
+                "Access to real sensitive data",
+            ],
+            "no_real_funds_or_transactions": True,
+            "no_destructive_execution": True,
+            "real_brand_impersonation_requires_written_consent": True,
+            "required_approvals": ["Exercise Director", "System Owner"],
+            "exercise_window": "Set an approved exercise window",
+        },
+        "post_2020_tradecraft_only": True,
+        "minimum_source_date": "2020-01-01",
+        "max_attack_path_steps": 8,
+        "output_audience": ["red_team", "blue_team", "exercise_control"],
+    }
+    if premise:
+        payload["ad_hoc_scenario"] = premise
+    try:
+        ScenarioRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise typer.BadParameter(_validation_details(exc), param_hint="request answers") from exc
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    console.print(f"[green]Created request[/green] {output}")
+    console.print(f"Next: adversaryflow validate-request --request {output}")
 
 
 @app.command("validate-request")
@@ -99,9 +208,12 @@ def doctor(
     search_provider: str | None = typer.Option(
         None, help="Override search provider: brave or null"
     ),
+    check_network: bool = typer.Option(
+        False, help="Make small authenticated requests to verify configured services"
+    ),
 ) -> None:
     """Check local configuration before generating a scenario."""
-    settings = Settings()
+    settings = _load_settings()
     if demo:
         console.print("[green]Ready[/green] for deterministic demo mode (no credentials required).")
         return
@@ -117,6 +229,39 @@ def doctor(
         f"[green]Ready[/green] for live generation with model '{settings.llm_model}' "
         f"and search provider '{selected_search}'."
     )
+    if not check_network:
+        console.print("Use --check-network to verify service connectivity and credentials.")
+        return
+
+    failures: list[str] = []
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    try:
+        response = httpx.get(
+            f"{settings.llm_base_url.rstrip('/')}/models",
+            headers=headers,
+            timeout=settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+        console.print("[green]Model endpoint reachable[/green]")
+    except httpx.HTTPError as exc:
+        failures.append(f"model endpoint: {exc}")
+    if selected_search == "brave":
+        try:
+            response = httpx.get(
+                BraveSearchProvider.endpoint,
+                headers={"X-Subscription-Token": settings.brave_api_key},
+                params={"q": "site:attack.mitre.org ATT&CK", "count": 1},
+                timeout=settings.search_timeout_seconds,
+            )
+            response.raise_for_status()
+            console.print("[green]Brave Search reachable[/green]")
+        except httpx.HTTPError as exc:
+            failures.append(f"Brave Search: {exc}")
+    if failures:
+        console.print("[red]Connectivity checks failed:[/red]")
+        for failure in failures:
+            console.print(f"  - {failure}")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -132,11 +277,16 @@ def generate(
         None,
         help="Optional local Enterprise ATT&CK STIX bundle",
     ),
+    output_format: str | None = typer.Option(
+        None,
+        "--format",
+        help="Report format: markdown or html. Defaults from the output extension.",
+    ),
 ) -> None:
     """Generate a safety-constrained red team scenario."""
 
     async def _run() -> None:
-        settings = Settings()
+        settings = _load_settings()
         scenario_request = _read_request(request)
 
         if demo:
@@ -186,8 +336,14 @@ def generate(
             require_grounded_dossier=(False if demo else settings.require_grounded_dossier),
         )
         pack = await orchestrator.generate(scenario_request)
+        selected_format = output_format or (
+            "html" if output.suffix.casefold() == ".html" else "markdown"
+        )
+        if selected_format not in {"markdown", "html"}:
+            raise typer.BadParameter("format must be 'markdown' or 'html'", param_hint="--format")
+        report = render_html(pack) if selected_format == "html" else render_markdown(pack)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(render_markdown(pack), encoding="utf-8")
+        output.write_text(report, encoding="utf-8")
         trace_path = output.with_suffix(".trace.json")
         trace_path.write_text(
             json.dumps(pack.trace, indent=2, ensure_ascii=False),
