@@ -169,9 +169,7 @@ class SourceCache:
     def get_document(self, content_sha256: str) -> SourceDocument | None:
         """Load immutable content by hash without applying URL-cache freshness."""
         try:
-            document = SourceDocument.model_validate(
-                read_json(self._document_path(content_sha256))
-            )
+            document = SourceDocument.model_validate(read_json(self._document_path(content_sha256)))
             if document.source.content_sha256 != content_sha256:
                 raise ValueError("Source content hash mismatch")
         except (OSError, ValueError, ValidationError):
