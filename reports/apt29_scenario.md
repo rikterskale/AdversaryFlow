@@ -1,11 +1,12 @@
 # APT29 Safe Red Team Exercise
 
-- Generated: 2026-07-14T15:26:53.260397+00:00
+- Generated: 2026-07-22T18:45:38.444379+00:00
 - Actor input: APT29
+- Scenario kind: ttp_based
 - Exercise mode: emulation_plan
 - Safety gate: PASS
-- Factuality gate: PASS (100%)
-- Citation coverage: 100%
+- Claim-evidence gate: N/A (no factual claims evaluated)
+- Citation coverage: 0%
 - Source validation: PASS
 - Model calls: 12
 - Repair calls: 0
@@ -225,11 +226,11 @@ This is a safe, threat-informed exercise shell for APT29. Demo mode validates or
 ## Claim-Level Citation Graph
 
 No actor-specific factual claims were emitted for evaluation.
-## Factuality Evaluation
+## Claim-Evidence Support Evaluation
 
-- Result: PASS
-- Score: 100%
-- Citation coverage: 100%
+- Result: N/A (no factual claims evaluated)
+- Lexical evidence-support score: 0%
+- Citation coverage: 0%
 - Claims evaluated: 0
 - Claims supported: 0
 

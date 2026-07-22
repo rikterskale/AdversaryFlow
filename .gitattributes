@@ -1,2 +1,16 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep Unix shell scripts LF even when checked out on Windows, so they stay
+# executable and parseable by bash.
+*.sh text eol=lf
+
+# Keep Windows scripts CRLF so PowerShell and cmd read them reliably.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Treat common binary assets as binary.
+*.png binary
+*.pdf binary
+*.ico binary

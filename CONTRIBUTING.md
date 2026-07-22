@@ -4,24 +4,28 @@ AdversaryFlow accepts changes that improve grounded scenario generation, defensi
 
 ## Development setup
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env  # optional for live provider/search configuration
-```
-
-Run the local quality gates:
+The project ships a stdlib-only task runner (`tasks.py`) that works the same on
+Windows, Linux, and macOS. The only prerequisite is Python 3.11+.
 
 ```bash
-ruff check src tests
-ruff format --check src tests
-pytest -q
-adversaryflow generate \
-  --request examples/apt29_request.json \
-  --output reports/apt29_scenario.md \
-  --demo
+python tasks.py setup   # use python3 on Linux/macOS if that is your interpreter name
 ```
+
+This creates `.venv`, installs the project with its dev extras, and copies
+`.env.example` to `.env` (edit it only for live provider/search configuration).
+
+Run the local quality gates — these are exactly what CI runs on both Windows and
+Linux:
+
+```bash
+python tasks.py check   # ruff lint + format check, then pytest
+python tasks.py demo    # generate the deterministic demo report
+```
+
+Individual steps are also available: `python tasks.py lint`, `python tasks.py
+format`, and `python tasks.py test`. Unix users who prefer `make` can run the
+identical targets (`make check`, `make demo`, …), and the raw `ruff`/`pytest`
+commands still work inside an activated virtual environment.
 
 ## Documentation review checklist
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-07-22
+
+- Added `tasks.py`, a stdlib-only cross-platform developer task runner (`setup`, `test`, `lint`, `format`, `check`, `demo`, `clean`) that works identically on Windows, Linux, and macOS with no manual virtual-environment activation.
+- Added one-command bootstrap helpers in `scripts/` for both shells (`setup.ps1`/`setup.sh`, `demo.ps1`/`demo.sh`).
+- Reworked the Makefile into a thin wrapper that forwards to `tasks.py`, so `make` and `python tasks.py` share one implementation.
+- Extended CI to a Windows + Linux matrix on Python 3.11 and 3.12, and added a demo smoke test to the pipeline.
+- Rewrote the README and CONTRIBUTING setup instructions with copy-paste-safe Windows (PowerShell) and Linux/macOS command variants and a documented requirements section.
+- Added `.gitattributes` line-ending rules so `.sh` stays LF and `.ps1`/`.bat` stay CRLF across platforms.
+
 ## 0.2.1 — 2026-07-14
 
 - Renamed the project branding, Python package, CLI, Docker entrypoint, environment-variable prefix, user agents, documentation, tests, and repository assets to AdversaryFlow.

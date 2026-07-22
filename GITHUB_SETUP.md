@@ -8,7 +8,7 @@ Create an empty repository named `adversaryflow`, then run from this directory:
 git init
 git branch -M main
 git add .
-git commit -m "Initial AdversaryFlow v0.2.1 release"
+git commit -m "Initial AdversaryFlow v0.3.0 release"
 git remote add origin https://github.com/YOUR-ACCOUNT/adversaryflow.git
 git push -u origin main
 ```

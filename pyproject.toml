@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "adversaryflow"
-version = "0.2.1"
+version = "0.3.0"
 description = "Threat-informed, safety-constrained red team scenario generator"
 readme = "README.md"
 requires-python = ">=3.11"

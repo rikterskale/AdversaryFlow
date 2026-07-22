@@ -1,4 +1,4 @@
-# AdversaryFlow v0.2.1 Architecture
+# AdversaryFlow v0.3.0 Architecture
 
 ## 1. Product boundary
 

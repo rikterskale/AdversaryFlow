@@ -1,21 +1,32 @@
-.PHONY: install test lint check demo clean
+# Convenience wrapper for Unix `make` users.
+# All logic lives in the cross-platform runner `tasks.py`, so Windows users
+# can run the same commands with:  python tasks.py <target>
+#
+# Choose the interpreter: `make PYTHON=python3.12 setup`
+PYTHON ?= python3
 
-install:
-	python -m venv .venv
-	. .venv/bin/activate && pip install -e '.[dev]'
+.PHONY: setup install test lint format check demo clean
+
+setup:
+	$(PYTHON) tasks.py setup
+
+# Backwards-compatible alias for `setup`.
+install: setup
 
 test:
-	. .venv/bin/activate && pytest -q
+	$(PYTHON) tasks.py test
 
 lint:
-	. .venv/bin/activate && ruff check src tests
-	. .venv/bin/activate && ruff format --check src tests
+	$(PYTHON) tasks.py lint
 
-check: lint test
+format:
+	$(PYTHON) tasks.py format
+
+check:
+	$(PYTHON) tasks.py check
 
 demo:
-	. .venv/bin/activate && adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.md --demo
+	$(PYTHON) tasks.py demo
 
 clean:
-	rm -rf .pytest_cache .ruff_cache reports src/adversaryflow.egg-info build dist
-	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+	$(PYTHON) tasks.py clean

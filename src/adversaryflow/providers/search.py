@@ -96,7 +96,7 @@ class BraveSearchProvider:
         headers = {
             "Accept": "application/json",
             "X-Subscription-Token": self.api_key,
-            "User-Agent": "AdversaryFlow/0.2.1",
+            "User-Agent": "AdversaryFlow/0.3.0",
         }
         params = {
             "q": effective_query,

@@ -85,7 +85,7 @@ class URLValidator:
                 timeout=timeout,
                 follow_redirects=False,
                 trust_env=False,
-                headers={"User-Agent": "AdversaryFlow-SourceValidator/0.2.1"},
+                headers={"User-Agent": "AdversaryFlow-SourceValidator/0.3.0"},
                 transport=self.transport,
             ) as client:
                 for _ in range(6):

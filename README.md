@@ -1,8 +1,13 @@
-# AdversaryFlow v0.2.1
+# AdversaryFlow v0.3.0
+
+![CI](https://github.com/YOUR-ACCOUNT/adversaryflow/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
 AdversaryFlow is a threat-informed red team scenario generator for authorized, collaborative purple-team exercises. It resolves a threat actor, builds a claim-level cited TTP dossier, adapts observed behaviors to the target environment and Rules of Engagement (RoE), and produces safe exercise equivalents rather than literal destructive or criminal actions.
 
-Version 0.2.1 is the GitHub-ready AdversaryFlow release, including the renamed package namespace, CLI, environment variables, Docker entrypoint, documentation, CI, and repository governance files.
+Version 0.3.0 makes the project run the same way on Windows, Linux, and macOS: a stdlib-only `tasks.py` runner, one-command bootstrap scripts for both shells, and a cross-platform CI matrix. (Replace `YOUR-ACCOUNT` in the CI badge above with your GitHub org/user after publishing.)
 
 ## What changed in v0.2
 
@@ -72,43 +77,98 @@ Calls 2–4, 6–8, and 9–10 run concurrently. A successful TTP-based run rema
 AdversaryFlow can also generate authorized red team scenarios that are not tied to a threat actor or ATT&CK TTP dossier. Set `scenario_kind` to `ad_hoc` and provide `ad_hoc_scenario`; the orchestrator skips actor identity resolution, live source retrieval, ATT&CK extraction, and dossier synthesis while keeping RoE translation, telemetry mapping, candidate-path adjudication, safety checks, factuality checks for any emitted claims, trace output, and Markdown rendering.
 
 ```bash
-adversaryflow generate \
-  --request examples/ad_hoc_request.json \
-  --output reports/ad_hoc_scenario.md \
-  --demo
+adversaryflow generate --request examples/ad_hoc_request.json --output reports/ad_hoc_scenario.md --demo
 ```
 
-Ad hoc reports intentionally show no grounded TTP dossier unless you explicitly include supported technique mappings in the request.
+Ad hoc reports intentionally show no grounded TTP dossier unless you explicitly include supported technique mappings in the request. (The commands in this README are written on a single line so they can be pasted directly into PowerShell, `cmd`, or a Unix shell.)
+
+## Requirements & install
+
+- **Python 3.11 or newer.** Check with `python --version` (or `py --version` on Windows).
+- **Git**, to clone the repository.
+
+No other prerequisites. The developer workflow is driven by `tasks.py`, a stdlib-only script that behaves identically on Windows, Linux, and macOS.
+
+**Windows:** install Python from [python.org](https://www.python.org/downloads/) and tick **"Add python.exe to PATH"** during setup. That also installs the **`py` launcher**, which is the most reliable way to run Python on Windows — if plain `python` does not work in your terminal, use `py` instead everywhere in this README (e.g. `py tasks.py setup`, `py --version`).
+
+**Linux / macOS:** most systems already ship Python 3.11+; if `python` is not found, use `python3` (e.g. `python3 tasks.py setup`). Install via your package manager (`sudo apt install python3 python3-venv`, `brew install python`, etc.) if needed.
 
 ## Quick start: deterministic demo
 
+The fastest path on any operating system is a single command.
+
+**Windows (PowerShell):**
+
+```powershell
+python tasks.py setup   # create .venv, install dev tools, seed .env
+python tasks.py demo
+```
+
+**Linux / macOS:**
+
 ```bash
+python3 tasks.py setup   # create .venv, install dev tools, seed .env
+python3 tasks.py demo
+```
+
+`tasks.py` creates the virtual environment, installs the project with its dev
+extras, copies `.env.example` to `.env` if you do not have one yet, and then runs
+the demo. You do not need to activate the environment manually — every task runs
+inside `.venv` automatically.
+
+Prefer the classic manual steps? They work too:
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
 python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e '.[dev]'
+Copy-Item .env.example .env   # optional: edit only for live providers/search
+
+adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.md --demo
+```
+</details>
+
+<details>
+<summary>Linux / macOS</summary>
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
-cp .env.example .env  # optional: edit only for live providers/search
+cp .env.example .env   # optional: edit only for live providers/search
 
-adversaryflow generate \
-  --request examples/apt29_request.json \
-  --output reports/apt29_scenario.md \
-  --demo
+adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.md --demo
 ```
+</details>
 
 Demo mode validates the 12-node DAG, strict schemas, trace generation, safety policy, claim-evidence evaluator, and renderer without external services. It intentionally emits no live actor claims, so its factuality status is reported as N/A rather than 100% verified.
 
-Run tests and lint:
+## Developer commands
 
-```bash
-pytest -q
-ruff check src tests
-ruff format --check src tests
-```
+The same commands run on every platform. Replace `python` with `python3` on Linux/macOS if that is how your interpreter is named.
+
+| Command | What it does |
+|---|---|
+| `python tasks.py setup` | Create `.venv`, install the project with dev tools, seed `.env`. |
+| `python tasks.py test` | Run the test suite (`pytest -q`). |
+| `python tasks.py lint` | Ruff lint and format check. |
+| `python tasks.py format` | Apply Ruff formatting. |
+| `python tasks.py check` | Lint + test (the same gates CI runs). |
+| `python tasks.py demo` | Generate the deterministic demo report. |
+| `python tasks.py clean` | Remove caches, build artifacts, and generated reports. |
+
+Unix users who prefer `make` can use the identical targets (`make setup`, `make test`, `make demo`, …); the Makefile simply forwards to `tasks.py`. There are also one-command bootstrap helpers in `scripts/` (`scripts/setup.ps1` / `scripts/setup.sh` and `scripts/demo.ps1` / `scripts/demo.sh`).
 
 ## Production configuration
 
 ### 1. Model provider
 
-The included model adapter works with OpenAI-compatible chat-completion APIs that support JSON-object output:
+The included model adapter works with OpenAI-compatible chat-completion APIs that support JSON-object output. The simplest cross-platform way to configure it is to copy `.env.example` to `.env` and fill in the values (`python tasks.py setup` does the copy for you). To set the variables directly in a shell instead:
+
+**Linux / macOS:**
 
 ```bash
 export ADVERSARYFLOW_LLM_BASE_URL="https://your-provider.example/v1"
@@ -116,30 +176,42 @@ export ADVERSARYFLOW_LLM_API_KEY="..."
 export ADVERSARYFLOW_LLM_MODEL="your-model"
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+$env:ADVERSARYFLOW_LLM_BASE_URL="https://your-provider.example/v1"
+$env:ADVERSARYFLOW_LLM_API_KEY="..."
+$env:ADVERSARYFLOW_LLM_MODEL="your-model"
+```
+
 Every node receives its exact JSON Schema in the system prompt. Returned JSON is validated locally with Pydantic. Invalid output is retried with a repair context containing the previous response and validation errors.
 
 ### 2. Brave Search
+
+**Linux / macOS:**
 
 ```bash
 export ADVERSARYFLOW_SEARCH_PROVIDER="brave"
 export ADVERSARYFLOW_BRAVE_API_KEY="..."
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+$env:ADVERSARYFLOW_SEARCH_PROVIDER="brave"
+$env:ADVERSARYFLOW_BRAVE_API_KEY="..."
+```
+
 The adapter calls the Brave Web Search endpoint and adds `site:` restrictions for the configured allowlist. Search syntax is only a retrieval optimization: every result is independently rejected unless its HTTPS URL is allowlisted. Redirect destinations are checked again during fetch.
 
-To intentionally disable live search:
-
-```bash
-export ADVERSARYFLOW_SEARCH_PROVIDER="null"
-```
+To intentionally disable live search, set `ADVERSARYFLOW_SEARCH_PROVIDER` to `null` (or pass `--search-provider null` on the command line).
 
 ### 3. Run
 
+If you did not install into a virtual environment, prefix the command with `python -m`, i.e. `python -m adversaryflow.cli generate ...`.
+
 ```bash
-adversaryflow generate \
-  --request examples/apt29_request.json \
-  --output reports/apt29_scenario.md \
-  --attack-bundle data/enterprise-attack.json
+adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.md --attack-bundle data/enterprise-attack.json
 ```
 
 ### CLI options
