@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from adversaryflow.cli import app
 from adversaryflow.storage.run_store import RunStore
+from adversaryflow.storage.migrations import CURRENT_STORE_VERSION
 
 
 runner = CliRunner()
@@ -83,6 +84,26 @@ def test_validate_request_accepts_minimal_tabletop(tmp_path) -> None:
 
     assert result.exit_code == 0
     assert "Valid request" in result.stdout
+
+
+def test_validate_request_accepts_utf8_bom_from_windows_powershell(tmp_path) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "actor": "Example Actor",
+                "objective": "Validate the incident response process.",
+                "mode": "tabletop",
+                "environment": {"name": "Example environment"},
+                "roe": {},
+            }
+        ),
+        encoding="utf-8-sig",
+    )
+
+    result = runner.invoke(app, ["validate-request", "--request", str(request)])
+
+    assert result.exit_code == 0
 
 
 def test_live_generate_fails_with_actionable_configuration_error(tmp_path, monkeypatch) -> None:
@@ -187,7 +208,7 @@ def test_generate_html_report(tmp_path) -> None:
     run_dirs = list((store / "runs").iterdir())
     assert len(run_dirs) == 1
     manifest = json.loads((run_dirs[0] / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == CURRENT_STORE_VERSION
     assert (run_dirs[0] / "scenario-pack.json").exists()
     assert (run_dirs[0] / "report.html").exists()
     persisted = RunStore(store)

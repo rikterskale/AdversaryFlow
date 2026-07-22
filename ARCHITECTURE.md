@@ -47,6 +47,14 @@ Each trace records:
 
 Parallel nodes do not mutate shared state. Citation graph updates happen after explicit join points.
 
+Each node also declares typed dependency categories and upstream nodes. Request
+payloads are sliced to those dependencies before cache hashing: actor research
+does not receive environment or RoE fields, while environment, RoE, and telemetry
+nodes receive only their relevant request views. Adaptation computes changed
+dependency categories, predicts the downstream invalidation closure, and records
+predicted versus actual cache reuse in the child run. Every trace embeds the
+versioned dependency manifest used for that decision.
+
 ## 4. Claim graph
 
 A factual claim is a first-class object containing text, category, confidence, technique IDs, source URLs, and optional model-selected supporting excerpts.
@@ -124,6 +132,10 @@ URL freshness index. Model-node outputs are keyed by provider/model identity, fu
 prompt, response schema, node name, and canonical input. Only successfully validated
 outputs are cached. API keys are excluded from storage and keys. Forward-only store
 migrations preserve existing artifacts and reject unknown newer schema versions.
+Store schema v2 adds immutable parent/child lineage for adaptations. Run diffs
+compare leaf request values and semantic scenario content while excluding timestamps
+and raw execution noise. Operator packs are derived exports with their own hashed
+manifest bound to the source run ID.
 
 ## 9. Test coverage
 

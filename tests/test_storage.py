@@ -108,10 +108,11 @@ def test_migration_upgrades_legacy_manifest(tmp_path) -> None:
     applied = migrate_store(tmp_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    assert applied == ["v0->v1"]
+    assert applied == ["v0->v1", "v1->v2"]
     assert store_version(tmp_path) == CURRENT_STORE_VERSION
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == CURRENT_STORE_VERSION
     assert manifest["status"] == "completed"
+    assert manifest["lineage"] == {"relationship": "root", "parent_run_id": None}
     assert migrate_store(tmp_path) == []
 
 
@@ -120,3 +121,20 @@ def test_migration_rejects_newer_store(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="newer than supported"):
         migrate_store(tmp_path)
+
+
+def test_v1_migration_adds_root_lineage_without_changing_artifacts(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "existing"
+    run_dir.mkdir(parents=True)
+    artifact = run_dir / "report.md"
+    artifact.write_text("preserve me", encoding="utf-8")
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"schema_version": 1, "run_id": "existing", "artifacts": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "store.json").write_text('{"schema_version": 1}', encoding="utf-8")
+
+    assert migrate_store(tmp_path) == ["v1->v2"]
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["lineage"] == {"relationship": "root", "parent_run_id": None}
+    assert artifact.read_text(encoding="utf-8") == "preserve me"

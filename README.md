@@ -279,6 +279,9 @@ Other useful commands:
 | `adversaryflow storage status` | Show current and supported storage schema versions. |
 | `adversaryflow storage list` | List completed immutable run bundles. |
 | `adversaryflow storage verify RUN_ID` | Recompute and verify every artifact hash. |
+| `adversaryflow adapt --from RUN_ID ...` | Change a stored request and selectively re-execute affected DAG nodes. |
+| `adversaryflow diff RUN_A RUN_B` | Compare request fields, scenario content, and actual node reuse. |
+| `adversaryflow export operator RUN_ID` | Create an operator-first directory or ZIP package. |
 
 For local configuration, copy `.env.example` to `.env` and fill in the variables needed by your provider before running the CLI.
 
@@ -383,6 +386,21 @@ The renderer intentionally emits operator-level summaries, evidence requirements
 
 See [`STORAGE.md`](STORAGE.md) for the artifact layout, cache-key contract,
 freshness policy, migration procedure, maintenance commands, and security guidance.
+
+## Adapt and hand off
+
+Reuse a stored dossier while adapting the environment, RoE, objective, or complete
+request. The child run records its parent, request diff, predicted invalidations,
+and actual cache reuse:
+
+```bash
+adversaryflow adapt --from RUN_ID --environment environments/hybrid-entra.json --output reports/adapted.html --demo
+adversaryflow diff RUN_ID CHILD_RUN_ID --format json --output reports/adaptation-diff.json
+adversaryflow export operator CHILD_RUN_ID --output reports/operator-pack --zip
+```
+
+Every trace embeds the typed DAG dependency model used to determine invalidation.
+Safety and factuality gates still run for adapted scenarios.
 
 ## Troubleshooting
 

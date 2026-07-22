@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from adversaryflow.storage.common import atomic_write_json, read_json
 
-CURRENT_STORE_VERSION = 1
+CURRENT_STORE_VERSION = 2
 Migration = Callable[[Path], None]
 
 
@@ -22,7 +22,25 @@ def _migrate_v0_to_v1(root: Path) -> None:
     atomic_write_json(root / "store.json", {"schema_version": 1})
 
 
-MIGRATIONS: dict[int, Migration] = {0: _migrate_v0_to_v1}
+def _migrate_v1_to_v2(root: Path) -> None:
+    """Add explicit root/adaptation lineage to every stored run."""
+    runs = root / "runs"
+    if runs.exists():
+        for manifest_path in runs.glob("*/manifest.json"):
+            manifest = read_json(manifest_path)
+            manifest["schema_version"] = 2
+            manifest.setdefault(
+                "lineage",
+                {
+                    "relationship": "root",
+                    "parent_run_id": None,
+                },
+            )
+            atomic_write_json(manifest_path, manifest)
+    atomic_write_json(root / "store.json", {"schema_version": 2})
+
+
+MIGRATIONS: dict[int, Migration] = {0: _migrate_v0_to_v1, 1: _migrate_v1_to_v2}
 
 
 def store_version(root: Path) -> int:

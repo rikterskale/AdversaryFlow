@@ -18,6 +18,12 @@
 - Run the Docker image as a non-root user and document persistent-volume permissions.
 - Add an early Python 3.11 version check and clarify that development cleanup preserves durable runs.
 - Build package artifacts in CI and verify installation from a wheel during review.
+- Add typed DAG dependency metadata and narrowly scoped cache payloads.
+- Add selective `adapt --from` generation with immutable parent/child lineage.
+- Add semantic text/JSON run diffs with predicted invalidation and actual node reuse.
+- Add operator-first directory and ZIP exports with hashed manifests.
+- Add the forward-only v1-to-v2 storage migration for lineage metadata.
+- Accept UTF-8 JSON with or without a BOM for Windows PowerShell interoperability.
 - Build the source distribution from an explicit file allowlist so untracked working-directory files, including scenario requests containing environment and rules-of-engagement detail, can no longer be packaged.
 - Add `scripts/check_sdist.py` and `python tasks.py build`, which audit a built source distribution against that allowlist and fail on any unexpected path or on a reversion to a denylist.
 - Enforce the sdist audit in CI against a deliberately dirty working tree, so the check cannot pass vacuously.

@@ -19,6 +19,13 @@ from adversaryflow.models import (
     TechniqueEvidence,
 )
 from adversaryflow.pipeline.factuality import FactualityEvaluator
+from adversaryflow.pipeline.dependencies import (
+    dependency_manifest,
+    environment_request,
+    grounding_request,
+    roe_request,
+    telemetry_request,
+)
 from adversaryflow.pipeline.node_runner import NodeRunner, RetryPolicy
 from adversaryflow.pipeline.schemas import (
     ActorIdentityOutput,
@@ -155,7 +162,7 @@ class ScenarioOrchestrator:
             (
                 await runner.run(
                     "actor_identity",
-                    {"actor": request.actor, "request": request.model_dump(mode="json")},
+                    {"actor": request.actor, "request": grounding_request(request)},
                 )
             ).model_dump(mode="json")
         )
@@ -201,7 +208,7 @@ class ScenarioOrchestrator:
                 await runner.run(
                     "dossier_synthesis",
                     {
-                        "request": request.model_dump(mode="json"),
+                        "request": grounding_request(request),
                         "identity": identity_out.model_dump(mode="json"),
                         "attack": attack_out.model_dump(mode="json"),
                         "advisories": advisory_out.model_dump(mode="json"),
@@ -213,16 +220,15 @@ class ScenarioOrchestrator:
         )
         graph_builder.add_claims("dossier_synthesis", dossier_out.claims)
 
-        shared = {
-            "request": request.model_dump(mode="json"),
+        evidence = {
             "dossier": dossier_out.model_dump(mode="json"),
             "citation_graph": graph_builder.build().model_dump(mode="json"),
         }
 
         environment_model, roe_model, telemetry_model = await asyncio.gather(
-            runner.run("environment_fit", shared),
-            runner.run("roe_translation", shared),
-            runner.run("telemetry_mapping", shared),
+            runner.run("environment_fit", {**evidence, "request": environment_request(request)}),
+            runner.run("roe_translation", {**evidence, "request": roe_request(request)}),
+            runner.run("telemetry_mapping", {**evidence, "request": telemetry_request(request)}),
         )
         environment_out = EnvironmentFitOutput.model_validate(
             environment_model.model_dump(mode="json")
@@ -233,7 +239,8 @@ class ScenarioOrchestrator:
         )
 
         path_payload = {
-            **shared,
+            **evidence,
+            "request": request.model_dump(mode="json"),
             "environment_fit": environment_out.model_dump(mode="json"),
             "roe_translation": roe_out.model_dump(mode="json"),
             "telemetry": telemetry_out.model_dump(mode="json"),
@@ -372,6 +379,7 @@ class ScenarioOrchestrator:
             "citation_graph": citation_graph.model_dump(mode="json"),
             "factuality": factuality.model_dump(mode="json"),
             "cache": self._cache_trace(),
+            "dependency_model": dependency_manifest(),
         }
 
         return ScenarioPack(
@@ -420,8 +428,7 @@ class ScenarioOrchestrator:
             source_manifest=[],
         )
         citation_graph = CitationGraph()
-        shared = {
-            "request": request.model_dump(mode="json"),
+        evidence = {
             "ad_hoc": True,
             "ad_hoc_scenario": request.ad_hoc_scenario,
             "dossier": dossier.model_dump(mode="json"),
@@ -429,9 +436,9 @@ class ScenarioOrchestrator:
         }
 
         environment_model, roe_model, telemetry_model = await asyncio.gather(
-            runner.run("environment_fit", shared),
-            runner.run("roe_translation", shared),
-            runner.run("telemetry_mapping", shared),
+            runner.run("environment_fit", {**evidence, "request": environment_request(request)}),
+            runner.run("roe_translation", {**evidence, "request": roe_request(request)}),
+            runner.run("telemetry_mapping", {**evidence, "request": telemetry_request(request)}),
         )
         environment_out = EnvironmentFitOutput.model_validate(
             environment_model.model_dump(mode="json")
@@ -441,7 +448,8 @@ class ScenarioOrchestrator:
             telemetry_model.model_dump(mode="json")
         )
         path_payload = {
-            **shared,
+            **evidence,
+            "request": request.model_dump(mode="json"),
             "environment_fit": environment_out.model_dump(mode="json"),
             "roe_translation": roe_out.model_dump(mode="json"),
             "telemetry": telemetry_out.model_dump(mode="json"),
@@ -526,6 +534,7 @@ class ScenarioOrchestrator:
             "citation_graph": citation_graph.model_dump(mode="json"),
             "factuality": factuality.model_dump(mode="json"),
             "cache": self._cache_trace(),
+            "dependency_model": dependency_manifest(),
         }
         return ScenarioPack(
             title=f"{request.actor} Ad Hoc Red Team Exercise",

@@ -404,6 +404,95 @@ Cache clearing preserves completed runs. `python tasks.py clean` removes develop
 caches and generated untracked reports but deliberately preserves `.adversaryflow`.
 See `STORAGE.md` before operating a shared or production store.
 
+## Adapt a previous run
+
+Adaptation creates a new immutable child run; it never edits its parent. Provide
+one or more replacements:
+
+```bash
+adversaryflow adapt --from PARENT_RUN_ID --environment new-environment.json --output reports/adapted.html
+adversaryflow adapt --from PARENT_RUN_ID --roe revised-roe.json --objective "Validate the revised identity control" --output reports/revised.html
+adversaryflow adapt --from PARENT_RUN_ID --request complete-replacement-request.json --output reports/revised.html
+```
+
+`--environment` accepts either the environment object itself or an object with an
+`environment` key. `--roe` behaves the same way. The final request is validated
+before provider calls.
+
+Each DAG node declares typed dependencies such as actor, grounding, objective,
+environment, RoE, and output policy. Cache keys also use narrowly scoped payloads.
+Consequently:
+
+- environment changes reuse actor identity, retrieval, and the grounded dossier;
+- RoE-only changes reuse actor research, dossier, environment fit, and telemetry;
+- objective changes reuse actor grounding but regenerate adaptation and path nodes;
+- actor or grounding-policy changes invalidate research and every downstream node.
+
+Exact reuse requires compatible node cache entries in the same store and the same
+provider/model identity. If caches were cleared, inputs came from an older payload
+schema, or `--no-cache`/`--refresh-nodes` is selected, AdversaryFlow safely executes
+more nodes. The child trace and manifest record predicted invalidations separately
+from actual reused and executed nodes.
+
+Adapted runs retain every normal request, safety, source, and factuality gate.
+
+## Compare runs
+
+Human-readable comparison:
+
+```bash
+adversaryflow diff RUN_A RUN_B
+```
+
+Machine-readable comparison:
+
+```bash
+adversaryflow diff RUN_A RUN_B --format json --output run-diff.json
+```
+
+The diff contains:
+
+- changed dependency categories;
+- predicted invalidated nodes;
+- actual reused and executed nodes from the newer trace;
+- leaf-level request changes;
+- semantic scenario changes covering summary, path, injects, metrics, dossier, and quality status.
+
+Generated timestamps, raw attempts, and cache counters are excluded from semantic
+scenario comparison so routine execution noise does not dominate the result.
+
+## Export an operator pack
+
+Directory export:
+
+```bash
+adversaryflow export operator RUN_ID --output operator-pack
+```
+
+Portable ZIP export:
+
+```bash
+adversaryflow export operator RUN_ID --output operator-pack.zip --zip
+```
+
+The pack contains:
+
+```text
+README.md
+00_Executive_Summary.md
+01_Operator_Injects.md
+02_Authorized_Safe_Actions.md
+03_Expected_Telemetry.md
+04_Detection_Validation.md
+05_Stop_Conditions_Cleanup.md
+full_report.html
+operator_manifest.json
+```
+
+The manifest binds the export to its source run and hashes every primary file.
+Use `--force` only when intentionally replacing an existing export. The operator
+pack remains a planning artifact and does not confer execution approval.
+
 ## Configuration reference
 
 | Variable | Default | Notes |

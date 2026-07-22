@@ -38,6 +38,8 @@ class RunStore:
         report_suffix: str,
         provider: str,
         cache: dict[str, object],
+        parent_run_id: str | None = None,
+        adaptation: dict[str, object] | None = None,
     ) -> Path:
         runs_dir = self.root / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +80,11 @@ class RunStore:
                 "scenario_pack_sha256": sha256_json(pack.model_dump(mode="json")),
                 "provider": provider,
                 "cache": cache,
+                "lineage": {
+                    "relationship": "adaptation" if parent_run_id else "root",
+                    "parent_run_id": parent_run_id,
+                },
+                "adaptation": adaptation,
                 "artifacts": artifact_manifest,
             }
             atomic_write_json(staging / "manifest.json", manifest)

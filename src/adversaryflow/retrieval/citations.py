@@ -45,7 +45,9 @@ def lexical_support(claim: GroundedClaim, text: str) -> float:
 
 
 class CitationGraphBuilder:
-    def __init__(self, documents: list[SourceDocument]) -> None:
+    def __init__(
+        self, documents: list[SourceDocument], *, existing_graph: CitationGraph | None = None
+    ) -> None:
         self.documents = documents
         self._documents_by_url: dict[str, SourceDocument] = {}
         self._sources: dict[str, CitationSource] = {}
@@ -68,6 +70,12 @@ class CitationGraphBuilder:
                 validated=document.source.validated,
                 content_sha256=document.source.content_sha256,
             )
+        if existing_graph is not None:
+            self._sources.update({item.source_id: item for item in existing_graph.sources})
+            self._claims.update({item.claim_id: item for item in existing_graph.claims})
+            for edge in existing_graph.edges:
+                self._edges[(edge.claim_id, edge.source_id)] = edge
+                self._claim_ids_by_source[edge.source_url].add(edge.claim_id)
 
     @staticmethod
     def _source_id(url: str) -> str:

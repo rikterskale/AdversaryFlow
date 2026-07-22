@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 import typer
@@ -12,6 +13,7 @@ from pydantic import ValidationError
 from rich.console import Console
 
 from adversaryflow.config import Settings
+from adversaryflow.export import write_operator_pack
 from adversaryflow.models import ScenarioRequest
 from adversaryflow.pipeline.factuality import FactualityEvaluator
 from adversaryflow.pipeline.node_runner import RetryPolicy
@@ -24,13 +26,16 @@ from adversaryflow.retrieval.url_validator import URLValidator
 from adversaryflow.safety.policy import SafetyPolicy
 from adversaryflow.storage import NodeCache, RunStore, SourceCache
 from adversaryflow.storage.cache import cache_inventory, clear_cache
+from adversaryflow.storage.diff import RunDiff, build_run_diff
 from adversaryflow.storage.migrations import CURRENT_STORE_VERSION, migrate_store, store_version
 
 app = typer.Typer(no_args_is_help=True, help="Build safe, evidence-grounded red team exercises.")
 cache_app = typer.Typer(help="Inspect or clear durable caches.")
 storage_app = typer.Typer(help="Inspect or migrate the durable run store.")
+export_app = typer.Typer(help="Export stored runs into operational formats.")
 app.add_typer(cache_app, name="cache")
 app.add_typer(storage_app, name="storage")
+app.add_typer(export_app, name="export")
 console = Console()
 
 
@@ -59,7 +64,7 @@ def main(
 
 def _read_request(path: Path) -> ScenarioRequest:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise typer.BadParameter(
             f"Invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}",
@@ -69,6 +74,16 @@ def _read_request(path: Path) -> ScenarioRequest:
         return ScenarioRequest.model_validate(payload)
     except ValidationError as exc:
         raise typer.BadParameter(_validation_details(exc), param_hint="--request") from exc
+
+
+def _read_json_object(path: Path, *, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise typer.BadParameter(f"Cannot read {label} JSON: {exc}", param_hint=label) from exc
+    if not isinstance(value, dict):
+        raise typer.BadParameter(f"{label} must contain a JSON object", param_hint=label)
+    return value
 
 
 def _validation_details(exc: ValidationError) -> str:
@@ -186,13 +201,94 @@ def storage_verify(
     """Verify every stored artifact against its manifest hash."""
     try:
         failures = RunStore(store_dir).verify(run_id)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
         raise typer.BadParameter(str(exc), param_hint="RUN_ID") from exc
     if failures:
         for failure in failures:
             console.print(f"[red]{failure}[/red]")
         raise typer.Exit(code=1)
     console.print(f"[green]Verified[/green] {run_id}")
+
+
+@export_app.command("operator")
+def export_operator(
+    run_id: str = typer.Argument(..., help="Stored run identifier"),
+    output: Path = typer.Option(Path("operator-pack"), help="Output directory or ZIP path"),
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+    zipped: bool = typer.Option(False, "--zip", help="Create one ZIP archive"),
+    force: bool = typer.Option(False, "--force", help="Replace an existing export"),
+) -> None:
+    """Export an operator-first exercise package from a stored run."""
+    try:
+        pack = RunStore(store_dir).load_pack(run_id)
+        destination = write_operator_pack(
+            pack,
+            run_id=run_id,
+            output=output,
+            zipped=zipped,
+            force=force,
+        )
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="RUN_ID") from exc
+    console.print(f"[green]Exported operator pack[/green] {destination}")
+
+
+def _format_diff(diff: RunDiff) -> str:
+    lines = [
+        f"Runs: {diff.before_run_id or 'unknown'} -> {diff.after_run_id or 'unknown'}",
+        "Changed dependencies: " + (", ".join(diff.changed_dependencies) or "none"),
+        "Predicted invalidated nodes: " + (", ".join(diff.predicted_invalidated_nodes) or "none"),
+        "Actual reused nodes: " + (", ".join(diff.actual_reused_nodes) or "none"),
+        "Actual executed nodes: " + (", ".join(diff.actual_executed_nodes) or "none"),
+        "",
+        "Request changes:",
+    ]
+    lines.extend(
+        f"- {item.path}: {item.before!r} -> {item.after!r}" for item in diff.request_changes
+    )
+    lines.extend(["", f"Scenario changes: {len(diff.scenario_changes)}"])
+    lines.extend(
+        f"- {item.path}: {item.before!r} -> {item.after!r}" for item in diff.scenario_changes[:50]
+    )
+    if len(diff.scenario_changes) > 50:
+        lines.append(f"- ... {len(diff.scenario_changes) - 50} additional changes; use JSON output")
+    return "\n".join(lines) + "\n"
+
+
+@app.command("diff")
+def diff_runs(
+    before_run_id: str = typer.Argument(..., help="Older stored run identifier"),
+    after_run_id: str = typer.Argument(..., help="Newer stored run identifier"),
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+    output: Path | None = typer.Option(None, help="Optional text or JSON output file"),
+    output_format: str = typer.Option("text", "--format", help="text or json"),
+) -> None:
+    """Compare request inputs, semantic scenario content, and node reuse."""
+    if output_format not in {"text", "json"}:
+        raise typer.BadParameter("format must be text or json", param_hint="--format")
+    try:
+        store = RunStore(store_dir)
+        before = store.load_pack(before_run_id)
+        after = store.load_pack(after_run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="RUN_ID") from exc
+    difference = build_run_diff(
+        before,
+        after,
+        before_run_id=before_run_id,
+        after_run_id=after_run_id,
+    )
+    rendered = (
+        json.dumps(difference.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n"
+        if output_format == "json"
+        else _format_diff(difference)
+    )
+    if output:
+        _ensure_writable_directory(output.parent, label="diff output directory")
+        output.write_text(rendered, encoding="utf-8")
+        console.print(f"[green]Wrote run diff[/green] {output}")
+    else:
+        console.print(rendered, markup=False)
 
 
 @app.command("export-schema")
@@ -365,6 +461,84 @@ def doctor(
         raise typer.Exit(code=1)
 
 
+@app.command("adapt")
+def adapt_run(
+    from_run: str = typer.Option(..., "--from", help="Parent stored run identifier"),
+    output: Path = typer.Option(Path("reports/adapted-scenario.md"), help="New report path"),
+    request: Path | None = typer.Option(
+        None, exists=True, readable=True, help="Complete replacement request JSON"
+    ),
+    environment: Path | None = typer.Option(
+        None, exists=True, readable=True, help="Replacement environment JSON object"
+    ),
+    roe: Path | None = typer.Option(
+        None, exists=True, readable=True, help="Replacement Rules of Engagement JSON object"
+    ),
+    objective: str | None = typer.Option(None, help="Replacement exercise objective"),
+    demo: bool = typer.Option(False, help="Use deterministic demo model and disable live search"),
+    search_provider: str | None = typer.Option(
+        None, help="Override search provider: brave or null"
+    ),
+    attack_bundle: Path | None = typer.Option(None, help="Optional Enterprise ATT&CK bundle"),
+    output_format: str | None = typer.Option(None, "--format", help="markdown or html"),
+    store_dir: Path | None = typer.Option(
+        None, help="Run store directory; defaults to ADVERSARYFLOW_STORE_DIR"
+    ),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Disable cache reuse"),
+    refresh_sources: bool = typer.Option(False, help="Refetch source documents"),
+    refresh_nodes: bool = typer.Option(False, help="Regenerate every model node"),
+) -> None:
+    """Adapt a stored run and selectively re-execute affected DAG nodes."""
+    settings = _load_settings()
+    resolved_store = store_dir or Path(settings.store_dir)
+    try:
+        parent = RunStore(resolved_store).load_pack(from_run)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--from") from exc
+
+    payload = (
+        _read_json_object(request, label="--request")
+        if request
+        else parent.request.model_dump(mode="json")
+    )
+    if environment:
+        environment_payload = _read_json_object(environment, label="--environment")
+        payload["environment"] = environment_payload.get("environment", environment_payload)
+    if roe:
+        roe_payload = _read_json_object(roe, label="--roe")
+        payload["roe"] = roe_payload.get("roe", roe_payload)
+    if objective is not None:
+        payload["objective"] = objective
+    try:
+        adapted = ScenarioRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise typer.BadParameter(_validation_details(exc), param_hint="adapted request") from exc
+    if adapted == parent.request:
+        raise typer.BadParameter(
+            "No request fields changed; provide --request, --environment, --roe, or --objective",
+            param_hint="adaptation",
+        )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".adversaryflow-adapt-", dir=output.parent) as temp:
+        request_path = Path(temp) / "request.json"
+        request_path.write_text(adapted.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        generate(
+            request=request_path,
+            output=output,
+            demo=demo,
+            search_provider=search_provider,
+            attack_bundle=attack_bundle,
+            output_format=output_format,
+            store_dir=resolved_store,
+            no_store=False,
+            no_cache=no_cache,
+            refresh_sources=refresh_sources,
+            refresh_nodes=refresh_nodes,
+            parent_run_id=from_run,
+        )
+
+
 @app.command()
 def generate(
     request: Path = typer.Option(..., exists=True, readable=True, help="Scenario request JSON"),
@@ -393,6 +567,12 @@ def generate(
     refresh_sources: bool = typer.Option(False, help="Refetch sources and replace cache entries"),
     refresh_nodes: bool = typer.Option(
         False, help="Regenerate model nodes and replace cache entries"
+    ),
+    parent_run_id: str | None = typer.Option(
+        None,
+        "--parent-run",
+        hidden=True,
+        help="Internal lineage link used by the adapt command",
     ),
 ) -> None:
     """Generate a safety-constrained red team scenario."""
@@ -480,12 +660,28 @@ def generate(
         pack = await orchestrator.generate(scenario_request)
         run_store = None if no_store else RunStore(resolved_store)
         run_id = run_store.new_run_id(scenario_request) if run_store else None
+        adaptation = None
+        if parent_run_id:
+            if not run_store or not run_id:
+                raise typer.BadParameter("Adapted runs require durable storage")
+            try:
+                parent_pack = run_store.load_pack(parent_run_id)
+            except (FileNotFoundError, ValueError) as exc:
+                raise typer.BadParameter(str(exc), param_hint="--parent-run") from exc
+            adaptation = build_run_diff(
+                parent_pack,
+                pack,
+                before_run_id=parent_run_id,
+                after_run_id=run_id,
+            ).model_dump(mode="json")
+            pack.trace["adaptation"] = adaptation
         pack.trace["storage"] = (
             {
                 "enabled": True,
                 "run_id": run_id,
                 "store_dir": str(resolved_store),
                 "schema_version": CURRENT_STORE_VERSION,
+                "parent_run_id": parent_run_id,
             }
             if run_store
             else {"enabled": False}
@@ -507,6 +703,8 @@ def generate(
                 report_suffix=".html" if selected_format == "html" else ".md",
                 provider=provider_identity,
                 cache=pack.trace.get("cache", {}),
+                parent_run_id=parent_run_id,
+                adaptation=adaptation,
             )
         console.print(f"[green]Generated[/green] {output}")
         console.print(f"[green]Trace[/green] {trace_path}")

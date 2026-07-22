@@ -86,7 +86,7 @@ model calls again.
 
 ## Migrations
 
-The current store schema is version 1. Migrations are forward-only and registered
+The current store schema is version 2. Migrations are forward-only and registered
 in `adversaryflow.storage.migrations`. Opening a `RunStore` automatically applies
 pending migrations; operators can run them explicitly with `storage migrate`.
 
@@ -96,6 +96,11 @@ Version 0 represents a pre-versioned directory. The v0-to-v1 migration:
 - preserves unknown manifest fields and every artifact;
 - writes `store.json` with schema version 1;
 - is idempotent.
+
+The v1-to-v2 migration adds a `lineage` object to every manifest. Existing runs
+become lineage roots. New adapted runs record `relationship: adaptation`, their
+`parent_run_id`, request changes, predicted invalidations, and actual node reuse.
+No existing request, report, trace, or scenario artifact is rewritten.
 
 Before migrating a production store, make a filesystem snapshot or backup of the
 store directory. A binary that encounters a newer store version stops rather

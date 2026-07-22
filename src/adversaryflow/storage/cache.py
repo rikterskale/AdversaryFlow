@@ -166,6 +166,21 @@ class SourceCache:
         )
         self.stats.writes += 1
 
+    def get_document(self, content_sha256: str) -> SourceDocument | None:
+        """Load immutable content by hash without applying URL-cache freshness."""
+        try:
+            document = SourceDocument.model_validate(
+                read_json(self._document_path(content_sha256))
+            )
+            if document.source.content_sha256 != content_sha256:
+                raise ValueError("Source content hash mismatch")
+        except (OSError, ValueError, ValidationError):
+            self.stats.invalid += 1
+            self.stats.misses += 1
+            return None
+        self.stats.hits += 1
+        return document
+
 
 def cache_inventory(root: Path) -> dict[str, dict[str, int]]:
     result: dict[str, dict[str, int]] = {}
