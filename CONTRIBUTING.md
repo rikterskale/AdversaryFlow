@@ -8,6 +8,7 @@ AdversaryFlow accepts changes that improve grounded scenario generation, defensi
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+cp .env.example .env  # optional for live provider/search configuration
 ```
 
 Run the local quality gates:
@@ -21,6 +22,10 @@ adversaryflow generate \
   --output reports/apt29_scenario.md \
   --demo
 ```
+
+## Documentation review checklist
+
+When reviewing documentation, verify that command examples match the Typer CLI, environment variables match `.env.example`, generated report paths are either tracked demo artifacts or intentionally ignored, and safety/grounding descriptions do not imply autonomous execution. If docs mention local ATT&CK data, make clear that `data/enterprise-attack.json` is intentionally untracked.
 
 ## Pull-request expectations
 
