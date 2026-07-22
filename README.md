@@ -252,6 +252,11 @@ adversaryflow generate --request examples/apt29_request.json --output reports/ap
 | `--demo` | Use the deterministic demo provider and disable live search. |
 | `--search-provider brave|null` | Override `ADVERSARYFLOW_SEARCH_PROVIDER` for the run. |
 | `--attack-bundle PATH` | Optional pinned Enterprise ATT&CK STIX bundle for local actor/TTP grounding. |
+| `--store-dir PATH` | Durable run/cache directory; defaults to `.adversaryflow`. |
+| `--no-store` | Skip the immutable run bundle while retaining normal report output. |
+| `--no-cache` | Disable both source and model-node cache reads and writes. |
+| `--refresh-sources` | Refetch sources and replace fresh URL-index entries. |
+| `--refresh-nodes` | Regenerate nodes and replace successful cache entries. |
 
 Other useful commands:
 
@@ -262,6 +267,10 @@ Other useful commands:
 | `adversaryflow doctor [--demo] [--check-network]` | Check configuration and optionally verify service credentials. |
 | `adversaryflow validate-request --request PATH` | Validate JSON and request rules without external calls. |
 | `adversaryflow --version` | Print the installed version. |
+| `adversaryflow cache inspect` | Show node/source cache counts and size. |
+| `adversaryflow storage status` | Show current and supported storage schema versions. |
+| `adversaryflow storage list` | List completed immutable run bundles. |
+| `adversaryflow storage verify RUN_ID` | Recompute and verify every artifact hash. |
 
 For local configuration, copy `.env.example` to `.env` and fill in the variables needed by your provider before running the CLI.
 
@@ -296,6 +305,8 @@ completion and validation to compatible editors.
 | `ADVERSARYFLOW_FACTUALITY_THRESHOLD` | `1.0` | Minimum supported-claim ratio |
 | `ADVERSARYFLOW_FAIL_ON_FACTUALITY` | `true` | Block output when factuality fails |
 | `ADVERSARYFLOW_REQUIRE_GROUNDING` | `true` | Require at least one source-supported ATT&CK technique |
+| `ADVERSARYFLOW_STORE_DIR` | `.adversaryflow` | Durable run and cache root |
+| `ADVERSARYFLOW_SOURCE_CACHE_TTL` | `86400` | Source URL freshness in seconds |
 
 ## Local ATT&CK snapshot
 
@@ -350,12 +361,17 @@ Each run produces:
 - a Markdown report by default, or a self-contained, printable HTML report when
   the output ends in `.html` or `--format html` is selected;
 - a `.trace.json` audit record containing node attempts, retrieval statistics, local ATT&CK context, citation graph, and factuality result.
+- unless `--no-store` is selected, an immutable run bundle containing the request,
+  complete scenario pack, trace, report, hashes, provider identity, and cache provenance.
 
 ```bash
 adversaryflow generate --request examples/apt29_request.json --output reports/apt29_scenario.html --demo
 ```
 
 The renderer intentionally emits operator-level summaries, evidence requirements, telemetry expectations, stop conditions, and cleanup—not exploit code or destructive commands.
+
+See [`STORAGE.md`](STORAGE.md) for the artifact layout, cache-key contract,
+freshness policy, migration procedure, maintenance commands, and security guidance.
 
 ## Troubleshooting
 
@@ -367,13 +383,12 @@ The renderer intentionally emits operator-level summaries, evidence requirements
 
 ## Remaining production hardening
 
-1. Persist source documents, hashes, and node state in a durable content-addressed cache.
-2. Add provider failover and per-node token/cost budgets.
-3. Sign reproducibility bundles and source manifests.
-4. Add reviewer identity, approval state, and immutable release records.
-5. Add an evaluation corpus for actor precision/recall, citation entailment, safety, realism, and environment fit.
-6. Add ATT&CK Navigator export and optional execution-framework export behind separate approval policies.
-7. Add a local web interface for request editing, generation progress, and report review.
+1. Add provider failover and per-node token/cost budgets.
+2. Sign reproducibility bundles and source manifests.
+3. Add reviewer identity, approval state, and immutable release records.
+4. Add an evaluation corpus for actor precision/recall, citation entailment, safety, realism, and environment fit.
+5. Add ATT&CK Navigator export and optional execution-framework export behind separate approval policies.
+6. Add a local web interface for request editing, generation progress, and report review.
 
 ## Publish to GitHub
 

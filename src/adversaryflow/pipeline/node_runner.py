@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from adversaryflow.pipeline.prompts import node_prompt
 from adversaryflow.pipeline.schemas import NODE_SCHEMAS
 from adversaryflow.providers.base import LLMProvider
+from adversaryflow.storage.cache import NodeCache
 
 
 @dataclass(slots=True)
@@ -29,14 +30,46 @@ class NodeRunner:
         *,
         llm: LLMProvider,
         retry_policy: RetryPolicy | None = None,
+        cache: NodeCache | None = None,
+        provider_identity: str | None = None,
+        refresh_cache: bool = False,
     ) -> None:
         self.llm = llm
         self.retry_policy = retry_policy or RetryPolicy()
+        self.cache = cache
+        self.provider_identity = provider_identity or (
+            f"{type(llm).__module__}.{type(llm).__qualname__}"
+        )
+        self.refresh_cache = refresh_cache
         self.trace: dict[str, Any] = {}
         self.repair_call_count = 0
 
     async def run(self, name: str, payload: dict[str, Any]) -> BaseModel:
         schema = NODE_SCHEMAS[name]
+        prompt = node_prompt(name, schema)
+        cache_key = (
+            self.cache.key(
+                name=name,
+                provider=self.provider_identity,
+                prompt=prompt,
+                schema=schema,
+                payload=payload,
+            )
+            if self.cache
+            else None
+        )
+        if self.cache and cache_key and not self.refresh_cache:
+            cached = self.cache.get(cache_key, schema)
+            if cached is not None:
+                self.trace[name] = {
+                    "status": "success",
+                    "schema": schema.__name__,
+                    "attempt_count": 0,
+                    "attempts": [],
+                    "parsed_output": cached.model_dump(mode="json"),
+                    "cache": {"status": "hit", "key": cache_key},
+                }
+                return cached
         attempts: list[dict[str, Any]] = []
         previous_output: dict[str, Any] | None = None
         previous_error: str | None = None
@@ -57,7 +90,7 @@ class NodeRunner:
             try:
                 raw = await self.llm.complete_json(
                     call_name=name,
-                    system_prompt=node_prompt(name, schema),
+                    system_prompt=prompt,
                     user_payload=call_payload,
                 )
                 previous_output = raw
@@ -76,7 +109,18 @@ class NodeRunner:
                     "attempt_count": attempt,
                     "attempts": attempts,
                     "parsed_output": parsed.model_dump(mode="json"),
+                    "cache": {
+                        "status": "refresh" if self.refresh_cache else "miss",
+                        "key": cache_key,
+                    },
                 }
+                if self.cache and cache_key:
+                    self.cache.put(
+                        cache_key,
+                        name=name,
+                        provider=self.provider_identity,
+                        output=parsed,
+                    )
                 return parsed
             except ValidationError as exc:
                 previous_error = str(exc)

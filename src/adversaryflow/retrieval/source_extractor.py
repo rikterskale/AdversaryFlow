@@ -7,11 +7,14 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from html.parser import HTMLParser
+from typing import Any
 
 from pypdf import PdfReader
 
 from adversaryflow.models import SourceChunk, SourceDocument, SourceRecord
+from adversaryflow.retrieval.allowlist import url_is_allowlisted
 from adversaryflow.retrieval.url_validator import URLValidator
+from adversaryflow.storage.cache import SourceCache
 
 
 class _VisibleTextParser(HTMLParser):
@@ -49,11 +52,16 @@ class SourceExtractor:
         max_document_chars: int = 120_000,
         chunk_chars: int = 1_500,
         concurrency: int = 4,
+        cache: SourceCache | None = None,
+        refresh_cache: bool = False,
     ) -> None:
         self.validator = validator
         self.max_document_chars = max_document_chars
         self.chunk_chars = chunk_chars
         self.concurrency = max(1, concurrency)
+        self.cache = cache
+        self.refresh_cache = refresh_cache
+        self.cache_events: dict[str, dict[str, Any]] = {}
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -154,8 +162,25 @@ class SourceExtractor:
         return chunks
 
     async def extract(self, record: SourceRecord) -> tuple[SourceDocument | None, SourceRecord]:
+        url = str(record.url)
+        if self.cache and not self.refresh_cache:
+            cached = self.cache.get(
+                record,
+                accept=lambda document: url_is_allowlisted(
+                    str(document.source.final_url or document.source.url),
+                    self.validator.allowed_domains,
+                ),
+            )
+            if cached is not None:
+                self.cache_events[url] = {
+                    "url": url,
+                    "status": "hit",
+                    "content_sha256": cached.source.content_sha256,
+                }
+                return cached, cached.source
         fetched = await self.validator.fetch(record)
         if not fetched.record.validated:
+            self.cache_events[url] = {"url": url, "status": "fetch_failed"}
             return None, fetched.record
         try:
             text = self._normalize(self._decode(fetched.body, fetched.record.content_type))
@@ -170,14 +195,24 @@ class SourceExtractor:
                     or self._published_at(fetched.body, fetched.record.content_type),
                 }
             )
-            return SourceDocument(source=updated, text=text, chunks=chunks), updated
+            document = SourceDocument(source=updated, text=text, chunks=chunks)
+            if self.cache:
+                self.cache.put(document)
+            self.cache_events[url] = {
+                "url": url,
+                "status": "refresh" if self.refresh_cache else "miss",
+                "content_sha256": updated.content_sha256,
+            }
+            return document, updated
         except Exception as exc:  # noqa: BLE001 - surfaced in source manifest
             failed = fetched.record.model_copy(
                 update={"validated": False, "validation_error": f"Extraction failed: {exc}"[:300]}
             )
+            self.cache_events[url] = {"url": url, "status": "extraction_failed"}
             return None, failed
 
     async def extract_many(self, records: list[SourceRecord]) -> ExtractionBatch:
+        self.cache_events = {}
         semaphore = asyncio.Semaphore(self.concurrency)
 
         async def _one(item: SourceRecord) -> tuple[SourceDocument | None, SourceRecord]:

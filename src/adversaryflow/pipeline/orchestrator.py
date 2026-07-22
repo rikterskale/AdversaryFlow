@@ -39,6 +39,7 @@ from adversaryflow.retrieval.citations import CitationGraphBuilder
 from adversaryflow.retrieval.source_extractor import SourceExtractor
 from adversaryflow.retrieval.url_validator import URLValidator
 from adversaryflow.safety.policy import SafetyPolicy
+from adversaryflow.storage.cache import NodeCache, SourceCache
 
 
 class ScenarioOrchestrator:
@@ -55,17 +56,30 @@ class ScenarioOrchestrator:
         factuality_evaluator: FactualityEvaluator | None = None,
         fail_on_factuality_error: bool = True,
         require_grounded_dossier: bool = False,
+        node_cache: NodeCache | None = None,
+        source_cache: SourceCache | None = None,
+        provider_identity: str | None = None,
+        refresh_node_cache: bool = False,
+        refresh_source_cache: bool = False,
     ) -> None:
         self.llm = llm
         self.search = search
         self.safety_policy = safety_policy
         self.url_validator = url_validator
         self.attack_bundle_path = Path(attack_bundle_path) if attack_bundle_path else None
-        self.source_extractor = source_extractor or SourceExtractor(validator=url_validator)
+        self.source_extractor = source_extractor or SourceExtractor(
+            validator=url_validator,
+            cache=source_cache,
+            refresh_cache=refresh_source_cache,
+        )
         self.retry_policy = retry_policy or RetryPolicy()
         self.factuality_evaluator = factuality_evaluator or FactualityEvaluator()
         self.fail_on_factuality_error = fail_on_factuality_error
         self.require_grounded_dossier = require_grounded_dossier
+        self.node_cache = node_cache
+        self.source_cache = source_cache
+        self.provider_identity = provider_identity
+        self.refresh_node_cache = refresh_node_cache
         self.trace: dict[str, Any] = {}
 
     def _local_attack_context(self, actor: str) -> dict[str, Any]:
@@ -125,7 +139,13 @@ class ScenarioOrchestrator:
                 "Request failed safety policy: " + "; ".join(request_decision.blocked_items)
             )
 
-        runner = NodeRunner(llm=self.llm, retry_policy=self.retry_policy)
+        runner = NodeRunner(
+            llm=self.llm,
+            retry_policy=self.retry_policy,
+            cache=self.node_cache,
+            provider_identity=self.provider_identity,
+            refresh_cache=self.refresh_node_cache,
+        )
         if request.is_ad_hoc:
             return await self._generate_ad_hoc(
                 request, runner, initial_call_count, request_decision
@@ -351,6 +371,7 @@ class ScenarioOrchestrator:
             },
             "citation_graph": citation_graph.model_dump(mode="json"),
             "factuality": factuality.model_dump(mode="json"),
+            "cache": self._cache_trace(),
         }
 
         return ScenarioPack(
@@ -504,6 +525,7 @@ class ScenarioOrchestrator:
             },
             "citation_graph": citation_graph.model_dump(mode="json"),
             "factuality": factuality.model_dump(mode="json"),
+            "cache": self._cache_trace(),
         }
         return ScenarioPack(
             title=f"{request.actor} Ad Hoc Red Team Exercise",
@@ -520,6 +542,18 @@ class ScenarioOrchestrator:
             qa=qa,
             trace=self.trace,
         )
+
+    def _cache_trace(self) -> dict[str, Any]:
+        source_details: dict[str, Any] = (
+            self.source_cache.stats.as_dict() if self.source_cache else {"enabled": False}
+        )
+        source_details["entries"] = list(
+            getattr(self.source_extractor, "cache_events", {}).values()
+        )
+        return {
+            "nodes": self.node_cache.stats.as_dict() if self.node_cache else {"enabled": False},
+            "sources": source_details,
+        }
 
     @staticmethod
     def _filter_recent_sources(

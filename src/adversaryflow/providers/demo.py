@@ -8,6 +8,7 @@ class DemoLLMProvider:
 
     def __init__(self) -> None:
         self.call_count = 0
+        self.cache_identity = "demo:v1"
 
     async def complete_json(
         self,

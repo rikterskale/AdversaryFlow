@@ -4,6 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from adversaryflow.cli import app
+from adversaryflow.storage.run_store import RunStore
 
 
 runner = CliRunner()
@@ -139,11 +140,21 @@ def test_export_schema_writes_scenario_request_schema(tmp_path) -> None:
 
 def test_generate_html_report(tmp_path) -> None:
     output = tmp_path / "scenario.html"
+    store = tmp_path / "store"
     example = Path(__file__).parents[1] / "examples" / "apt29_request.json"
 
     result = runner.invoke(
         app,
-        ["generate", "--request", str(example), "--output", str(output), "--demo"],
+        [
+            "generate",
+            "--request",
+            str(example),
+            "--output",
+            str(output),
+            "--store-dir",
+            str(store),
+            "--demo",
+        ],
     )
 
     assert result.exit_code == 0
@@ -151,3 +162,28 @@ def test_generate_html_report(tmp_path) -> None:
     assert html.startswith("<!doctype html>")
     assert "<h1>APT29 Safe Red Team Exercise</h1>" in html
     assert (tmp_path / "scenario.trace.json").exists()
+    run_dirs = list((store / "runs").iterdir())
+    assert len(run_dirs) == 1
+    manifest = json.loads((run_dirs[0] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert (run_dirs[0] / "scenario-pack.json").exists()
+    assert (run_dirs[0] / "report.html").exists()
+    persisted = RunStore(store)
+    assert persisted.load_pack(manifest["run_id"]).title == "APT29 Safe Red Team Exercise"
+    assert persisted.verify(manifest["run_id"]) == []
+    assert persisted.list_runs()[0]["run_id"] == manifest["run_id"]
+
+
+def test_second_demo_run_uses_node_cache(tmp_path) -> None:
+    store = tmp_path / "store"
+    example = Path(__file__).parents[1] / "examples" / "apt29_request.json"
+    common = ["--request", str(example), "--store-dir", str(store), "--demo"]
+
+    first = runner.invoke(app, ["generate", *common, "--output", str(tmp_path / "first.md")])
+    second = runner.invoke(app, ["generate", *common, "--output", str(tmp_path / "second.md")])
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    trace = json.loads((tmp_path / "second.trace.json").read_text(encoding="utf-8"))
+    assert trace["cache"]["nodes"]["hits"] == 12
+    assert trace["nodes"]["actor_identity"]["attempt_count"] == 0

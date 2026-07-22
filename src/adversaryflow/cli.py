@@ -21,8 +21,15 @@ from adversaryflow.providers.search import BraveSearchProvider, NullSearchProvid
 from adversaryflow.render import render_html, render_markdown
 from adversaryflow.retrieval.url_validator import URLValidator
 from adversaryflow.safety.policy import SafetyPolicy
+from adversaryflow.storage import NodeCache, RunStore, SourceCache
+from adversaryflow.storage.cache import cache_inventory, clear_cache
+from adversaryflow.storage.migrations import CURRENT_STORE_VERSION, migrate_store, store_version
 
 app = typer.Typer(no_args_is_help=True, help="Build safe, evidence-grounded red team exercises.")
+cache_app = typer.Typer(help="Inspect or clear durable caches.")
+storage_app = typer.Typer(help="Inspect or migrate the durable run store.")
+app.add_typer(cache_app, name="cache")
+app.add_typer(storage_app, name="storage")
 console = Console()
 
 
@@ -92,6 +99,86 @@ def _configuration_issues(settings: Settings, selected_search: str) -> list[str]
     elif selected_search == "brave" and not settings.brave_api_key:
         issues.append("ADVERSARYFLOW_BRAVE_API_KEY is not set (or select search provider 'null')")
     return issues
+
+
+@cache_app.command("inspect")
+def inspect_cache(
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+) -> None:
+    """Show cache entry counts and disk usage."""
+    inventory = cache_inventory(store_dir)
+    for kind, details in inventory.items():
+        console.print(f"{kind}: {details['files']} files, {details['bytes']} bytes")
+
+
+@cache_app.command("clear")
+def remove_cache(
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+    kind: str = typer.Option("all", help="nodes, sources, or all"),
+    yes: bool = typer.Option(False, "--yes", help="Skip confirmation"),
+) -> None:
+    """Remove cached values without deleting persisted runs."""
+    if kind not in {"nodes", "sources", "all"}:
+        raise typer.BadParameter("kind must be nodes, sources, or all", param_hint="--kind")
+    if not yes and not typer.confirm(f"Clear {kind} cache under {store_dir}?"):
+        raise typer.Abort()
+    clear_cache(store_dir, kind)
+    console.print(f"[green]Cleared[/green] {kind} cache under {store_dir}")
+
+
+@storage_app.command("status")
+def storage_status(
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+) -> None:
+    """Show the on-disk and supported store schema versions."""
+    console.print(
+        f"Store version: {store_version(store_dir)} | Supported version: {CURRENT_STORE_VERSION}"
+    )
+
+
+@storage_app.command("migrate")
+def storage_migrate(
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+) -> None:
+    """Apply all pending forward-only store migrations."""
+    applied = migrate_store(store_dir)
+    if applied:
+        console.print(f"[green]Applied[/green] {', '.join(applied)}")
+    else:
+        console.print(f"Store is current at version {CURRENT_STORE_VERSION}.")
+
+
+@storage_app.command("list")
+def storage_list(
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+) -> None:
+    """List completed stored runs, newest first."""
+    runs = RunStore(store_dir).list_runs()
+    if not runs:
+        console.print("No stored runs.")
+        return
+    for item in runs:
+        console.print(
+            f"{item.get('run_id')} | {item.get('created_at')} | "
+            f"{item.get('actor')} | {item.get('status')}"
+        )
+
+
+@storage_app.command("verify")
+def storage_verify(
+    run_id: str = typer.Argument(..., help="Stored run identifier"),
+    store_dir: Path = typer.Option(Path(".adversaryflow"), help="Run store directory"),
+) -> None:
+    """Verify every stored artifact against its manifest hash."""
+    try:
+        failures = RunStore(store_dir).verify(run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="RUN_ID") from exc
+    if failures:
+        for failure in failures:
+            console.print(f"[red]{failure}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Verified[/green] {run_id}")
 
 
 @app.command("export-schema")
@@ -282,12 +369,22 @@ def generate(
         "--format",
         help="Report format: markdown or html. Defaults from the output extension.",
     ),
+    store_dir: Path | None = typer.Option(
+        None, help="Run store directory; defaults to ADVERSARYFLOW_STORE_DIR"
+    ),
+    no_store: bool = typer.Option(False, help="Do not persist an immutable run bundle"),
+    no_cache: bool = typer.Option(False, help="Disable source and model-node caches"),
+    refresh_sources: bool = typer.Option(False, help="Refetch sources and replace cache entries"),
+    refresh_nodes: bool = typer.Option(
+        False, help="Regenerate model nodes and replace cache entries"
+    ),
 ) -> None:
     """Generate a safety-constrained red team scenario."""
 
     async def _run() -> None:
         settings = _load_settings()
         scenario_request = _read_request(request)
+        resolved_store = store_dir or Path(settings.store_dir)
 
         if demo:
             llm = DemoLLMProvider()
@@ -321,6 +418,18 @@ def generate(
             timeout_seconds=settings.url_validation_timeout_seconds,
             max_bytes=settings.max_source_bytes,
         )
+        node_cache = None if no_cache else NodeCache(resolved_store)
+        source_cache = (
+            None
+            if no_cache
+            else SourceCache(
+                resolved_store,
+                ttl_seconds=settings.source_cache_ttl_seconds,
+            )
+        )
+        provider_identity = getattr(
+            llm, "cache_identity", f"{type(llm).__module__}.{type(llm).__qualname__}"
+        )
         orchestrator = ScenarioOrchestrator(
             llm=llm,
             search=search,
@@ -334,6 +443,11 @@ def generate(
             factuality_evaluator=FactualityEvaluator(threshold=settings.factuality_threshold),
             fail_on_factuality_error=settings.fail_on_factuality_error,
             require_grounded_dossier=(False if demo else settings.require_grounded_dossier),
+            node_cache=node_cache,
+            source_cache=source_cache,
+            provider_identity=provider_identity,
+            refresh_node_cache=refresh_nodes,
+            refresh_source_cache=refresh_sources,
         )
         pack = await orchestrator.generate(scenario_request)
         selected_format = output_format or (
@@ -341,6 +455,18 @@ def generate(
         )
         if selected_format not in {"markdown", "html"}:
             raise typer.BadParameter("format must be 'markdown' or 'html'", param_hint="--format")
+        run_store = None if no_store else RunStore(resolved_store)
+        run_id = run_store.new_run_id(scenario_request) if run_store else None
+        pack.trace["storage"] = (
+            {
+                "enabled": True,
+                "run_id": run_id,
+                "store_dir": str(resolved_store),
+                "schema_version": CURRENT_STORE_VERSION,
+            }
+            if run_store
+            else {"enabled": False}
+        )
         report = render_html(pack) if selected_format == "html" else render_markdown(pack)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(report, encoding="utf-8")
@@ -349,8 +475,20 @@ def generate(
             json.dumps(pack.trace, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        run_dir = None
+        if run_store and run_id:
+            run_dir = run_store.save(
+                run_id=run_id,
+                pack=pack,
+                report=report,
+                report_suffix=".html" if selected_format == "html" else ".md",
+                provider=provider_identity,
+                cache=pack.trace.get("cache", {}),
+            )
         console.print(f"[green]Generated[/green] {output}")
         console.print(f"[green]Trace[/green] {trace_path}")
+        if run_dir:
+            console.print(f"[green]Stored run[/green] {run_id} at {run_dir}")
         factuality_status = (
             f"{'PASS' if pack.qa.factuality_passed else 'FAIL'} ({pack.qa.factuality_score:.0%})"
             if pack.factuality.evaluated

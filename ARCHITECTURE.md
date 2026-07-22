@@ -115,7 +115,15 @@ Unsupported claims are never silently converted into facts. Strict mode stops pa
 
 ## 8. Reproducibility
 
-The v0.2 trace preserves the retrieval queries, source hashes, local ATT&CK context, validated documents used for grounding, node schemas and attempts, citation graph, factuality result, and final safety decision. A future durable cache should key source bodies by content hash and node inputs by canonical JSON hash.
+The trace preserves retrieval queries, source hashes, local ATT&CK context, validated documents used for grounding, node schemas and attempts, citation graph, factuality result, final safety decision, and cache provenance.
+
+The durable-storage layer now persists a versioned immutable run bundle containing
+the request, complete scenario pack, trace, rendered report, and artifact hashes.
+Source documents are content-addressed by fetched SHA-256 with a separate normalized
+URL freshness index. Model-node outputs are keyed by provider/model identity, full
+prompt, response schema, node name, and canonical input. Only successfully validated
+outputs are cached. API keys are excluded from storage and keys. Forward-only store
+migrations preserve existing artifacts and reject unknown newer schema versions.
 
 ## 9. Test coverage
 

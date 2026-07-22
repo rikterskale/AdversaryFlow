@@ -9,6 +9,10 @@
 - Add an interactive `init` wizard, JSON Schema export, and a tabletop template.
 - Add safe, self-contained HTML reports with automatic format inference.
 - Add optional authenticated service-connectivity checks to `doctor`.
+- Add versioned immutable run bundles with hashed request, scenario, trace, and report artifacts.
+- Add content-addressed source caching with URL freshness indexes and per-source trace provenance.
+- Add schema-, prompt-, input-, and provider-aware model-node caching.
+- Add forward-only store migrations plus cache inspection, selective clearing, and refresh controls.
 
 ## 0.3.0 — 2026-07-22
 

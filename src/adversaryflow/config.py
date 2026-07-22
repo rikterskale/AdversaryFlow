@@ -72,4 +72,10 @@ class Settings:
     require_grounded_dossier: bool = field(
         default_factory=lambda: _env_bool("ADVERSARYFLOW_REQUIRE_GROUNDING", True)
     )
+    store_dir: str = field(
+        default_factory=lambda: os.getenv("ADVERSARYFLOW_STORE_DIR", ".adversaryflow")
+    )
+    source_cache_ttl_seconds: int = field(
+        default_factory=lambda: int(os.getenv("ADVERSARYFLOW_SOURCE_CACHE_TTL", "86400"))
+    )
     allowed_domains: set[str] = field(default_factory=_allowed_domains)

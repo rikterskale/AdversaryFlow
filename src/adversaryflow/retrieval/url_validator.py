@@ -123,8 +123,9 @@ class URLValidator:
                             if len(body) > self.max_bytes:
                                 raise ValueError("Source exceeded maximum validation size")
                         content_type = response.headers.get("content-type", "").split(";", 1)[0]
-                        updated = record.model_copy(
-                            update={
+                        updated = SourceRecord.model_validate(
+                            {
+                                **record.model_dump(mode="json"),
                                 "validated": True,
                                 "final_url": current_url,
                                 "status_code": response.status_code,

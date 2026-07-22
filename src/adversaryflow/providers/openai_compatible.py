@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from typing import Any
 
 import httpx
@@ -24,6 +25,8 @@ class OpenAICompatibleProvider:
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.call_count = 0
+        endpoint_hash = sha256(self.base_url.encode("utf-8")).hexdigest()[:16]
+        self.cache_identity = f"openai-compatible:{endpoint_hash}:{self.model}"
 
     async def complete_json(
         self,
