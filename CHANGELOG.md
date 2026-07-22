@@ -18,6 +18,13 @@
 - Run the Docker image as a non-root user and document persistent-volume permissions.
 - Add an early Python 3.11 version check and clarify that development cleanup preserves durable runs.
 - Build package artifacts in CI and verify installation from a wheel during review.
+- Build the source distribution from an explicit file allowlist so untracked working-directory files, including scenario requests containing environment and rules-of-engagement detail, can no longer be packaged.
+- Add `scripts/check_sdist.py` and `python tasks.py build`, which audit a built source distribution against that allowlist and fail on any unexpected path or on a reversion to a denylist.
+- Enforce the sdist audit in CI against a deliberately dirty working tree, so the check cannot pass vacuously.
+- Extend lint and format coverage to `scripts/` and `tasks.py`.
+- Validate `generate --format` before contacting the model provider instead of after generation completes.
+- Ship `.env.example` with an empty `ADVERSARYFLOW_LLM_BASE_URL`, because `doctor` treats a placeholder value as configured.
+- Document trace-filename collisions between runs sharing an output stem, cwd-relative paths for global installs, `PYTHON` interpreter overrides, offline pip bootstrapping, and per-code CLI exit behavior.
 
 ## 0.3.0 — 2026-07-22
 

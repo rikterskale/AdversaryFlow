@@ -43,6 +43,37 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/adversaryflow"]
 
+# The source distribution uses an explicit allowlist. A denylist would ship any
+# untracked working-directory file the operator happened to create - including
+# scenario requests, which contain environment names, designated test assets,
+# and rules of engagement.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/examples",
+  "/scripts",
+  "/data/.gitkeep",
+  "/.github",
+  "/.dockerignore",
+  "/.gitattributes",
+  "/.gitignore",
+  "/ARCHITECTURE.md",
+  "/CHANGELOG.md",
+  "/CONTRIBUTING.md",
+  "/Dockerfile",
+  "/INSTALLATION.md",
+  "/LICENSE",
+  "/Makefile",
+  "/README.md",
+  "/SECURITY.md",
+  "/STORAGE.md",
+  "/USAGE.md",
+  "/pyproject.toml",
+  "/tasks.py",
+  "/.env.example",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

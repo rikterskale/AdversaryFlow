@@ -58,33 +58,57 @@ Validation makes no model or search calls. Errors identify the JSON field and ru
 Markdown:
 
 ```bash
-adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop.md --demo
+adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop-md.md --demo
 ```
 
 Self-contained, printable HTML:
 
 ```bash
-adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop.html --demo
+adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop-html.html --demo
 ```
 
 The extension selects the renderer. `--format markdown` or `--format html`
-overrides inference.
+overrides inference. An invalid `--format` value is rejected before any provider
+call, so a typo costs nothing.
+
+**The two output names differ on purpose.** The trace file is always the output
+path with its extension replaced by `.trace.json`, so `reports/x.md` and
+`reports/x.html` both write `reports/x.trace.json` and the second run silently
+overwrites the first run's trace. Give each run a distinct output stem whenever
+you intend to keep its trace. The immutable copy under `.adversaryflow/runs/` is
+never overwritten, so a clobbered trace is recoverable from there.
 
 ### 4. Review all outputs
 
-For `reports/tabletop.html`, inspect:
+For `reports/tabletop-html.html`, inspect:
 
-- `reports/tabletop.html`: human-readable exercise plan.
-- `reports/tabletop.trace.json`: node attempts, cache provenance, retrieval, citations, and factuality data.
+- `reports/tabletop-html.html`: human-readable exercise plan.
+- `reports/tabletop-html.trace.json`: node attempts, cache provenance, retrieval, citations, and factuality data.
 - `.adversaryflow/runs/<run-id>/`: immutable request, scenario pack, trace, report, and hash manifest.
-- `.adversaryflow/cache/nodes/`: validated reusable demo-node outputs.
+- `.adversaryflow/cache/nodes/`: validated reusable demo-node outputs, one file per resolved model node.
 
-The second identical run should use cache hits and make zero model calls:
+Watch the `Model calls:` counter in each run's summary line. The first run of a
+given request reports `Model calls: 12`; every later run of the *same* request
+reports `0`, because the node cache is keyed on the request, prompts, schemas,
+and provider identity — not on the output path or format. So the HTML run above
+already reported `0`. To see it again explicitly:
 
 ```bash
-adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop-second.html --demo
+adversaryflow generate --request examples/tabletop_request.json --output reports/tabletop-third.html --demo
 adversaryflow cache inspect
 ```
+
+`cache inspect` prints one line per cache kind. After a single TTP-based demo
+against an otherwise empty store:
+
+```text
+nodes: 12 files, 7276 bytes
+sources: 0 files, 0 bytes
+```
+
+The node count equals the number of resolved model nodes: 12 for a TTP-based
+request, 7 for an ad hoc one. Byte totals vary with request content. `sources: 0`
+is correct in demo mode, which performs no retrieval.
 
 ### 5. Verify the stored run
 
@@ -93,7 +117,15 @@ adversaryflow storage list
 adversaryflow storage verify RUN_ID_FROM_THE_LIST
 ```
 
-Verification recomputes each artifact hash. It does not rerun the scenario.
+`storage list` prints newest first, one run per line, as
+`run-id | created-at | actor | status`. Copy the identifier from the first
+column only — everything after the first `|` is metadata.
+
+Verification recomputes each artifact hash and prints `Verified <run-id>`. It
+does not rerun the scenario, make model calls, or cost anything. Two failure
+modes are distinct and automation should treat them differently: a run ID that
+does not exist is a bad argument and exits `2`, while a run whose artifacts no
+longer match the manifest prints the mismatching paths in red and exits `1`.
 
 ## Create a request
 
@@ -106,6 +138,20 @@ adversaryflow init --output my-request.json
 The wizard asks for an actor or label, objective, environment, and—when required—a
 designated test asset. It emits conservative RoE defaults, but those defaults are
 not an authorization decision. Review every field with the exercise owner.
+
+Two defaults are worth knowing before you run it:
+
+- `init` writes `"mode": "tabletop"`, which is *not* the schema default. A
+  hand-written request that omits `mode` gets `emulation_plan`; a wizard-written
+  one gets `tabletop`. Pass `--mode emulation_plan` if that is what you want.
+- Because the default is `tabletop`, the wizard does not prompt for a designated
+  test asset. Ask for one with `--mode`, or add
+  `environment.designated_test_assets` by hand before switching modes later.
+
+The wizard also never prompts for `scenario_kind`; it defaults to `ttp_based`
+unless you pass `--kind ad_hoc`. Supplying every answer as a flag makes the
+command fully non-interactive, which is what you want in scripts — an unanswered
+prompt at end-of-input aborts the command and writes nothing.
 
 Create an ad hoc request non-interactively:
 
@@ -213,11 +259,25 @@ Schema, validates the result locally, and retries bounded provider/schema failur
 Never commit `.env`; it is ignored by Git and excluded from package and Docker
 build contexts.
 
+The same care applies to the requests themselves. A scenario request names your
+environment, identity systems, security tooling, crown jewels, designated test
+assets, authorized users, and rules of engagement. `.gitignore` covers `.env`,
+`.adversaryflow/`, and generated `reports/`, but it does not cover a
+`my-request.json` you create at the checkout root. Keep working requests outside
+the repository, or add your own ignore rule, before running `git add .` or
+building a source distribution.
+
 Check presence without making a network call:
 
 ```bash
 adversaryflow doctor --search-provider null
 ```
+
+**`doctor` checks for emptiness, not validity.** A variable is reported as
+missing only when it is unset or blank, so any placeholder — `changeme`,
+`https://your-provider.example/v1`, a stale key — makes the check report
+`Ready for live generation`. Treat a passing offline `doctor` as "nothing is
+blank," not "the configuration is correct."
 
 Check credentials and service reachability with small authenticated requests:
 
@@ -228,6 +288,11 @@ adversaryflow doctor --search-provider null --check-network
 The network check calls the provider's `/models` endpoint. A provider that supports
 chat completions but not `/models` may fail this optional diagnostic even though
 generation works.
+
+Exit codes: `0` when every selected check passes, `1` when configuration is
+incomplete or a connectivity check fails. Incomplete configuration prints one
+bullet per missing variable, so you can fix them in a single pass rather than
+rerunning after each edit.
 
 ## Configure live search
 
@@ -404,10 +469,23 @@ Review the generated shell modification before installing it on managed systems.
 
 ### Exit behavior
 
-Successful commands exit zero. CLI validation/configuration errors generally exit
-2. Failed diagnostics, integrity verification, connectivity, or generation exit
-nonzero. Automation should use exit codes and parse JSON artifacts rather than
-terminal colors or wrapped human-readable output.
+| Code | Meaning | Observed examples |
+|---:|---|---|
+| `0` | The command did what it said | any successful `generate`, `doctor --demo`, `storage verify` |
+| `1` | The command ran and the answer was "no" | `doctor` with incomplete configuration; `doctor --check-network` failing; `storage verify` finding a hash mismatch; `tasks.py` on Python older than 3.11 |
+| `2` | The command was asked for something invalid and did not run | unreadable or schema-invalid `--request`; `--format` outside `markdown`/`html`; `--kind`/`--mode` outside their enums; `export-schema`/`init` refusing to overwrite without `--force`; `storage verify` on an unknown run ID; an unwritable output or store directory |
+
+The distinction between `1` and `2` matters in pipelines: `2` means nothing was
+attempted and retrying will not help, while `1` may reflect a transient
+provider or network condition.
+
+Automation should branch on exit codes and parse the JSON trace, never on
+terminal output. Rich wraps and colorizes to terminal width, so human-readable
+lines break at different points depending on `COLUMNS`.
+
+Both the output directory and the store directory are preflighted for
+writability before any provider call, so a permission problem costs `2` and zero
+model calls rather than failing after a full generation.
 
 ## Usage troubleshooting
 

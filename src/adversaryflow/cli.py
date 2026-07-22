@@ -403,6 +403,13 @@ def generate(
         resolved_store = store_dir or Path(settings.store_dir)
         if output.exists() and not output.is_file():
             raise typer.BadParameter(f"Output path is not a file: {output}", param_hint="--output")
+        # Resolve the renderer before any provider call so an invalid value cannot
+        # be discovered only after a full billable generation has already run.
+        selected_format = output_format or (
+            "html" if output.suffix.casefold() == ".html" else "markdown"
+        )
+        if selected_format not in {"markdown", "html"}:
+            raise typer.BadParameter("format must be 'markdown' or 'html'", param_hint="--format")
         _ensure_writable_directory(output.parent, label="output directory")
         if not (no_store and no_cache):
             _ensure_writable_directory(resolved_store, label="store directory")
@@ -471,11 +478,6 @@ def generate(
             refresh_source_cache=refresh_sources,
         )
         pack = await orchestrator.generate(scenario_request)
-        selected_format = output_format or (
-            "html" if output.suffix.casefold() == ".html" else "markdown"
-        )
-        if selected_format not in {"markdown", "html"}:
-            raise typer.BadParameter("format must be 'markdown' or 'html'", param_hint="--format")
         run_store = None if no_store else RunStore(resolved_store)
         run_id = run_store.new_run_id(scenario_request) if run_store else None
         pack.trace["storage"] = (

@@ -19,9 +19,15 @@ install from the repository checkout or from a wheel you build. Do not assume
 `pip install adversaryflow` retrieves this project from a public index unless a
 release process has explicitly published and verified it.
 
+If you are new here, read Method A and stop; everything after it is for people
+packaging or deploying the tool. Sections marked **Expert** assume you already
+know what a wheel, a build backend, and a container UID are.
+
 ## Requirements
 
-- Python 3.11 or newer for native installation.
+- Python 3.11 or newer for native installation. This is enforced, not advisory:
+  `tasks.py` exits with status 1 and a version message on older interpreters, and
+  pip refuses the install because `requires-python` is `>=3.11`.
 - Internet access during the first install, unless an offline wheelhouse is prepared.
 - Git only when cloning; a downloaded source archive works without Git.
 - Docker Desktop or Docker Engine only for the container method.
@@ -50,6 +56,23 @@ If it is older than 3.11, install a newer interpreter through the operating
 system package manager or python.org. On Debian/Ubuntu, the matching `python3-venv`
 package may also be required. On macOS, a current Homebrew Python is suitable.
 
+Ubuntu 22.04 LTS ships Python 3.10 and cannot run this project from its default
+repositories. Add a newer interpreter (for example through the deadsnakes PPA,
+`pyenv`, `uv python install 3.12`, or Homebrew) before continuing.
+
+If several interpreters are installed, name the one you want explicitly. Every
+entry point accepts an override, so you never have to guess which `python3` wins:
+
+```bash
+python3.12 tasks.py setup          # call the interpreter directly
+PYTHON=python3.12 ./scripts/setup.sh   # the Bash wrapper honors $PYTHON
+make PYTHON=python3.12 setup       # the Makefile forwards the same variable
+```
+
+Without an override, `scripts/setup.sh` searches `python3.13`, `python3.12`,
+`python3.11`, `python3`, then `python`, and uses the first one it finds.
+`scripts/setup.ps1` searches `py`, `python`, then `python3`.
+
 ## Get the source
 
 Clone the repository:
@@ -63,7 +86,7 @@ Alternatively, extract a source archive and open a terminal in the directory
 containing `pyproject.toml`, `tasks.py`, and `README.md`. All repository-relative
 commands below must be run from that directory.
 
-## Method A: guided repository setup
+## Method A: guided repository setup (beginners start here)
 
 This is the recommended beginner path. It installs editable source plus test and
 lint tools. The task runner always uses `.venv` after creating it, so activation
@@ -149,9 +172,32 @@ It never overwrites an existing `.env`. Generated run bundles and caches live in
 .venv/bin/python -m adversaryflow.cli validate-request --request examples/apt29_request.json
 ```
 
-Expected results include version `0.3.0`, “Ready for deterministic demo mode,”
-and “Valid request.” The demo produces a report, a neighboring trace, a durable
-run bundle, and reusable node-cache entries.
+The three commands print, in order:
+
+```text
+AdversaryFlow 0.3.0
+Ready for deterministic demo mode (no credentials required).
+Valid request: Validate identity, endpoint, and data-access detections using a
+safe threat-informed exercise. (ttp_based)
+```
+
+Rich wraps long lines to your terminal width, so the third message may break
+differently. All three commands must exit `0`; check with `echo $?` on Unix or
+`echo $LASTEXITCODE` in PowerShell.
+
+`py -3.11 tasks.py demo` then prints a five-line summary ending in
+`Safety: PASS | Claim evidence: N/A (no factual claims evaluated) | Model calls: 12 (repairs: 0)`
+and leaves four things on disk:
+
+| Path | Contents |
+|---|---|
+| `reports/apt29_scenario.md` | The rendered exercise plan |
+| `reports/apt29_scenario.trace.json` | Node attempts, cache provenance, citations, factuality data |
+| `.adversaryflow/runs/<run-id>/` | Immutable request, scenario pack, trace, report, hash manifest |
+| `.adversaryflow/cache/nodes/` | 12 reusable node-cache entries, one per resolved model node |
+
+`Model calls: 12` on the first demo and `0` on an identical repeat is the
+expected signature of a working node cache.
 
 ## Method B: minimal runtime virtual environment
 
@@ -198,13 +244,24 @@ adversaryflow init --output scenario-request.json
 
 `pipx` exposes the command globally while isolating dependencies. Repository
 examples are not installed as working-directory files, so use `adversaryflow init`
-or copy an example before leaving the checkout. To upgrade after pulling new source:
+or copy an example before leaving the checkout —
+`adversaryflow validate-request --request examples/tabletop_request.json` outside
+the checkout fails with `Path 'examples/tabletop_request.json' does not exist`
+and exit code 2.
+
+A globally installed command still resolves relative paths against your current
+directory, not against the install location. Running `generate` from an arbitrary
+directory creates `reports/` and `.adversaryflow/` right there, and `.env` is read
+from there too. Pick one working directory for exercises and stay in it, or set
+`ADVERSARYFLOW_STORE_DIR` to an absolute path.
+
+To upgrade after pulling new source:
 
 ```bash
 pipx reinstall adversaryflow
 ```
 
-## Method D: build and install a wheel
+## Method D: build and install a wheel (expert)
 
 This method is appropriate for release engineering and controlled deployment.
 
@@ -229,14 +286,56 @@ wheel-check/bin/python -m adversaryflow.cli doctor --demo
 On Windows replace `wheel-check/bin/python` with
 `wheel-check\Scripts\python.exe`.
 
-The build configuration excludes `.env`, `.claude`, `.adversaryflow`, `.venv`,
-and `.test-tmp` from distributions. Always inspect release artifacts anyway:
+### Expert: inspect artifacts before distributing them
+
+The wheel is built from an explicit package list (`src/adversaryflow`) and the
+source distribution from an explicit file allowlist under
+`[tool.hatch.build.targets.sdist]`. `[tool.hatch.build] exclude` additionally
+blocks `.env`, `.claude`, `.adversaryflow`, `.venv`, and `.test-tmp` from every
+target. Inspect both artifacts anyway:
 
 ```bash
 python -m zipfile -l dist/adversaryflow-0.3.0-py3-none-any.whl
+tar tzf dist/adversaryflow-0.3.0.tar.gz
 ```
 
-## Offline installation
+The wheel should contain only `adversaryflow/**` plus `dist-info` metadata, and
+must include `adversaryflow/prompts/operational_constraints.md` and
+`adversaryflow/prompts/philosophy.md` — the package fails at runtime without them.
+
+The source distribution must contain no exercise data. Scenario requests carry
+environment names, crown jewels, designated test assets, authorized users, and
+rules of engagement, and `USAGE.md` tells operators to create them inside the
+checkout. Build and audit in one step:
+
+```bash
+python tasks.py build
+```
+
+That runs `python -m build` and then `scripts/check_sdist.py`, which compares
+every member of the built tarball against the allowlist and fails if anything
+else is present. Run the audit against an artifact you did not build yourself
+by passing its path:
+
+```bash
+python scripts/check_sdist.py dist/adversaryflow-0.3.0.tar.gz
+```
+
+| Exit | Meaning |
+|---:|---|
+| `0` | Every path in the artifact is accounted for |
+| `1` | The artifact contains unexpected paths, or the build config is a denylist |
+| `2` | The check could not run — no artifact, or an unreadable `pyproject.toml` |
+
+Exit `2` is not a pass. Any wrapper you write around this must distinguish it
+from `0`.
+
+Earlier releases used a denylist here, which shipped whatever the operator had
+left in the working directory. CI now plants decoy scenario requests before
+building and fails if they survive into the artifact, so the check cannot pass
+merely because the runner's tree happened to be clean.
+
+## Offline installation (expert)
 
 On a connected build machine with the same target operating system and Python
 version, create a wheelhouse containing the project and all dependencies:
@@ -253,9 +352,31 @@ python -m venv .venv
 .venv/bin/python -m pip install --no-index --find-links wheelhouse adversaryflow
 ```
 
-Use `.venv\Scripts\python.exe` on Windows. Retain the wheelhouse and record its
-hashes for reproducible deployments. Binary dependencies make a wheelhouse
-platform- and interpreter-specific.
+Use `.venv\Scripts\python.exe` on Windows. A complete wheelhouse is roughly two
+dozen wheels — AdversaryFlow plus its runtime dependency closure. The exact
+count varies with the interpreter, since some dependencies are conditional on
+the Python version.
+
+Do not carry the `python -m pip install --upgrade pip` step from Method B into an
+offline install — it reaches an index and fails under `--no-index`. Either accept
+the pip that `venv` bootstraps, or add pip itself to the wheelhouse:
+
+```bash
+python -m pip wheel --wheel-dir wheelhouse pip setuptools wheel
+```
+
+Two dependencies (`pydantic-core` and `MarkupSafe`) ship compiled wheels, so a
+wheelhouse is specific to one operating system, CPU architecture, and CPython
+minor version. Build it on a machine matching the target on all three, and
+record hashes for reproducible deployments:
+
+```bash
+python -m pip hash wheelhouse/*.whl > wheelhouse/SHA256SUMS
+python -m pip install --no-index --find-links wheelhouse --require-hashes -r requirements.lock
+```
+
+`--require-hashes` needs a pinned requirements file with hashes; generate one
+with `pip freeze` plus `pip hash`, or with your organization's lock tooling.
 
 ## Method E: Docker
 
@@ -378,6 +499,22 @@ Activate the intended environment or use `python -m adversaryflow.cli`. Check
 
 Ensure the mount is writable by UID `10001`, map the host UID/GID on Linux, or
 use a named Docker volume.
+
+### `AdversaryFlow requires Python 3.11 or newer`
+
+`tasks.py` refused the interpreter you invoked it with and exited 1 without
+touching anything. Rerun it with an explicit newer interpreter (`python3.12
+tasks.py setup`) rather than editing the check. If pip is the one complaining —
+`package requires a different Python` — the same fix applies; do not reach for
+`--ignore-requires-python`, because it will install a package that has not been
+tested on that interpreter.
+
+### `doctor` says the configuration is ready but generation fails to connect
+
+`doctor` reports a variable as missing only when it is empty, so any non-empty
+placeholder passes. Confirm `ADVERSARYFLOW_LLM_BASE_URL` is a real endpoint you
+control, then rerun `adversaryflow doctor --check-network`, which actually calls
+the provider's `/models` endpoint.
 
 ### A partially created `.venv` blocks setup
 
