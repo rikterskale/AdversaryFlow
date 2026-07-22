@@ -1,7 +1,8 @@
 import json
+import re
 from pathlib import Path
 
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from adversaryflow.cli import app
 from adversaryflow.storage.run_store import RunStore
@@ -10,22 +11,58 @@ from adversaryflow.storage.migrations import CURRENT_STORE_VERSION
 
 runner = CliRunner()
 
+# Typer renders help and errors through Rich, so CLI output is presentation, not
+# a stable string. Two things break naive substring assertions:
+#
+# 1. Color. When Rich detects a terminal it interleaves SGR escapes with the
+#    text. GitHub Actions sets FORCE_COLOR, so CI always detects one while a
+#    normal local run does not -- which is how this passed locally and failed in
+#    CI. FORCE_COLOR outranks both NO_COLOR and COLUMNS, so there is no env var
+#    that reliably turns it off; the escapes have to be removed after the fact.
+# 2. Width. Rich wraps messages inside a bordered panel at the terminal width,
+#    so a sentence can arrive split across lines with box-drawing characters and
+#    padding in between.
+#
+# Normalizing for both keeps these tests about what the CLI says, not about how
+# wide the terminal was or whether it was a tty.
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+BOX_DRAWING = re.compile(r"[─-╿]")
+
+
+def _normalize(text: str) -> str:
+    text = ANSI_ESCAPE.sub("", text)
+    text = BOX_DRAWING.sub(" ", text)
+    return " ".join(text.split())
+
+
+def stdout(result: Result) -> str:
+    """Return stdout without styling, borders, or width-dependent line breaks."""
+    return _normalize(result.stdout)
+
+
+def stderr(result: Result) -> str:
+    """Return stderr without styling, borders, or width-dependent line breaks."""
+    return _normalize(result.stderr)
+
 
 def test_doctor_demo_requires_no_credentials() -> None:
     result = runner.invoke(app, ["doctor", "--demo"])
 
     assert result.exit_code == 0
-    assert "Ready" in result.stdout
+    assert "Ready" in stdout(result)
 
 
 def test_generate_help_has_unambiguous_disable_flags() -> None:
-    result = runner.invoke(app, ["generate", "--help"])
+    # This test is about which flags exist, so it pins the width rather than
+    # inheriting it. In a narrow terminal Rich abbreviates the flag column to
+    # "--no-..." and the names genuinely are not in the output to assert on.
+    result = runner.invoke(app, ["generate", "--help"], env={"COLUMNS": "200"})
 
     assert result.exit_code == 0
-    assert "--no-store" in result.stdout
-    assert "--no-cache" in result.stdout
-    assert "--no-no-store" not in result.stdout
-    assert "--no-no-cache" not in result.stdout
+    assert "--no-store" in stdout(result)
+    assert "--no-cache" in stdout(result)
+    assert "--no-no-store" not in stdout(result)
+    assert "--no-no-cache" not in stdout(result)
 
 
 def test_doctor_loads_dotenv_from_current_directory(tmp_path, monkeypatch) -> None:
@@ -52,7 +89,7 @@ def test_doctor_loads_dotenv_from_current_directory(tmp_path, monkeypatch) -> No
     result = runner.invoke(app, ["doctor"])
 
     assert result.exit_code == 0
-    assert "test-model" in result.stdout
+    assert "test-model" in stdout(result)
 
 
 def test_validate_request_reports_invalid_json(tmp_path) -> None:
@@ -62,7 +99,7 @@ def test_validate_request_reports_invalid_json(tmp_path) -> None:
     result = runner.invoke(app, ["validate-request", "--request", str(request)])
 
     assert result.exit_code == 2
-    assert "Invalid JSON at line 1" in result.stderr
+    assert "Invalid JSON at line 1" in stderr(result)
 
 
 def test_validate_request_accepts_minimal_tabletop(tmp_path) -> None:
@@ -83,7 +120,7 @@ def test_validate_request_accepts_minimal_tabletop(tmp_path) -> None:
     result = runner.invoke(app, ["validate-request", "--request", str(request)])
 
     assert result.exit_code == 0
-    assert "Valid request" in result.stdout
+    assert "Valid request" in stdout(result)
 
 
 def test_validate_request_accepts_utf8_bom_from_windows_powershell(tmp_path) -> None:
@@ -131,7 +168,7 @@ def test_live_generate_fails_with_actionable_configuration_error(tmp_path, monke
     result = runner.invoke(app, ["generate", "--request", str(request)])
 
     assert result.exit_code == 2
-    assert "Edit .env or run with --demo" in result.stderr
+    assert "Edit .env or run with --demo" in stderr(result)
 
 
 def test_generate_rejects_directory_as_output_before_model_calls(tmp_path) -> None:
@@ -143,7 +180,7 @@ def test_generate_rejects_directory_as_output_before_model_calls(tmp_path) -> No
     )
 
     assert result.exit_code == 2
-    assert "Output path is not a file" in result.stderr
+    assert "Output path is not a file" in stderr(result)
 
 
 def test_init_creates_valid_safe_request(tmp_path) -> None:

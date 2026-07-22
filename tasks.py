@@ -21,6 +21,7 @@ Every command runs inside the project's virtual environment when one exists.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -44,11 +45,11 @@ def venv_python() -> str:
     return str(candidate) if candidate.exists() else sys.executable
 
 
-def run(cmd: list[str], *, check: bool = True) -> int:
+def run(cmd: list[str], *, check: bool = True, env: dict[str, str] | None = None) -> int:
     """Run a command from the project root, echoing it first."""
     printable = " ".join(str(part) for part in cmd)
     print(f"$ {printable}", flush=True)
-    result = subprocess.run(cmd, cwd=ROOT)
+    result = subprocess.run(cmd, cwd=ROOT, env={**os.environ, **(env or {})} if env else None)
     if check and result.returncode != 0:
         sys.exit(result.returncode)
     return result.returncode
@@ -74,7 +75,11 @@ def task_setup() -> None:
 
 
 def task_test() -> None:
-    run([venv_python(), "-m", "pytest", "-q"])
+    # GitHub Actions sets FORCE_COLOR, so Rich emits styled, panel-wrapped output
+    # there and plain text in an ordinary local shell. Tests that assert on CLI
+    # output have passed locally and failed in CI for exactly that reason, so the
+    # local run reproduces the stricter environment rather than the friendlier one.
+    run([venv_python(), "-m", "pytest", "-q"], env={"FORCE_COLOR": "1"})
 
 
 LINT_TARGETS = ["src", "tests", "scripts", "tasks.py"]

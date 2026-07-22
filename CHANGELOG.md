@@ -28,6 +28,8 @@
 - Add `scripts/check_sdist.py` and `python tasks.py build`, which audit a built source distribution against that allowlist and fail on any unexpected path or on a reversion to a denylist.
 - Enforce the sdist audit in CI against a deliberately dirty working tree, so the check cannot pass vacuously.
 - Extend lint and format coverage to `scripts/` and `tasks.py`.
+- Assert on CLI output with terminal styling, panel borders, and width-dependent line breaks normalized away, so tests describe what the CLI says rather than how it was rendered.
+- Force color during `python tasks.py test` so the local gate reproduces the CI environment instead of a friendlier one.
 - Validate `generate --format` before contacting the model provider instead of after generation completes.
 - Ship `.env.example` with an empty `ADVERSARYFLOW_LLM_BASE_URL`, because `doctor` treats a placeholder value as configured.
 - Document trace-filename collisions between runs sharing an output stem, cwd-relative paths for global installs, `PYTHON` interpreter overrides, offline pip bootstrapping, and per-code CLI exit behavior.
