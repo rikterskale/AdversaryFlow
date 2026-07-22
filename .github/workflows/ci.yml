@@ -27,10 +27,24 @@ jobs:
             echo "::error::Unresolved merge conflict markers found"; exit 1
           fi
       - run: pip install -e '.[dev]'
-      - run: ruff check src tests
-      - run: ruff format --check src tests
+      - run: ruff check src tests scripts tasks.py
+      - run: ruff format --check src tests scripts tasks.py
       - run: pytest -q
+      - name: Plant decoy exercise data
+        # The sdist allowlist must hold even when the working tree is dirty,
+        # which is exactly the state a maintainer building a release is in.
+        # These files mimic what USAGE.md tells operators to create in the
+        # checkout; if any reaches the artifact, the next step fails.
+        run: |
+          cp examples/tabletop_request.json ./decoy-scenario-request.json
+          mkdir -p artifacts
+          cp examples/tabletop_request.json artifacts/decoy-run.json
       - name: Build wheel and source distribution
         run: python -m build
+      - name: Verify the source distribution contains no unexpected paths
+        run: python scripts/check_sdist.py
+      - name: Remove decoy exercise data
+        if: always()
+        run: rm -rf ./decoy-scenario-request.json artifacts
       - name: Smoke-test the deterministic demo
         run: adversaryflow generate --request examples/apt29_request.json --output reports/ci_demo.md --demo

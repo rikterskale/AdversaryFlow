@@ -5,7 +5,7 @@
 # Choose the interpreter: `make PYTHON=python3.12 setup`
 PYTHON ?= python3
 
-.PHONY: setup install test lint format check demo clean
+.PHONY: setup install test lint format check demo build clean
 
 setup:
 	$(PYTHON) tasks.py setup
@@ -27,6 +27,9 @@ check:
 
 demo:
 	$(PYTHON) tasks.py demo
+
+build:
+	$(PYTHON) tasks.py build
 
 clean:
 	$(PYTHON) tasks.py clean

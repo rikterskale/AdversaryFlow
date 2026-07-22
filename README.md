@@ -189,6 +189,7 @@ The same commands run on every platform. Replace `python` with `python3` on Linu
 | `python tasks.py format` | Apply Ruff formatting. |
 | `python tasks.py check` | Lint + test (the same gates CI runs). |
 | `python tasks.py demo` | Generate the deterministic demo report. |
+| `python tasks.py build` | Build the wheel and sdist, then audit the sdist against its allowlist. |
 | `python tasks.py clean` | Remove development caches/build output and untracked reports; preserve `.adversaryflow`. |
 
 Unix users who prefer `make` can use the identical targets (`make setup`, `make test`, `make demo`, …); the Makefile simply forwards to `tasks.py`. There are also one-command bootstrap helpers in `scripts/` (`scripts/setup.ps1` / `scripts/setup.sh` and `scripts/demo.ps1` / `scripts/demo.sh`).

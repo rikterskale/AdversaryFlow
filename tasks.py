@@ -12,6 +12,7 @@ Usage:
     python tasks.py format     # apply ruff formatting
     python tasks.py check      # lint + test (what CI runs)
     python tasks.py demo       # generate the deterministic demo report
+    python tasks.py build      # build the wheel and sdist, then audit the sdist contents
     python tasks.py clean      # remove development caches/build output; preserve stored runs
     python tasks.py help       # show this message
 
@@ -76,14 +77,17 @@ def task_test() -> None:
     run([venv_python(), "-m", "pytest", "-q"])
 
 
+LINT_TARGETS = ["src", "tests", "scripts", "tasks.py"]
+
+
 def task_lint() -> None:
     py = venv_python()
-    run([py, "-m", "ruff", "check", "src", "tests"])
-    run([py, "-m", "ruff", "format", "--check", "src", "tests"])
+    run([py, "-m", "ruff", "check", *LINT_TARGETS])
+    run([py, "-m", "ruff", "format", "--check", *LINT_TARGETS])
 
 
 def task_format() -> None:
-    run([venv_python(), "-m", "ruff", "format", "src", "tests"])
+    run([venv_python(), "-m", "ruff", "format", *LINT_TARGETS])
 
 
 def task_check() -> None:
@@ -105,6 +109,13 @@ def task_demo() -> None:
             "--demo",
         ]
     )
+
+
+def task_build() -> None:
+    """Build distributions and refuse to leave a leaking sdist lying around."""
+    py = venv_python()
+    run([py, "-m", "build"])
+    run([py, str(ROOT / "scripts" / "check_sdist.py")])
 
 
 def task_clean() -> None:
@@ -145,6 +156,7 @@ TASKS = {
     "format": task_format,
     "check": task_check,
     "demo": task_demo,
+    "build": task_build,
     "clean": task_clean,
 }
 
