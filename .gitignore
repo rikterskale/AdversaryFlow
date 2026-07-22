@@ -14,6 +14,12 @@ dist/
 *.log
 .DS_Store
 
+# Local agent/assistant settings. These are per-developer and have previously
+# reached a source distribution; the sdist allowlist now blocks that, but they
+# must not be committed either.
+.claude/
+.agents/
+
 # Local ATT&CK snapshots can be large and should be pinned separately.
 data/enterprise-attack.json
 
