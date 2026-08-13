@@ -6,9 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-08-13
+
 ### Added
 
-- Apache-2.0 licensing and repository documentation.
+- Apache-2.0 licensing, contributor guidance, security policy, code of conduct, CLI reference, operator guides, and module documentation.
 
 ## [0.2.2] - 2026-08-13
 
@@ -23,5 +25,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Initial tagged release.
 
 [Unreleased]: https://github.com/rikterskale/AdversaryFlow/compare/v0.2.2...HEAD
+[0.2.3]: https://github.com/rikterskale/AdversaryFlow/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/rikterskale/AdversaryFlow/releases/tag/v0.2.2
 [0.2.1]: https://github.com/rikterskale/AdversaryFlow/releases/tag/v0.2.1
