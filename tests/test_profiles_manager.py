@@ -5,7 +5,8 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _terminal_next_step, make_handler
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _offline_draft, _portfolio_summary, _report_summary, _terminal_next_step, make_handler, serve
+from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
@@ -180,3 +181,79 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
 def test_manager_next_step_quotes_roE_approver_as_one_cli_argument():
     result = _terminal_next_step("campaign-safe", "awaiting-approval", {"ready": True}, 'manager "blue team"')
     assert result["command"] == 'adversaryflow campaign --campaign-id campaign-safe --approve --approver "manager blue team"'
+
+
+@pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])
+def test_manager_input_validation_rejects_empty_nonstring_and_oversized_values(payload):
+    with pytest.raises(ValueError):
+        _input(payload, "actor")
+
+
+def test_manager_report_and_portfolio_helpers_preserve_local_boundaries():
+    assert _report_summary({})["status"] == "not-available"
+    assert "outside this workspace" in _report_summary({"run_dir": str(__import__("pathlib").Path.cwd().parent)})["detail"]
+    root = __import__("pathlib").Path("artifacts") / f"manager-summary-{uuid4()}"
+    root.mkdir(parents=True)
+    assert "No telemetry-gap summary" in _report_summary({"run_dir": str(root)})["detail"]
+    (root / "telemetry-gap-report.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON object"):
+        _report_summary({"run_dir": str(root)})
+    summary = _portfolio_summary([{"status": "awaiting-approval"}, {"status": "unexpected"}])
+    assert summary["statuses"]["awaiting-approval"] == 1
+    assert summary["statuses"]["other"] == 1
+
+
+def test_manager_rejects_malformed_and_oversized_json_request_bodies():
+    root = __import__("pathlib").Path("artifacts") / f"manager-body-{uuid4()}"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(str(root)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        for body in (b"[]", b"x" * 4097):
+            request = urllib.request.Request(base + "/api/campaigns", data=body, headers={"Content-Type": "application/json"}, method="POST")
+            with pytest.raises(HTTPError) as error:
+                urllib.request.urlopen(request)
+            assert error.value.code == 400
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_manager_review_helpers_handle_integrity_mismatch_and_local_timeline_records():
+    root = __import__("pathlib").Path("artifacts") / f"manager-edges-{uuid4()}"
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test edge cases"), load_catalog("content/abilities/catalog.json"))
+    campaign = save_campaign_draft(draft, "hash", "offline", root)
+    metadata_path = campaign / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.update({"roe_sha256": "1" * 64, "catalog_sha256": "2" * 64, "status": "unknown"})
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    detail = _campaign_detail(str(root), campaign.name, "examples/roe.yaml", "content/abilities/catalog.json")["detail"]
+    assert detail["integrity"]["status"] == "review-required"
+    assert detail["terminal_next"]["label"] == "Copy CLI inspection command"
+    (campaign / "approval.json").write_text(json.dumps({"approved_at": "2099-01-02T00:00:00Z", "approver": "manager", "decision": "approved"}), encoding="utf-8")
+    (campaign / "cancellation.json").write_text(json.dumps({"cancelled_at": "2099-01-03T00:00:00Z", "reason": "fixture stop"}), encoding="utf-8")
+    (campaign / "rejection.json").write_text("[]", encoding="utf-8")
+    events = _decision_timeline(str(campaign), metadata)
+    assert [event["event"] for event in events] == ["Draft created", "Approval recorded by manager", "Cancellation recorded"]
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "x", "operator_name": "o", "approver_name": "a", "approved_targets": ["other"]})
+    assert _approval_readiness("unknown", draft, roe, [], {"status": "review-required"})["ready"] is False
+    assert _terminal_next_step(campaign.name, "awaiting-approval", {"ready": False}, "manager")["label"] == "Copy CLI inspection command"
+
+
+def test_manager_rejects_absent_reports_and_nonloopback_binding():
+    root = __import__("pathlib").Path("artifacts") / f"manager-report-missing-{uuid4()}"
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test report"), load_catalog("content/abilities/catalog.json"))
+    campaign = save_campaign_draft(draft, "hash", "offline", root)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(str(root)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HTTPError) as error:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/campaigns/{campaign.name}/report")
+        assert error.value.code == 404
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+    with pytest.raises(ValueError, match="loopback"):
+        serve("0.0.0.0")
