@@ -146,6 +146,11 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         readiness = inspected["detail"]["approval_readiness"]
         assert readiness["ready"] is True
         assert all(check["passed"] for check in readiness["checks"])
+        assert inspected["detail"]["terminal_next"] == {
+            "label": "Copy CLI approval command",
+            "command": f"adversaryflow campaign --campaign-id {campaign_id} --approve --approver manager@example.test",
+            "detail": "Copy this command only after the named RoE approver confirms schedule and scope.",
+        }
         with pytest.raises(HTTPError) as wrong_approver:
             _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "not-the-approver", "reason": "not scheduled"})
         assert wrong_approver.value.code == 403
@@ -159,6 +164,8 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         assert rejected_detail["detail"]["decision_timeline"][1]["detail"] == "not scheduled"
         assert rejected_detail["detail"]["approval_readiness"]["ready"] is False
         assert rejected_detail["detail"]["approval_readiness"]["checks"][0]["passed"] is False
+        assert rejected_detail["detail"]["terminal_next"]["label"] == "Copy CLI inspection command"
+        assert rejected_detail["detail"]["terminal_next"]["command"] == f"adversaryflow campaign inspect --campaign-id {campaign_id}"
         summary = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())["summary"]
         assert summary["total"] == 1
         assert summary["statuses"]["rejected"] == 1
