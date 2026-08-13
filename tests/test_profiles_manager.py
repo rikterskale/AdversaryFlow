@@ -70,6 +70,9 @@ def test_manager_health_and_campaign_listing():
         assert "Campaign Guide" in page
         assert "Start a safe campaign in five clear steps" in page
         assert "Create safe offline draft" in page
+        assert "Your setup checklist" in page
+        assert "Saved in this browser only" in page
+        assert "function statusLabel(status)" in page
         assert "Current local scope" in page
         assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
         assert "active local RoE" in page
