@@ -63,6 +63,9 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     selected = [a for a in abilities if a.id in draft.ability_ids]
     run_dir = Path(output_root) / f"run-{uuid.uuid4()}"
     run_dir.mkdir(parents=True, exist_ok=False)
+    progress_path = run_dir / "progress.json"
+    progress = {"status": "running", "completed_abilities": [], "total_abilities": len(draft.ability_ids)}
+    progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
     events = []
     with LoopbackSink() as sink:
         for ability in selected:
@@ -71,12 +74,16 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
                 sink.send_marker(run_dir.name)
                 observed = sink.received
             events.append({"event": "simulation_completed", "ability_id": ability.id, "technique_id": ability.technique_id, "target": draft.target, "behavior_success": True, "telemetry": [asdict(t) for t in ability.expected_telemetry], "observed_loopback_requests": observed, "network_scope": ability.network_scope, "execution": "synthetic-harness-only"})
+            progress["completed_abilities"].append(ability.id)
+            progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
     event_bytes = ("\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n").encode()
     (run_dir / "events.jsonl").write_bytes(event_bytes)
     (run_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
     manifest = {"run_id": run_dir.name, "approval": asdict(approval), "events_sha256": sha256_bytes(event_bytes), "mode": "local-synthetic"}
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     AuditLog(run_dir / "audit.jsonl").record("local_emulation_completed", run_id=run_dir.name, approval_id=approval.approval_id, ability_count=len(selected))
+    progress.update({"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()})
+    progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
     return run_dir
 
 

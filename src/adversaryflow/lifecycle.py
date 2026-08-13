@@ -51,6 +51,23 @@ def reject_campaign(root: str | Path, campaign_id: str, approver: str, reason: s
     return directory / "rejection.json"
 
 
+def cancel_campaign(root: str | Path, campaign_id: str, reason: str) -> Path:
+    """Request a safe stop for a campaign that has not completed."""
+    directory = _campaign_dir(root, campaign_id)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Campaign not found: {campaign_id}")
+    metadata_path = directory / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if metadata.get("status") == "completed":
+        raise ValueError("Completed campaigns cannot be cancelled")
+    cancellation = {"decision": "cancelled", "reason": reason, "cancelled_at": datetime.now(timezone.utc).isoformat(), "plan_hash": metadata["plan_hash"]}
+    path = directory / "cancellation.json"
+    path.write_text(json.dumps(cancellation, indent=2), encoding="utf-8")
+    metadata.update({"status": "cancelled", "cancellation": path.name})
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return path
+
+
 def reset_campaign(root: str | Path, campaign_id: str, confirm: bool) -> None:
     if not confirm:
         raise PermissionError("Reset requires --confirm")
@@ -58,4 +75,3 @@ def reset_campaign(root: str | Path, campaign_id: str, confirm: bool) -> None:
     if not directory.is_dir():
         raise FileNotFoundError(f"Campaign not found: {campaign_id}")
     shutil.rmtree(directory)
-

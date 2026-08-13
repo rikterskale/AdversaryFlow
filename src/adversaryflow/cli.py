@@ -9,7 +9,7 @@ from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import default_catalog_path, load_catalog
 from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
 from .reports import write_campaign_reports
-from .lifecycle import inspect_campaign, list_campaigns, reject_campaign, reset_campaign
+from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
@@ -64,6 +64,7 @@ def main() -> None:
     provider_sub.add_parser("status", help="show redacted provider configuration")
     provider_sub.add_parser("validate", help="validate settings without network access")
     provider_sub.add_parser("configure", help="show provider configuration instructions")
+    provider_sub.add_parser("diagnose", help="show guided provider troubleshooting")
     test_provider = provider_sub.add_parser("test", help="send one harmless planning request")
     test_provider.add_argument("--actor", default="APT29")
     test_provider.add_argument("--target", default="local-lab")
@@ -77,6 +78,7 @@ def main() -> None:
     campaign.add_argument("--platform", default="linux")
     campaign.add_argument("--approver", default=None)
     campaign.add_argument("--approve", action="store_true", help="approve and run the safe local emulation")
+    campaign.add_argument("--fallback-offline", action="store_true", help="use the offline planner if the configured provider fails")
     campaign.add_argument("--catalog", default="content/abilities/catalog.json")
     campaign.add_argument("--output", default="artifacts/runs")
     campaign.add_argument("--campaign-root", default="artifacts/campaigns")
@@ -92,6 +94,10 @@ def main() -> None:
     reject.add_argument("--approver", required=True)
     reject.add_argument("--reason", required=True)
     reject.add_argument("--campaign-root", default="artifacts/campaigns")
+    cancel = campaign_sub.add_parser("cancel", help="request cancellation of an incomplete campaign")
+    cancel.add_argument("--campaign-id", required=True)
+    cancel.add_argument("--reason", required=True)
+    cancel.add_argument("--campaign-root", default="artifacts/campaigns")
     reset = campaign_sub.add_parser("reset", help="delete a saved campaign")
     reset.add_argument("--campaign-id", required=True)
     reset.add_argument("--confirm", action="store_true")
@@ -124,6 +130,14 @@ def main() -> None:
                 print(json.dumps({"success": False, "error": str(exc)}, indent=2))
                 raise SystemExit(1)
             return
+        if args.lifecycle_command == "cancel":
+            try:
+                path = cancel_campaign(args.campaign_root, args.campaign_id, args.reason)
+                print(json.dumps({"success": True, "status": "cancelled", "record": str(path)}, indent=2))
+            except (OSError, KeyError, ValueError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            return
         if args.lifecycle_command == "reset":
             try:
                 reset_campaign(args.campaign_root, args.campaign_id, args.confirm)
@@ -149,6 +163,7 @@ def main() -> None:
             if not args.actor or not args.objective:
                 parser.error("campaign requires --actor and --objective when --campaign-id is not supplied")
             request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
+            provider_name = config.name
             try:
                 provider_metadata = {"provider": config.name, "status": "offline"}
                 if config.name == "offline":
@@ -161,11 +176,15 @@ def main() -> None:
                     raise ProviderError(f"Unsupported provider '{config.name}'.")
                 validate_ai_draft(draft_result, roe, abilities)
             except (ProviderError, ValueError) as exc:
-                print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                if not args.fallback_offline or config.name == "offline":
+                    print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc), "recovery": "Review provider configuration or rerun with --fallback-offline."}, indent=2))
+                    raise SystemExit(1)
+                draft_result = OfflinePlanner().draft(request, abilities)
+                validate_ai_draft(draft_result, roe, abilities)
+                provider_metadata = {"provider": config.name, "status": "fallback-offline", "error": str(exc)}
+                provider_name = "offline-fallback"
             plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
-            campaign_dir = save_campaign_draft(draft_result, plan_hash, config.name, args.campaign_root, provider_metadata=provider_metadata)
-            provider_name = config.name
+            campaign_dir = save_campaign_draft(draft_result, plan_hash, provider_name, args.campaign_root, provider_metadata=provider_metadata)
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
@@ -234,6 +253,13 @@ def main() -> None:
             print(json.dumps(config.as_dict(), indent=2))
         elif args.provider_command == "configure":
             print(provider_setup_instructions())
+        elif args.provider_command == "diagnose":
+            print(json.dumps({"configuration": config.as_dict(), "valid": not errors, "errors": errors, "recovery": [
+                "Offline mode requires no key and never sends network requests.",
+                "For hosted mode, confirm the endpoint is HTTPS and ends with /v1 when required by the provider.",
+                "Use provider validate before provider test; provider test is the only command here that sends a request.",
+                "If a hosted request fails, rerun campaign with --fallback-offline to continue a safe local rehearsal.",
+            ]}, indent=2))
         elif args.provider_command == "test":
             if config.name != "openai-compatible":
                 print("Provider test requires ADVERSARYFLOW_PROVIDER=openai-compatible.")
