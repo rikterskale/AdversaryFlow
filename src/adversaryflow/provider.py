@@ -17,6 +17,24 @@ from .emulation import Ability
 
 SUPPORTED_PROVIDERS = {"offline", "openai-compatible"}
 
+CAMPAIGN_DRAFT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "actor": {"type": "string"},
+        "target": {"type": "string"},
+        "objective": {"type": "string"},
+        "ability_ids": {"type": "array", "items": {"type": "string"}},
+        "risk_level": {"type": "string", "enum": ["Low", "Medium", "High"]},
+        "approval_required": {"type": "boolean"},
+        "expected_telemetry": {"type": "array", "items": {"type": "string"}},
+        "stop_conditions": {"type": "array", "items": {"type": "string"}},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "source_refs": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["actor", "target", "objective", "ability_ids", "risk_level", "approval_required", "expected_telemetry", "stop_conditions", "assumptions", "source_refs"],
+}
+
 
 class ProviderError(RuntimeError):
     """Safe, user-facing provider failure without secret or response leakage."""
@@ -39,7 +57,10 @@ class OpenAICompatiblePlanner:
                 {"role": "system", "content": "Return only valid JSON matching the requested schema."},
                 {"role": "user", "content": build_ai_request_prompt(request, abilities)},
             ],
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "campaign_draft", "strict": True, "schema": CAMPAIGN_DRAFT_SCHEMA},
+            },
         }
         endpoint = self.config.endpoint.rstrip("/") + "/chat/completions"
         request_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()

@@ -16,15 +16,21 @@ def _config():
 
 
 def test_client_parses_structured_draft():
-    body = {"choices": [{"message": {"content": json.dumps({"actor": "APT29", "target": "local-lab", "objective": "test", "ability_ids": [], "risk_level": "Low", "approval_required": True, "expected_telemetry": [], "stop_conditions": ["stop"], "assumptions": []})}}]}
+    body = {"choices": [{"message": {"content": json.dumps({"actor": "APT29", "target": "local-lab", "objective": "test", "ability_ids": [], "risk_level": "Low", "approval_required": True, "expected_telemetry": [], "stop_conditions": ["stop"], "assumptions": [], "source_refs": []})}}]}
+    received = {}
     class Response:
         def __enter__(self): return self
         def __exit__(self, *_): pass
         def __iter__(self): return iter([])
         def read(self): return json.dumps(body).encode()
-    with patch("adversaryflow.provider.urlopen", return_value=Response()):
+    def fake_urlopen(request, **_kwargs):
+        received.update(json.loads(request.data))
+        return Response()
+    with patch("adversaryflow.provider.urlopen", side_effect=fake_urlopen):
         draft = OpenAICompatiblePlanner(_config()).draft(CampaignRequest("APT29", "local-lab", "test"), load_catalog("content/abilities/catalog.json"))
     assert draft.approval_required is True
+    assert received["response_format"]["type"] == "json_schema"
+    assert received["response_format"]["json_schema"]["strict"] is True
 
 
 def test_client_hides_auth_failure():
