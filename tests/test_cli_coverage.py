@@ -38,7 +38,8 @@ def test_cli_manager_passes_only_explicit_local_configuration(monkeypatch, capsy
 
 def test_cli_uses_packaged_defaults_when_source_assets_are_absent(monkeypatch, capsys):
     original_exists = Path.exists
-    monkeypatch.setattr(Path, "exists", lambda path: False if str(path) in {"examples\\roe.yaml", "content\\abilities\\catalog.json"} else original_exists(path))
+    missing_paths = {str(Path("examples/roe.yaml")), str(Path("content/abilities/catalog.json"))}
+    monkeypatch.setattr(Path, "exists", lambda path: False if str(path) in missing_paths else original_exists(path))
     assert cli.load_roe("examples/roe.yaml").approver_name == "manager@example.test"
     monkeypatch.setattr(cli, "default_catalog_path", lambda: Path("packaged-catalog.json"))
     received = {}
