@@ -40,3 +40,43 @@ def test_cancel_records_stop_request():
     cancellation = cancel_campaign(root, campaign_id, "operator requested stop")
     assert json.loads(cancellation.read_text(encoding="utf-8"))["decision"] == "cancelled"
     assert inspect_campaign(root, campaign_id)["metadata"]["status"] == "cancelled"
+
+
+def test_lifecycle_recovery_rejects_unsafe_roots_invalid_ids_and_missing_campaigns():
+    root = Path("artifacts/test-lifecycle") / str(uuid4())
+    directory, campaign_id = _campaign(root)
+    outside_root = Path.cwd().parent / "outside-campaigns"
+    with pytest.raises(ValueError, match="inside the current working directory"):
+        list_campaigns(outside_root)
+    for operation in (
+        lambda: inspect_campaign(root, "not-a-campaign"),
+        lambda: reject_campaign(root, "not-a-campaign", "manager@example.test", "not scheduled"),
+        lambda: cancel_campaign(root, "not-a-campaign", "operator stop"),
+        lambda: reset_campaign(root, "not-a-campaign", True),
+    ):
+        with pytest.raises(ValueError, match="campaign ID"):
+            operation()
+    missing = "campaign-missing"
+    for operation in (
+        lambda: inspect_campaign(root, missing),
+        lambda: reject_campaign(root, missing, "manager@example.test", "not scheduled"),
+        lambda: cancel_campaign(root, missing, "operator stop"),
+        lambda: reset_campaign(root, missing, True),
+    ):
+        with pytest.raises(FileNotFoundError, match=missing):
+            operation()
+    assert directory.is_dir()
+    assert campaign_id == directory.name
+
+
+def test_completed_campaign_cannot_be_cancelled_and_is_left_unchanged():
+    root = Path("artifacts/test-lifecycle") / str(uuid4())
+    directory, campaign_id = _campaign(root)
+    metadata_path = directory / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "completed"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="cannot be cancelled"):
+        cancel_campaign(root, campaign_id, "too late")
+    assert json.loads(metadata_path.read_text(encoding="utf-8"))["status"] == "completed"
+    assert not (directory / "cancellation.json").exists()
