@@ -143,6 +143,9 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         assert inspected["detail"]["scope"]["target"] == "local-lab"
         assert inspected["detail"]["abilities"]
         assert "CLI" in inspected["detail"]["next_action"]
+        readiness = inspected["detail"]["approval_readiness"]
+        assert readiness["ready"] is True
+        assert all(check["passed"] for check in readiness["checks"])
         with pytest.raises(HTTPError) as wrong_approver:
             _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "not-the-approver", "reason": "not scheduled"})
         assert wrong_approver.value.code == 403
@@ -154,6 +157,8 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
             "Rejection recorded by manager@example.test",
         ]
         assert rejected_detail["detail"]["decision_timeline"][1]["detail"] == "not scheduled"
+        assert rejected_detail["detail"]["approval_readiness"]["ready"] is False
+        assert rejected_detail["detail"]["approval_readiness"]["checks"][0]["passed"] is False
         summary = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())["summary"]
         assert summary["total"] == 1
         assert summary["statuses"]["rejected"] == 1
