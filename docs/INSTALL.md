@@ -1,5 +1,7 @@
 # Installation and first-user journey
 
+AdversaryFlow requires Python 3.11 or newer and supports Windows, Debian, Ubuntu, and Kali. The installers create or reuse a project-local `.venv`, install the package, and run `doctor --fix`.
+
 ## Windows
 
 ```powershell
@@ -20,7 +22,7 @@ bash scripts/install.sh
 
 For contributors, use `bash scripts/install.sh --dev`.
 
-The same procedure is supported on current 64-bit Debian and Ubuntu releases. Python 3.11 or newer is required.
+Python 3.11 or newer is required.
 
 ## Kali Linux
 
@@ -70,7 +72,7 @@ If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve
 
 Release builds always include SHA-256 manifests. For publication signing, set `ADVERSARYFLOW_RELEASE_GPG_KEY` to an available GPG key ID before running `python scripts/release.py`; this produces `SHA256SUMS.json.asc`. Verify it with `verify_release_signature` from `scripts.release` using the publisher's public keyring.
 
-For the current unsigned release, download artifacts from the [releases page](https://github.com/rikterskale/AdversaryFlow/releases), verify `SHA256SUMS.json`, and install the wheel with `python -m pip install adversaryflow-0.2.2-py3-none-any.whl`.
+Download release artifacts from the [releases page](https://github.com/rikterskale/AdversaryFlow/releases), verify `SHA256SUMS.json`, and install the wheel with `python -m pip install adversaryflow-0.2.2-py3-none-any.whl`. Verify `SHA256SUMS.json.asc` only when the release includes that signature.
 
 ## Supported platform matrix
 
@@ -80,3 +82,5 @@ For the current unsigned release, download artifacts from the [releases page](ht
 | Debian | `scripts/install.sh` | Debian container |
 | Ubuntu | `scripts/install.sh` | Ubuntu runner |
 | Kali | `scripts/install.sh` | Kali container |
+
+Continue with [USAGE.md](USAGE.md), [CLI_REFERENCE.md](CLI_REFERENCE.md), and [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
