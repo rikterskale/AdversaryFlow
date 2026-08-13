@@ -7,11 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .adapters import AdapterRequest, resolve_adapter
 from .ai import AICampaignDraft, validate_ai_draft
 from .audit import AuditLog, sha256_bytes
 from .emulation import Ability
 from .models import RulesOfEngagement
-from .loopback import LoopbackSink
 from .reports import write_campaign_reports
 
 
@@ -85,7 +85,7 @@ def approve_draft(draft: AICampaignDraft, roe: RulesOfEngagement, abilities: tup
     return Approval(str(uuid.uuid4()), approver, plan_hash, datetime.now(timezone.utc).isoformat(), decision)
 
 
-def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], approval: Approval, output_root: str | Path = "artifacts/runs") -> Path:
+def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], approval: Approval, output_root: str | Path = "artifacts/runs", adapter_name: str = "local-synthetic") -> Path:
     if approval.decision != "approved":
         raise PermissionError("Cannot emulate a rejected draft")
     selected = [a for a in abilities if a.id in draft.ability_ids]
@@ -94,20 +94,16 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     progress_path = run_dir / "progress.json"
     progress = {"status": "running", "completed_abilities": [], "total_abilities": len(draft.ability_ids)}
     progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
-    events = []
-    with LoopbackSink() as sink:
-        for ability in selected:
-            observed = []
-            if ability.network_scope == "loopback":
-                sink.send_marker(run_dir.name)
-                observed = sink.received
-            events.append({"event": "simulation_completed", "ability_id": ability.id, "technique_id": ability.technique_id, "target": draft.target, "behavior_success": True, "telemetry": [asdict(t) for t in ability.expected_telemetry], "observed_loopback_requests": observed, "network_scope": ability.network_scope, "execution": "synthetic-harness-only"})
-            progress["completed_abilities"].append(ability.id)
-            progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
+    adapter = resolve_adapter(adapter_name)
+    result = adapter.execute(AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name))
+    events = list(result.events)
+    for ability in selected:
+        progress["completed_abilities"].append(ability.id)
+        progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
     event_bytes = ("\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n").encode()
     (run_dir / "events.jsonl").write_bytes(event_bytes)
     (run_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
-    manifest = {"run_id": run_dir.name, "approval": asdict(approval), "events_sha256": sha256_bytes(event_bytes), "mode": "local-synthetic"}
+    manifest = {"run_id": run_dir.name, "approval": asdict(approval), "events_sha256": sha256_bytes(event_bytes), "mode": result.adapter, "adapter": result.adapter}
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     AuditLog(run_dir / "audit.jsonl").record("local_emulation_completed", run_id=run_dir.name, approval_id=approval.approval_id, ability_count=len(selected))
     progress.update({"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()})

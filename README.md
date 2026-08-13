@@ -19,8 +19,9 @@ The first vertical slice provides:
 - Campaign plans that pair each technique with expected telemetry and validation questions.
 - A provider-neutral AI review prompt that keeps planning defensive and novice-friendly.
 - Versioned, safe emulation abilities with telemetry expectations, cleanup contracts, and deterministic plan hashes.
+- A fixed local-synthetic adapter boundary that accepts reviewed metadata only, never operator-supplied commands.
 
-The MVP deliberately does not generate exploit payloads, persistence, credential theft, evasion, lateral movement commands, or unrestricted network actions. Execution adapters are simulation-only and must be extended behind the safety interfaces.
+The MVP deliberately does not generate exploit payloads, persistence, credential theft, evasion, lateral movement commands, or unrestricted network actions. The only registered execution adapter is local-synthetic: it remains simulation-only and is restricted to run artifacts and engine-owned loopback markers.
 
 AI provider integration is intentionally left behind a small adapter boundary so an organization can choose its approved model, data-handling policy, and retention settings.
 

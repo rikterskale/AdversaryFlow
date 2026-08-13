@@ -5,6 +5,7 @@ from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.workflow import approve_draft, build_gap_report, run_local_emulation
+from adversaryflow.adapters import AdapterRequest, LocalSyntheticAdapter, resolve_adapter
 
 
 def test_complete_local_workflow():
@@ -29,3 +30,12 @@ def test_rejected_draft_cannot_start_local_emulation():
     rejection = approve_draft(draft, roe, abilities, "manager", "plan-hash", decision="rejected")
     with __import__("pytest").raises(PermissionError, match="rejected"):
         run_local_emulation(draft, abilities, rejection, Path("artifacts/test-runs") / str(uuid4()))
+
+
+def test_adapter_rejects_unsupported_name_and_unreviewed_ability():
+    abilities = load_catalog("content/abilities/catalog.json")
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test telemetry"), abilities[:1])
+    with __import__("pytest").raises(ValueError, match="Unsupported"):
+        resolve_adapter("remote-shell")
+    with __import__("pytest").raises(ValueError, match="exactly match"):
+        LocalSyntheticAdapter().execute(AdapterRequest(draft, abilities, "run-test"))
