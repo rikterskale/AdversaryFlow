@@ -1,11 +1,12 @@
 from pathlib import Path
 from uuid import uuid4
+from dataclasses import replace
 
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.workflow import approve_draft, build_gap_report, run_local_emulation
-from adversaryflow.adapters import AdapterRequest, LocalSyntheticAdapter, preflight_adapter, resolve_adapter
+from adversaryflow.adapters import AdapterRequest, LocalSyntheticAdapter, adapter_readiness, preflight_adapter, resolve_adapter
 
 
 def test_complete_local_workflow():
@@ -46,6 +47,33 @@ def test_adapter_rejects_unsupported_name_and_unreviewed_ability():
     adapter, preflight = preflight_adapter("local-synthetic", AdapterRequest(draft, abilities[:1], "run-test"))
     assert adapter.name == preflight.adapter == "local-synthetic"
     assert preflight.network_scopes == ("none",)
+
+
+def test_adapter_rejects_incomplete_or_non_simulation_requests():
+    abilities = load_catalog("content/abilities/catalog.json")
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test telemetry"), abilities[:1])
+    adapter = LocalSyntheticAdapter()
+    for request, message in (
+        (AdapterRequest(draft, abilities[:1], ""), "run_id"),
+        (AdapterRequest(draft, abilities[:1], "run-test", timeout_seconds=0), "timeout"),
+        (AdapterRequest(draft, (), "run-test"), "requires at least"),
+        (AdapterRequest(draft, (replace(abilities[0], fidelity="emulated"),), "run-test"), "supports synthetic"),
+    ):
+        with __import__("pytest").raises(ValueError, match=message):
+            adapter.execute(request)
+
+
+def test_adapter_readiness_reports_empty_and_invalid_catalog_inputs():
+    empty = adapter_readiness(())
+    assert empty["compatible"] is False
+    assert empty["ability_count"] == 0
+    abilities = load_catalog("content/abilities/catalog.json")
+    invalid = adapter_readiness((replace(abilities[0], fidelity="emulated"),))
+    unsupported = adapter_readiness(abilities, "remote-shell")
+    assert invalid["compatible"] is False
+    assert "Unsupported ability fidelity" in invalid["detail"]
+    assert unsupported["compatible"] is False
+    assert "Unsupported execution adapter" in unsupported["detail"]
 
 
 def test_adapter_failure_is_recorded_as_a_failed_run(monkeypatch):
