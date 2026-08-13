@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Safe test and documentation placeholders"
+paths = [
+  '''examples/''',
+  '''docs/'''
+]

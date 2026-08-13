@@ -101,4 +101,4 @@ def build_ai_request_prompt(request: CampaignRequest, abilities: tuple[Ability, 
     return (f"{SAFE_ASSISTANT_INSTRUCTIONS}\nReturn JSON only matching AICampaignDraft. "
             "Select only ability IDs from this catalog. Always set approval_required to true. "
             "Never add commands or new abilities.\n\n"
-            f"Request: {json.dumps(request.__dict__, sort_keys=True)}\nAbility catalog: {catalog}")
+            f"Request: {json.dumps(request.__dict__, sort_keys=True)}\nAbility catalog: {catalog}")  # nosec B608

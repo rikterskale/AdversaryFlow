@@ -6,6 +6,7 @@ import hashlib
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,7 +46,7 @@ class OpenAICompatiblePlanner:
         try:
             raw = json.dumps(payload).encode("utf-8")
             req = Request(endpoint, data=raw, headers={"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}, method="POST")
-            with urlopen(req, timeout=self.timeout) as response:  # noqa: S310 - explicitly configured operator endpoint.
+            with urlopen(req, timeout=self.timeout) as response:  # nosec B310 - HTTPS-only endpoint validation above.
                 response_data = json.load(response)
             response_hash = hashlib.sha256(json.dumps(response_data, sort_keys=True).encode()).hexdigest()
             self.last_request_metadata = {"provider": self.config.name, "model": self.config.model, "endpoint": self.config.endpoint, "request_sha256": request_hash, "response_sha256": response_hash, "duration_ms": round((time.monotonic() - started) * 1000), "status": "success"}
@@ -116,6 +117,8 @@ def validate_provider_config(config: ProviderConfig) -> list[str]:
             errors.append("ADVERSARYFLOW_MODEL is required for openai-compatible provider.")
         if not config.credential_configured:
             errors.append("ADVERSARYFLOW_API_KEY is required for openai-compatible provider.")
+        if config.endpoint and urlparse(config.endpoint).scheme != "https":
+            errors.append("ADVERSARYFLOW_ENDPOINT must use HTTPS.")
     return errors
 
 

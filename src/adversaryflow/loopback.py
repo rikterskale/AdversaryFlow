@@ -48,7 +48,6 @@ class LoopbackSink:
     def send_marker(self, run_id: str) -> None:
         payload = json.dumps({"marker": "ADVERSARYFLOW_SYNTHETIC", "run_id": run_id}).encode()
         request = Request(f"{self.url}/beacon", data=payload, headers={"Content-Type": "application/json"}, method="POST")
-        with urlopen(request, timeout=2) as response:  # noqa: S310 - URL is constructed from the local bound sink.
+        with urlopen(request, timeout=2) as response:  # nosec B310 - URL is constructed from the engine-owned loopback sink.
             if response.status != 200:
                 raise RuntimeError("loopback sink rejected synthetic marker")
-

@@ -116,6 +116,8 @@ python scripts/release.py
 
 The release script verifies artifact hashes after building. A clean install should run `adversaryflow doctor --json` and `adversaryflow demo` before release publication.
 
+CI security gates include branch/line coverage, Bandit, pip-audit, Gitleaks, workflow security analysis, and SBOM validation. Coverage currently has a ratcheted 50% floor based on the measured baseline; it must only increase as critical safety-module tests are added. These job names should be configured as required checks before merging into `main`.
+
 Run the clean artifact journey locally after building:
 
 ```powershell
