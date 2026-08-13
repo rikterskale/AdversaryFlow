@@ -60,6 +60,23 @@ def journey(release_dir: str | Path) -> list[str]:
             if "Approve the local synthetic emulation" not in guide or "manager --open" not in guide:
                 raise RuntimeError(f"Campaign guidance missing for {artifact.name}")
             run([str(python), "-m", "adversaryflow", "manager", "--help"], env_root)
+            manager_smoke = """import json, threading, urllib.request
+from http.server import ThreadingHTTPServer
+from adversaryflow.manager import make_handler
+root = 'manager-campaigns'
+server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(root))
+thread = threading.Thread(target=server.serve_forever, daemon=True)
+thread.start()
+try:
+    base = f'http://127.0.0.1:{server.server_port}'
+    request = urllib.request.Request(base + '/api/campaigns', data=json.dumps({'actor': 'APT29', 'target': 'local-lab', 'objective': 'installed manager smoke'}).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+    created = json.loads(urllib.request.urlopen(request).read())
+    detail = json.loads(urllib.request.urlopen(base + '/api/campaigns/' + created['campaign_id']).read())
+    assert created['stage'] == 'drafted' and detail['metadata']['status'] == 'awaiting-approval'
+finally:
+    server.shutdown(); thread.join(timeout=2)
+"""
+            run([str(python), "-c", manager_smoke], env_root)
             run([str(python), "-m", "adversaryflow", "demo", "--output", str(env_root / "runs")], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "validate"], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "diagnose"], env_root)

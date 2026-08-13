@@ -54,6 +54,8 @@ The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only
 
 See [docs/INSTALL.md](docs/INSTALL.md) for Windows, Linux/Kali, and Docker setup. `doctor` is the first troubleshooting command, and `support-bundle` creates a redacted diagnostics archive.
 
+Maintainers can use the [release checklist](docs/RELEASE_CHECKLIST.md) before creating a release tag.
+
 ## Downloads
 
 Versioned unsigned release artifacts are published at the [GitHub Releases page](https://github.com/rikterskale/AdversaryFlow/releases). Each release includes a wheel, source distribution, source ZIP, SHA-256 manifest, and CycloneDX SBOM. GPG signing is intentionally not enabled in this development release.
