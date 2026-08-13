@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=50
+      - run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=75
       - run: python -m adversaryflow doctor --json
       - run: python -m adversaryflow demo
 
