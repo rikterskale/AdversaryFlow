@@ -20,3 +20,12 @@ def test_complete_local_workflow():
     assert report["behavior_success"] is True
     assert report["telemetry_expected"] == report["telemetry_observed"]
     assert report["detection_gap_count"] == 0
+
+
+def test_rejected_draft_cannot_start_local_emulation():
+    abilities = load_catalog("content/abilities/catalog.json")
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "x", "operator_name": "o", "approver_name": "manager", "approved_targets": ["local-lab"]})
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "rejected simulation"), abilities)
+    rejection = approve_draft(draft, roe, abilities, "manager", "plan-hash", decision="rejected")
+    with __import__("pytest").raises(PermissionError, match="rejected"):
+        run_local_emulation(draft, abilities, rejection, Path("artifacts/test-runs") / str(uuid4()))

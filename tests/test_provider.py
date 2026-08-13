@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from adversaryflow.provider import load_provider_config, validate_provider_config
+from adversaryflow.provider import _draft_from_mapping, load_provider_config, validate_provider_config
 from adversaryflow.profiles import activation_summary, save_profile, use_profile
 
 
@@ -40,6 +40,18 @@ def test_active_provider_profile_is_loaded_without_environment_selector():
 def test_missing_selected_provider_profile_fails_validation():
     config = load_provider_config({"ADVERSARYFLOW_PROFILE": "renamed", "ADVERSARYFLOW_PROFILE_FILE": "artifacts/no-profiles.json"})
     assert validate_provider_config(config) == ["Provider profile 'renamed' was not found."]
+
+
+def test_provider_validation_rejects_missing_active_profile_invalid_drafts_and_http_endpoints():
+    root = Path("artifacts/test-profiles") / str(uuid4())
+    root.mkdir(parents=True)
+    profile = root / "profiles.json"
+    profile.write_text('{"active": "missing", "profiles": {}}', encoding="utf-8")
+    assert "was not found" in load_provider_config({"ADVERSARYFLOW_PROFILE_FILE": str(profile)}).profile_error
+    with pytest.raises(ValueError, match="missing required"):
+        _draft_from_mapping({})
+    insecure = load_provider_config({"ADVERSARYFLOW_PROVIDER": "openai-compatible", "ADVERSARYFLOW_ENDPOINT": "http://example.test/v1", "ADVERSARYFLOW_MODEL": "model", "ADVERSARYFLOW_API_KEY": "secret"})
+    assert any("must use HTTPS" in error for error in validate_provider_config(insecure))
 
 
 def test_profile_activation_summary_is_redacted_and_gives_a_recovery_step():

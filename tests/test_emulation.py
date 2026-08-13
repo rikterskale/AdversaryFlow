@@ -22,6 +22,21 @@ def test_ability_rejects_external_network_scope():
         Ability.from_mapping(raw)
 
 
+@pytest.mark.parametrize(("writes_only_run_root", "telemetry", "message"), [
+    (False, [{"category": "process", "description": "test"}], "writes_only_run_root"),
+    (True, [], "expected telemetry"),
+])
+def test_ability_requires_local_writes_and_telemetry(writes_only_run_root, telemetry, message):
+    raw = {
+        "id": "incomplete", "version": "1", "name": "incomplete", "technique": {"id": "T1000"},
+        "platform": "linux", "simulation_action": "test",
+        "expected": {"telemetry": telemetry},
+        "safety": {"writes_only_run_root": writes_only_run_root, "network_scope": "none"},
+    }
+    with pytest.raises(ValueError, match=message):
+        Ability.from_mapping(raw)
+
+
 def test_plan_hash_is_deterministic():
     plan = build_emulation_plan(load_catalog("content/abilities/catalog.json"), "local-lab", "APT29")
     stored = plan.pop("plan_sha256")
