@@ -5,7 +5,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import make_handler
+from adversaryflow.manager import _terminal_next_step, make_handler
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
@@ -148,7 +148,7 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         assert all(check["passed"] for check in readiness["checks"])
         assert inspected["detail"]["terminal_next"] == {
             "label": "Copy CLI approval command",
-            "command": f"adversaryflow campaign --campaign-id {campaign_id} --approve --approver manager@example.test",
+            "command": f"adversaryflow campaign --campaign-id {campaign_id} --approve --approver \"manager@example.test\"",
             "detail": "Copy this command only after the named RoE approver confirms schedule and scope.",
         }
         with pytest.raises(HTTPError) as wrong_approver:
@@ -175,3 +175,8 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
     finally:
         server.shutdown()
         thread.join(timeout=2)
+
+
+def test_manager_next_step_quotes_roE_approver_as_one_cli_argument():
+    result = _terminal_next_step("campaign-safe", "awaiting-approval", {"ready": True}, 'manager "blue team"')
+    assert result["command"] == 'adversaryflow campaign --campaign-id campaign-safe --approve --approver "manager blue team"'

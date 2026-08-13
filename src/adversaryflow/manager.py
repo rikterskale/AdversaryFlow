@@ -184,11 +184,16 @@ def _approval_readiness(status: str, draft, roe: RulesOfEngagement, abilities: l
     }
 
 
+def _terminal_value(value: str) -> str:
+    """Quote a displayed CLI argument without preserving command metacharacters."""
+    return '"' + value.replace('"', "") + '"'
+
+
 def _terminal_next_step(campaign_id: str, status: str, readiness: dict[str, object], approver: str) -> dict[str, str]:
     """Offer a copyable CLI instruction; the browser never invokes it."""
     inspect = f"adversaryflow campaign inspect --campaign-id {campaign_id}"
     if status == "awaiting-approval" and readiness["ready"]:
-        return {"label": "Copy CLI approval command", "command": f"adversaryflow campaign --campaign-id {campaign_id} --approve --approver {approver}", "detail": "Copy this command only after the named RoE approver confirms schedule and scope."}
+        return {"label": "Copy CLI approval command", "command": f"adversaryflow campaign --campaign-id {campaign_id} --approve --approver {_terminal_value(approver)}", "detail": "Copy this command only after the named RoE approver confirms schedule and scope."}
     if status == "awaiting-approval":
         return {"label": "Copy CLI inspection command", "command": inspect, "detail": "Review the campaign again after resolving the failed readiness checks."}
     return {"label": "Copy CLI inspection command", "command": inspect, "detail": "This is a read-only inspection command; create a new draft if scope needs to change."}
