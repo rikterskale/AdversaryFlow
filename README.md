@@ -42,6 +42,8 @@ adversaryflow doctor
 adversaryflow support-bundle
 adversaryflow capabilities
 adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"
+adversaryflow manager --open
+adversaryflow guide --interactive
 ```
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.
@@ -97,6 +99,12 @@ adversaryflow campaign --campaign-id campaign-... --approve --approver "manager@
 Resuming verifies the saved draft, plan hash, RoE, and ability catalog before emulation; it does not regenerate the AI response.
 
 Completed campaigns also produce `campaign-report.md` and `campaign-report.html` containing the scope, approval, plan hash, behavior result, telemetry counts, and detection gaps. Provider metadata stores hashes, timing, model, and status only; API keys and raw prompts/responses are not persisted.
+
+## Guided local campaign workspace
+
+Run `adversaryflow manager --open` to launch a loopback-only browser workspace. It explains the safe campaign stages, generates copyable draft commands, lists locally saved campaigns, and provides context-sensitive next steps. The workspace does not execute commands or expose any non-loopback service; approval and emulation remain explicit CLI operations gated by the RoE.
+
+The same step-by-step guidance is available in the terminal with `adversaryflow guide`. Add `--interactive` to enter a threat actor, approved target, and defensive objective; it only generates a copyable draft command and never runs a campaign.
 
 Campaign lifecycle commands:
 

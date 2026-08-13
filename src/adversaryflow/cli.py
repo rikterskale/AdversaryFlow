@@ -27,6 +27,55 @@ def load_roe(path: str) -> RulesOfEngagement:
         return RulesOfEngagement.from_mapping(yaml.safe_load(handle) or {})
 
 
+def _quote_command(value: str) -> str:
+    return '"' + value.replace('"', "") + '"'
+
+
+def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -> str:
+    """Return a safe, copyable campaign walkthrough without executing a campaign."""
+    if interactive:
+        actor = input(f"Threat actor [{actor}]: ").strip() or actor
+        target = input(f"RoE-approved target [{target}]: ").strip() or target
+        objective = input(f"Defensive objective [{objective}]: ").strip() or objective
+    draft_command = f"adversaryflow campaign --actor {_quote_command(actor)} --target {_quote_command(target)} --objective {_quote_command(objective)}"
+    return "\n".join([
+        "AdversaryFlow Campaign Guide (simulation-only)",
+        "=" * 48,
+        "This guide creates no campaign and runs no emulation. It only prepares your safe next command.",
+        "",
+        "1. Prepare the local environment",
+        "   Run: adversaryflow doctor --json",
+        "   Confirm your RoE and ability catalog pass before continuing.",
+        "",
+        "2. Confirm scope",
+        f"   Target: {target}",
+        "   The target must appear in the RoE allowlist and must not be excluded.",
+        "   This tool permits only local synthetic simulation; it never creates exploit payloads, persistence, credential theft, evasion, lateral movement, or unrestricted network actions.",
+        "",
+        "3. Create a reviewable draft (no execution)",
+        f"   Run: {draft_command}",
+        "   Save the returned campaign ID. The draft is bound to its plan, RoE, and ability-catalog integrity hashes.",
+        "",
+        "4. Review before approval",
+        "   Run: adversaryflow campaign inspect --campaign-id campaign-...",
+        "   Check selected abilities, expected telemetry, stop conditions, assumptions, scope, and provider status.",
+        "   If it should not proceed, record the decision with: adversaryflow campaign reject --campaign-id campaign-... --approver <RoE-approver> --reason \"Not scheduled\"",
+        "",
+        "5. Approve the local synthetic emulation",
+        "   Only the approver named in the RoE can authorize it:",
+        "   Run: adversaryflow campaign --campaign-id campaign-... --approve --approver <RoE-approver>",
+        "   Resume rejects changed drafts, RoEs, or ability catalogs.",
+        "",
+        "6. Learn and retest",
+        "   Review campaign-report.md, campaign-report.html, and telemetry-gap-report.json in the campaign/run artifacts.",
+        "   Capture detection gaps, create a retest objective, and draft a new campaign rather than modifying an approved one.",
+        "",
+        "Need a visual walkthrough? Run: adversaryflow manager --open",
+        "Need provider help? Run: adversaryflow provider diagnose",
+        "Need diagnostics? Run: adversaryflow support-bundle",
+    ])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -61,6 +110,11 @@ def main() -> None:
     support.add_argument("--output", default="artifacts/support")
     support.add_argument("--roe", default="examples/roe.yaml")
     sub.add_parser("capabilities", help="list advertised capabilities")
+    guide = sub.add_parser("guide", help="walk through the safe campaign workflow and next steps")
+    guide.add_argument("--actor", default="APT29")
+    guide.add_argument("--target", default="local-lab")
+    guide.add_argument("--objective", default="validate endpoint process visibility")
+    guide.add_argument("--interactive", action="store_true", help="prompt for draft-command details without executing a campaign")
     provider = sub.add_parser("provider", help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
@@ -117,10 +171,11 @@ def main() -> None:
     reset.add_argument("--campaign-id", required=True)
     reset.add_argument("--confirm", action="store_true")
     reset.add_argument("--campaign-root", default="artifacts/campaigns")
-    manager = sub.add_parser("manager", help="start the loopback-only campaign manager")
+    manager = sub.add_parser("manager", help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
     manager.add_argument("--campaign-root", default="artifacts/campaigns")
+    manager.add_argument("--open", action="store_true", help="open the local campaign guide in your default browser")
     args = parser.parse_args()
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
         args.catalog = str(default_catalog_path())
@@ -130,8 +185,12 @@ def main() -> None:
         print(json.dumps({"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}, indent=2))
         return
 
+    if args.command == "guide":
+        print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
+        return
+
     if args.command == "manager":
-        serve_manager(args.host, args.port, args.campaign_root)
+        serve_manager(args.host, args.port, args.campaign_root, args.open)
         return
 
     if args.command == "campaign":

@@ -43,7 +43,11 @@ def test_manager_health_and_campaign_listing():
         health = json.loads(urllib.request.urlopen(base + "/api/health").read())
         campaigns = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())
         assert health["ok"] is True
+        assert health["mode"] == "local-guided-manager"
         assert campaigns["campaigns"] == []
+        page = urllib.request.urlopen(base + "/").read().decode()
+        assert "Campaign Guide" in page
+        assert "Build a safe draft command" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
