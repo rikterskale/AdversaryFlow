@@ -175,6 +175,8 @@ def main() -> None:
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
     manager.add_argument("--campaign-root", default="artifacts/campaigns")
+    manager.add_argument("--roe", default="examples/roe.yaml", help="Rules of Engagement used to validate browser-created offline drafts")
+    manager.add_argument("--catalog", default="content/abilities/catalog.json", help="safe ability catalog used to validate browser-created offline drafts")
     manager.add_argument("--open", action="store_true", help="open the local campaign guide in your default browser")
     args = parser.parse_args()
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
@@ -190,7 +192,7 @@ def main() -> None:
         return
 
     if args.command == "manager":
-        serve_manager(args.host, args.port, args.campaign_root, args.open)
+        serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
         return
 
     if args.command == "campaign":

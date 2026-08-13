@@ -51,7 +51,7 @@ def test_manager_health_and_campaign_listing():
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "Campaign Guide" in page
         assert "Start a safe campaign in five clear steps" in page
-        assert "Create my draft command" in page
+        assert "Create safe offline draft" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
@@ -88,6 +88,43 @@ def test_manager_includes_existing_html_report_for_completed_campaign():
         report_url = payload["campaigns"][0]["report_url"]
         assert report_url == f"/api/campaigns/{campaign.name}/report"
         assert "Report" in urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{report_url}").read().decode()
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def _manager_post(base, path, payload):
+    request = urllib.request.Request(
+        base + path,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    return json.loads(urllib.request.urlopen(request).read())
+
+
+def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
+    root = __import__("pathlib").Path("artifacts") / f"manager-control-{uuid4()}"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(str(root)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        created = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "validate endpoint visibility"})
+        assert created["provider"] == "offline"
+        assert created["approval_required"] is True
+        campaign_id = created["campaign_id"]
+        inspected = json.loads(urllib.request.urlopen(base + f"/api/campaigns/{campaign_id}").read())
+        assert inspected["metadata"]["status"] == "awaiting-approval"
+        assert inspected["metadata"]["provider"] == "offline"
+        with pytest.raises(HTTPError) as wrong_approver:
+            _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "not-the-approver", "reason": "not scheduled"})
+        assert wrong_approver.value.code == 403
+        rejected = _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "manager@example.test", "reason": "not scheduled"})
+        assert rejected["status"] == "rejected"
+        second = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "validate process visibility"})
+        cancelled = _manager_post(base, f"/api/campaigns/{second['campaign_id']}/cancel", {"reason": "operator requested stop"})
+        assert cancelled["status"] == "cancelled"
     finally:
         server.shutdown()
         thread.join(timeout=2)
