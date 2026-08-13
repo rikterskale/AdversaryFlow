@@ -4,6 +4,7 @@ import os
 import json
 import hashlib
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
@@ -87,8 +88,21 @@ def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfi
     name = env.get("ADVERSARYFLOW_PROVIDER", "offline").strip().lower()
     model = env.get("ADVERSARYFLOW_MODEL") or None
     endpoint = env.get("ADVERSARYFLOW_ENDPOINT") or None
-    credential = bool(env.get("ADVERSARYFLOW_API_KEY"))
-    return ProviderConfig(name, model, endpoint, credential, env.get("ADVERSARYFLOW_API_KEY") or None)
+    api_key = env.get("ADVERSARYFLOW_API_KEY") or None
+    profile_name = env.get("ADVERSARYFLOW_PROFILE")
+    if profile_name and profile_name != "offline":
+        profile_path = Path(env.get("ADVERSARYFLOW_PROFILE_FILE", "artifacts/providers/profiles.json"))
+        if profile_path.exists():
+            try:
+                profile = json.loads(profile_path.read_text(encoding="utf-8")).get("profiles", {}).get(profile_name, {})
+                name = str(profile.get("provider", name))
+                model = model or profile.get("model")
+                endpoint = endpoint or profile.get("endpoint")
+                api_key = api_key or env.get(profile.get("credential_env", "ADVERSARYFLOW_API_KEY"))
+            except (OSError, json.JSONDecodeError):
+                pass
+    credential = bool(api_key)
+    return ProviderConfig(name, model, endpoint, credential, api_key)
 
 
 def _draft_from_mapping(data: dict[str, Any]) -> AICampaignDraft:

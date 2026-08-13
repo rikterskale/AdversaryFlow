@@ -70,6 +70,8 @@ If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve
 
 Release builds always include SHA-256 manifests. For publication signing, set `ADVERSARYFLOW_RELEASE_GPG_KEY` to an available GPG key ID before running `python scripts/release.py`; this produces `SHA256SUMS.json.asc`. Verify it with `verify_release_signature` from `scripts.release` using the publisher's public keyring.
 
+For the current unsigned release, download artifacts from the [releases page](https://github.com/rikterskale/AdversaryFlow/releases), verify `SHA256SUMS.json`, and install the wheel with `python -m pip install adversaryflow-0.2.0-py3-none-any.whl`.
+
 ## Supported platform matrix
 
 | Platform | Install path | CI coverage |
