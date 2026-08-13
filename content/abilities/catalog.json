@@ -1,0 +1,30 @@
+{
+  "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "abilities": [
+    {
+      "id": "ability-synthetic-shell-marker",
+      "version": "1.0.0",
+      "name": "Synthetic shell execution marker",
+      "technique": {"id": "T1059.004", "name": "Command and Scripting Interpreter: Unix Shell"},
+      "platform": "linux",
+      "fidelity": "synthetic",
+      "simulation_action": "Emit a benign correlation marker to the local test harness; do not run an operator-supplied command.",
+      "expected": {"telemetry": [{"category": "process", "description": "The test harness records a synthetic shell execution event."}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"},
+      "cleanup_action": "Remove the run-owned marker artifact."
+    },
+    {
+      "id": "ability-loopback-beacon",
+      "version": "1.0.0",
+      "name": "Loopback HTTP beacon",
+      "technique": {"id": "T1071.001", "name": "Application Layer Protocol: Web Protocols"},
+      "platform": "linux",
+      "fidelity": "behavioral",
+      "simulation_action": "Send a fixed run identifier to an engine-owned 127.0.0.1 sink.",
+      "expected": {"telemetry": [{"category": "network", "description": "The local test harness records an HTTP request to the loopback sink."}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "loopback"},
+      "cleanup_action": "Close the engine-owned sink and remove run-owned artifacts."
+    }
+  ]
+}
+
