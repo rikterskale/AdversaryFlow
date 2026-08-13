@@ -105,6 +105,17 @@ adversaryflow campaign reset --campaign-id campaign-... --confirm
 
 `list` and `inspect` are read-only. `reject` preserves an auditable decision. `reset` requires explicit confirmation and only operates inside the configured campaign root.
 
+## Release artifacts
+
+Release builds produce a wheel, source distribution, source ZIP, `SHA256SUMS.json`, and `sbom.cdx.json`:
+
+```powershell
+python -m pip install build
+python scripts/release.py
+```
+
+The release script verifies artifact hashes after building. A clean install should run `adversaryflow doctor --json` and `adversaryflow demo` before release publication.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

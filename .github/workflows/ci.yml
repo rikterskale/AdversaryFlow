@@ -43,10 +43,12 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install build
-      - run: python -m build
-      - run: python -m pip install dist/*.whl
+      - run: python scripts/release.py artifacts/release
+      - run: python -c "from scripts.release import verify_release; assert verify_release('artifacts/release')"
+      - run: python -m pip install artifacts/release/*.whl
       - run: adversaryflow doctor --json
       - run: adversaryflow demo
+      - run: python -m pip install artifacts/release/*.tar.gz
 
   distro-matrix:
     strategy:
