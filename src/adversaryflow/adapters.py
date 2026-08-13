@@ -14,6 +14,7 @@ from .loopback import LoopbackSink
 
 
 MAX_ADAPTER_TIMEOUT_SECONDS = 60
+ADAPTER_CONTRACT_VERSION = "ADVERSARYFLOW-ADAPTER-1"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,16 @@ class AdapterRequest:
 class AdapterResult:
     adapter: str
     events: tuple[dict, ...]
+
+
+@dataclass(frozen=True)
+class AdapterPreflight:
+    """Evidence that the fixed adapter accepted only reviewed, safe inputs."""
+
+    contract_version: str
+    adapter: str
+    ability_ids: tuple[str, ...]
+    network_scopes: tuple[str, ...]
 
 
 class ExecutionAdapter(Protocol):
@@ -93,3 +104,15 @@ def resolve_adapter(name: str = "local-synthetic") -> ExecutionAdapter:
         return _REGISTERED_ADAPTERS[name]
     except KeyError as error:
         raise ValueError(f"Unsupported execution adapter: {name}") from error
+
+
+def preflight_adapter(name: str, request: AdapterRequest) -> tuple[ExecutionAdapter, AdapterPreflight]:
+    """Resolve and validate a built-in adapter before it receives any execution work."""
+    adapter = resolve_adapter(name)
+    validate_adapter_request(request)
+    return adapter, AdapterPreflight(
+        contract_version=ADAPTER_CONTRACT_VERSION,
+        adapter=adapter.name,
+        ability_ids=tuple(ability.id for ability in request.abilities),
+        network_scopes=tuple(sorted({ability.network_scope for ability in request.abilities})),
+    )

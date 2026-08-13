@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .adapters import AdapterRequest, resolve_adapter
+from .adapters import AdapterRequest, preflight_adapter
 from .ai import AICampaignDraft, validate_ai_draft
 from .audit import AuditLog, sha256_bytes
 from .emulation import Ability
@@ -89,7 +89,6 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     if approval.decision != "approved":
         raise PermissionError("Cannot emulate a rejected draft")
     selected = [a for a in abilities if a.id in draft.ability_ids]
-    adapter = resolve_adapter(adapter_name)
     run_dir = Path(output_root) / f"run-{uuid.uuid4()}"
     run_dir.mkdir(parents=True, exist_ok=False)
     progress_path = run_dir / "progress.json"
@@ -98,8 +97,8 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     manifest = {
         "run_id": run_dir.name,
         "approval": asdict(approval),
-        "mode": adapter.name,
-        "adapter": adapter.name,
+        "mode": adapter_name,
+        "adapter": adapter_name,
         "status": "running",
         "execution_boundary": "simulation-only",
         "allowed_network_scopes": ["none", "loopback"],
@@ -108,13 +107,17 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     manifest_path = run_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     try:
-        result = adapter.execute(AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name))
+        request = AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name)
+        adapter, preflight = preflight_adapter(adapter_name, request)
+        manifest["adapter_preflight"] = asdict(preflight)
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        result = adapter.execute(request)
     except Exception as error:
         progress.update({"status": "failed", "failed_at": datetime.now(timezone.utc).isoformat(), "failure": "adapter_failed"})
         progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
         manifest.update({"status": "failed", "failed_at": progress["failed_at"], "failure_type": type(error).__name__})
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        AuditLog(run_dir / "audit.jsonl").record("local_emulation_failed", run_id=run_dir.name, approval_id=approval.approval_id, adapter=adapter.name, failure_type=type(error).__name__)
+        AuditLog(run_dir / "audit.jsonl").record("local_emulation_failed", run_id=run_dir.name, approval_id=approval.approval_id, adapter=adapter_name, failure_type=type(error).__name__)
         raise
     events = list(result.events)
     for ability in selected:

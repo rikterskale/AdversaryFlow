@@ -5,7 +5,7 @@ from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.workflow import approve_draft, build_gap_report, run_local_emulation
-from adversaryflow.adapters import AdapterRequest, LocalSyntheticAdapter, resolve_adapter
+from adversaryflow.adapters import AdapterRequest, LocalSyntheticAdapter, preflight_adapter, resolve_adapter
 
 
 def test_complete_local_workflow():
@@ -24,6 +24,7 @@ def test_complete_local_workflow():
     manifest = __import__("json").loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["adapter"] == "local-synthetic"
     assert manifest["execution_boundary"] == "simulation-only"
+    assert manifest["adapter_preflight"]["contract_version"] == "ADVERSARYFLOW-ADAPTER-1"
 
 
 def test_rejected_draft_cannot_start_local_emulation():
@@ -42,6 +43,9 @@ def test_adapter_rejects_unsupported_name_and_unreviewed_ability():
         resolve_adapter("remote-shell")
     with __import__("pytest").raises(ValueError, match="exactly match"):
         LocalSyntheticAdapter().execute(AdapterRequest(draft, abilities, "run-test"))
+    adapter, preflight = preflight_adapter("local-synthetic", AdapterRequest(draft, abilities[:1], "run-test"))
+    assert adapter.name == preflight.adapter == "local-synthetic"
+    assert preflight.network_scopes == ("none",)
 
 
 def test_adapter_failure_is_recorded_as_a_failed_run(monkeypatch):
