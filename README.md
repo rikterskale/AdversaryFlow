@@ -40,6 +40,8 @@ python -m adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.
 
+The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

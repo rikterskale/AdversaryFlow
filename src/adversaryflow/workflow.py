@@ -11,6 +11,7 @@ from .ai import AICampaignDraft, validate_ai_draft
 from .audit import AuditLog, sha256_bytes
 from .emulation import Ability
 from .models import RulesOfEngagement
+from .loopback import LoopbackSink
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,14 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     selected = [a for a in abilities if a.id in draft.ability_ids]
     run_dir = Path(output_root) / f"run-{uuid.uuid4()}"
     run_dir.mkdir(parents=True, exist_ok=False)
-    events = [{"event": "simulation_completed", "ability_id": a.id, "technique_id": a.technique_id, "target": draft.target, "behavior_success": True, "telemetry": [asdict(t) for t in a.expected_telemetry], "network_scope": a.network_scope, "execution": "synthetic-harness-only"} for a in selected]
+    events = []
+    with LoopbackSink() as sink:
+        for ability in selected:
+            observed = []
+            if ability.network_scope == "loopback":
+                sink.send_marker(run_dir.name)
+                observed = sink.received
+            events.append({"event": "simulation_completed", "ability_id": ability.id, "technique_id": ability.technique_id, "target": draft.target, "behavior_success": True, "telemetry": [asdict(t) for t in ability.expected_telemetry], "observed_loopback_requests": observed, "network_scope": ability.network_scope, "execution": "synthetic-harness-only"})
     event_bytes = ("\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n").encode()
     (run_dir / "events.jsonl").write_bytes(event_bytes)
     (run_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
@@ -57,4 +65,3 @@ def build_gap_report(run_dir: str | Path) -> dict[str, Any]:
     report = {"run_id": root.name, "behavior_success": all(event.get("behavior_success") for event in events), "telemetry_expected": len(expected), "telemetry_observed": len(observed), "detection_gap_count": len(gaps), "gaps": gaps, "assessment": "Telemetry recorded by synthetic harness; validate separately against production log pipelines."}
     (root / "telemetry-gap-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
-
