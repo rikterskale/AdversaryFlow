@@ -49,6 +49,18 @@ The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only
 
 See [docs/INSTALL.md](docs/INSTALL.md) for Windows, Linux/Kali, and Docker setup. `doctor` is the first troubleshooting command, and `support-bundle` creates a redacted diagnostics archive.
 
+## AI provider management
+
+Offline mode is the default and requires no credentials. To inspect or validate provider configuration:
+
+```powershell
+adversaryflow provider status
+adversaryflow provider configure
+adversaryflow provider validate
+```
+
+The supported hosted configuration is an OpenAI-compatible endpoint using `ADVERSARYFLOW_PROVIDER`, `ADVERSARYFLOW_ENDPOINT`, `ADVERSARYFLOW_MODEL`, and `ADVERSARYFLOW_API_KEY`. The API key is read from the process environment only; it is never written to project files or support bundles. Validation is non-networked.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

@@ -10,6 +10,7 @@ from .emulation import load_catalog
 from .workflow import approve_draft, build_gap_report, run_local_emulation
 from .doctor import run_doctor
 from .support import create_support_bundle
+from .provider import load_provider_config, provider_setup_instructions, validate_provider_config
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
 from .planner import build_plan
@@ -53,6 +54,11 @@ def main() -> None:
     support.add_argument("--output", default="artifacts/support")
     support.add_argument("--roe", default="examples/roe.yaml")
     sub.add_parser("capabilities", help="list advertised capabilities")
+    provider = sub.add_parser("provider", help="configure and validate AI provider settings")
+    provider_sub = provider.add_subparsers(dest="provider_command", required=True)
+    provider_sub.add_parser("status", help="show redacted provider configuration")
+    provider_sub.add_parser("validate", help="validate settings without network access")
+    provider_sub.add_parser("configure", help="show provider configuration instructions")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -96,6 +102,18 @@ def main() -> None:
 
     if args.command == "capabilities":
         print(Path("capabilities.json").read_text(encoding="utf-8"))
+        return
+
+    if args.command == "provider":
+        config = load_provider_config()
+        errors = validate_provider_config(config)
+        if args.provider_command == "status":
+            print(json.dumps(config.as_dict(), indent=2))
+        elif args.provider_command == "configure":
+            print(provider_setup_instructions())
+        else:
+            print(json.dumps({"valid": not errors, "configuration": config.as_dict(), "errors": errors}, indent=2))
+            raise SystemExit(0 if not errors else 1)
         return
 
     roe = load_roe(args.roe)
