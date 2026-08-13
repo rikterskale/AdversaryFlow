@@ -2,6 +2,8 @@
 
 import os
 import json
+import hashlib
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ class OpenAICompatiblePlanner:
     def __init__(self, config: "ProviderConfig", timeout: int = 30):
         self.config = config
         self.timeout = timeout
+        self.last_request_metadata: dict[str, Any] = {}
 
     def draft(self, request: CampaignRequest, abilities: tuple[Ability, ...]) -> AICampaignDraft:
         errors = validate_provider_config(self.config)
@@ -37,18 +40,24 @@ class OpenAICompatiblePlanner:
             "response_format": {"type": "json_object"},
         }
         endpoint = self.config.endpoint.rstrip("/") + "/chat/completions"
+        request_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        started = time.monotonic()
         try:
             raw = json.dumps(payload).encode("utf-8")
             req = Request(endpoint, data=raw, headers={"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}, method="POST")
             with urlopen(req, timeout=self.timeout) as response:  # noqa: S310 - explicitly configured operator endpoint.
                 response_data = json.load(response)
+            response_hash = hashlib.sha256(json.dumps(response_data, sort_keys=True).encode()).hexdigest()
+            self.last_request_metadata = {"provider": self.config.name, "model": self.config.model, "endpoint": self.config.endpoint, "request_sha256": request_hash, "response_sha256": response_hash, "duration_ms": round((time.monotonic() - started) * 1000), "status": "success"}
         except HTTPError as exc:
+            self.last_request_metadata = {"provider": self.config.name, "model": self.config.model, "endpoint": self.config.endpoint, "request_sha256": request_hash, "duration_ms": round((time.monotonic() - started) * 1000), "status": f"http_{exc.code}"}
             if exc.code == 401:
                 raise ProviderError("Provider authentication failed; check ADVERSARYFLOW_API_KEY.") from exc
             if exc.code == 429:
                 raise ProviderError("Provider rate limit reached; retry later.") from exc
             raise ProviderError(f"Provider returned HTTP {exc.code}.") from exc
         except (TimeoutError, URLError):
+            self.last_request_metadata = {"provider": self.config.name, "model": self.config.model, "endpoint": self.config.endpoint, "request_sha256": request_hash, "duration_ms": round((time.monotonic() - started) * 1000), "status": "unreachable"}
             raise ProviderError("Provider endpoint could not be reached before timeout.") from None
         except json.JSONDecodeError:
             raise ProviderError("Provider returned invalid JSON.") from None

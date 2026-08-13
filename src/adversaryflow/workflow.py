@@ -12,6 +12,7 @@ from .audit import AuditLog, sha256_bytes
 from .emulation import Ability
 from .models import RulesOfEngagement
 from .loopback import LoopbackSink
+from .reports import write_campaign_reports
 
 
 @dataclass(frozen=True)
@@ -24,10 +25,10 @@ class Approval:
     scope_acknowledged: bool = True
 
 
-def save_campaign_draft(draft: AICampaignDraft, plan_hash: str, provider: str, output_root: str | Path = "artifacts/campaigns", campaign_id: str | None = None) -> Path:
+def save_campaign_draft(draft: AICampaignDraft, plan_hash: str, provider: str, output_root: str | Path = "artifacts/campaigns", campaign_id: str | None = None, provider_metadata: dict[str, Any] | None = None) -> Path:
     campaign_dir = Path(output_root) / (campaign_id or f"campaign-{uuid.uuid4()}")
     campaign_dir.mkdir(parents=True, exist_ok=False)
-    metadata = {"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider, "status": "awaiting-approval", "created_at": datetime.now(timezone.utc).isoformat()}
+    metadata = {"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider, "provider_metadata": provider_metadata or {"provider": provider, "status": "offline"}, "status": "awaiting-approval", "created_at": datetime.now(timezone.utc).isoformat()}
     (campaign_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
     (campaign_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return campaign_dir

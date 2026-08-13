@@ -8,6 +8,7 @@ from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import load_catalog
 from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
+from .reports import write_campaign_reports
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
@@ -102,10 +103,13 @@ def main() -> None:
                 parser.error("campaign requires --actor and --objective when --campaign-id is not supplied")
             request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
             try:
+                provider_metadata = {"provider": config.name, "status": "offline"}
                 if config.name == "offline":
                     draft_result = OfflinePlanner().draft(request, abilities)
                 elif config.name == "openai-compatible":
-                    draft_result = OpenAICompatiblePlanner(config).draft(request, abilities)
+                    planner = OpenAICompatiblePlanner(config)
+                    draft_result = planner.draft(request, abilities)
+                    provider_metadata = planner.last_request_metadata
                 else:
                     raise ProviderError(f"Unsupported provider '{config.name}'.")
                 validate_ai_draft(draft_result, roe, abilities)
@@ -113,7 +117,7 @@ def main() -> None:
                 print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc)}, indent=2))
                 raise SystemExit(1)
             plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
-            campaign_dir = save_campaign_draft(draft_result, plan_hash, config.name, args.campaign_root)
+            campaign_dir = save_campaign_draft(draft_result, plan_hash, config.name, args.campaign_root, provider_metadata=provider_metadata)
             provider_name = config.name
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
@@ -121,7 +125,10 @@ def main() -> None:
                 approval = approve_draft(draft_result, roe, abilities, args.approver or "", plan_hash)
                 run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
                 (campaign_dir / "approval.json").write_text(json.dumps(approval.__dict__, indent=2), encoding="utf-8")
-                (campaign_dir / "metadata.json").write_text(json.dumps({"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider_name, "status": "completed", "run_dir": str(run_dir)}, indent=2), encoding="utf-8")
+                completed_metadata = json.loads((campaign_dir / "metadata.json").read_text(encoding="utf-8"))
+                completed_metadata.update({"status": "completed", "run_dir": str(run_dir)})
+                (campaign_dir / "metadata.json").write_text(json.dumps(completed_metadata, indent=2), encoding="utf-8")
+                write_campaign_reports(campaign_dir, run_dir)
                 result.update({"stage": "completed", "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)})
             except (PermissionError, ValueError) as exc:
                 print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))
