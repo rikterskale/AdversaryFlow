@@ -15,7 +15,7 @@ from .doctor import run_doctor
 from .emulation import default_catalog_path, load_catalog
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign
 from .models import RulesOfEngagement
-from .workflow import campaign_integrity_hashes, save_campaign_draft
+from .workflow import campaign_integrity_hashes, load_campaign_draft, save_campaign_draft
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -25,7 +25,7 @@ PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=
 <nav class="journey" aria-label="Campaign walkthrough"><button class="step" onclick="showStep(0)"><b>Step 1</b><span>Check</span><small>Verify setup.</small></button><button class="step" onclick="showStep(1)"><b>Step 2</b><span>Draft</span><small>Save offline plan.</small></button><button class="step" onclick="showStep(2)"><b>Step 3</b><span>Review</span><small>Inspect scope.</small></button><button class="step" onclick="showStep(3)"><b>Step 4</b><span>Approve</span><small>Use CLI.</small></button><button class="step" onclick="showStep(4)"><b>Step 5</b><span>Learn</span><small>Review report.</small></button></nav>
 <section class="card" id="walkthrough" aria-live="polite"><p class="eyebrow" id="guide-count">Guided walkthrough · step 1 of 5</p><h2 id="guide-title">Check your setup</h2><p id="guide-detail">Confirm the local environment, RoE, and safe ability catalog are healthy.</p><code id="guide-command">adversaryflow doctor --json</code><p class="next" id="guide-next"><strong>Do this now:</strong> Run the health check. Continue only after it passes.</p><button id="run-safe-check" onclick="runDoctor()">Run health check here</button><button class="secondary" id="guide-back" onclick="moveStep(-1)">Back</button><button id="guide-forward" onclick="moveStep(1)">Next: create a draft</button><pre id="safe-result" hidden></pre></section>
 <section class="card" id="draft-helper"><h2>Create a reviewable offline draft</h2><p class="muted">This stores a locally generated, RoE-validated plan for review. It does not use a hosted provider and does not run an emulation.</p><div class="layout"><div><label>Threat actor<input id="actor" value="APT29" maxlength="200"></label><label>Defensive objective<input id="objective" value="validate endpoint process visibility" maxlength="200"></label><label>RoE-approved target<input id="target" value="local-lab" maxlength="200"></label><button onclick="createDraft()">Create safe offline draft</button><button class="secondary" onclick="copyCommand()">Copy equivalent CLI command</button></div><div><h3 id="draft-heading">Your next step</h3><pre id="command">Complete the fields, then create a safe offline draft.</pre><p class="next" id="command-next"><strong>Then:</strong> Inspect the saved plan before any approval decision.</p></div></div></section>
-<section class="card"><h2>Saved campaigns</h2><p class="muted">Inspect every plan before scheduling. You may record a rejection or cancellation here; the manager cannot approve or execute a campaign.</p><button onclick="loadCampaigns()">Refresh campaign list</button><div id="campaigns" class="muted">Loading local campaigns…</div><pre id="campaign-detail" hidden></pre></section>
+<section class="card"><h2>Saved campaigns</h2><p class="muted">Inspect every plan before scheduling. You may record a rejection or cancellation here; the manager cannot approve or execute a campaign.</p><button onclick="loadCampaigns()">Refresh campaign list</button><div id="campaigns" class="muted">Loading local campaigns…</div><div id="campaign-detail" hidden></div></section>
 <section class="card"><h2>What happens after review?</h2><div class="layout"><div><h3>Approve only when scheduled</h3><code>adversaryflow campaign --campaign-id campaign-... --approve --approver &lt;RoE-approver&gt;</code><p class="muted">The CLI verifies the draft, RoE, and ability catalog integrity before local synthetic emulation.</p></div><div><h3>Learn and retest</h3><p class="muted">Open a completed report, use detection gaps to define a new objective, and draft a new campaign instead of modifying an approved one.</p></div></div></section>
 <section class="card"><h2>Common questions</h2><details><summary>My setup is not ready.</summary><p>Run <code>adversaryflow doctor --fix --json</code>. It only creates local artifact folders, then explains remaining problems.</p></details><details><summary>My provider is unavailable.</summary><p>The browser draft flow is always offline. For CLI help, run <code>adversaryflow provider diagnose</code> and use <code>--fallback-offline</code> for a safe rehearsal.</p></details><details><summary>I prefer the terminal.</summary><p>Run <code>adversaryflow guide --interactive</code> for the same step-by-step workflow.</p></details></section>
 </main><script>
@@ -35,7 +35,9 @@ function showStep(index){currentStep=Math.max(0,Math.min(steps.length-1,index));
 async function runDoctor(){let b=q('run-safe-check'),o=q('safe-result');b.disabled=true;b.textContent='Checking…';try{let result=await api('/api/doctor',{method:'POST'});o.hidden=false;o.textContent=JSON.stringify(result,null,2);b.textContent=result.passed?'Health check passed':'Health check needs attention';q('guide-next').innerHTML=result.passed?'<strong>Ready:</strong> Your local checks passed. Continue to create a draft.':'<strong>Pause:</strong> Follow the remediation before creating a draft.'}catch(e){o.hidden=false;o.textContent='Health check failed: '+e.message;b.textContent='Try health check again'}finally{b.disabled=false}}
 async function createDraft(){let b=event.currentTarget;b.disabled=true;b.textContent='Creating local draft…';try{let result=await api('/api/campaigns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('actor').value,objective:q('objective').value,target:q('target').value})});q('draft-heading').textContent='Draft '+result.campaign_id+' is ready for review';q('command').textContent=JSON.stringify(result,null,2);q('command-next').innerHTML='<strong>Next:</strong> Inspect this RoE-validated offline draft below. Browser approval and emulation are unavailable by design.';showStep(2);await loadCampaigns()}catch(e){q('command').textContent='Draft was not created: '+e.message;q('command-next').innerHTML='<strong>Pause:</strong> Correct the input or RoE configuration, then try again.'}finally{b.disabled=false;b.textContent='Create safe offline draft'}}
 function copyCommand(){let text='adversaryflow campaign --actor "'+q('actor').value.replaceAll('"','')+'" --target "'+q('target').value.replaceAll('"','')+'" --objective "'+q('objective').value.replaceAll('"','')+'" --fallback-offline';navigator.clipboard.writeText(text);q('command').textContent=text;q('command-next').innerHTML='<strong>Copied:</strong> This CLI command creates a draft only; review it before approval.'}
-async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));q('campaign-detail').hidden=false;q('campaign-detail').textContent=JSON.stringify(d,null,2);q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
+function pills(items){return items.length?items.map(x=>'<span style="display:inline-block;padding:2px 8px;margin:3px;border:1px solid #31516e;border-radius:99px;font-size:.85rem">'+esc(x)+'</span>').join(''):'<span class="muted">None recorded</span>'}
+function renderDetail(d){let x=d.detail,verified=x.integrity.status==='verified',color=verified?'#8de0ac':x.integrity.status==='review-required'?'#f3cb72':'#ff9d9d',report=x.report_url?'<a href="'+esc(x.report_url)+'">Open report</a>':'';q('campaign-detail').innerHTML='<p class="eyebrow">Campaign review</p><h2>'+esc(d.metadata.campaign_id)+'</h2><p class="next" style="border-left-color:'+color+'"><strong>Next:</strong> '+esc(x.next_action)+'</p><div class="layout"><section class="card"><h3>Scope</h3><p><strong>Target:</strong> '+esc(x.scope.target)+'<br><strong>Objective:</strong> '+esc(x.scope.objective)+'<br><strong>Risk:</strong> '+esc(x.scope.risk_level)+'<br><strong>Mode:</strong> local synthetic simulation only</p></section><section class="card"><h3>Integrity</h3><p style="color:'+color+'"><strong>'+esc(x.integrity.status.replaceAll('-',' '))+'</strong></p><p class="muted">'+esc(x.integrity.detail)+'</p></section><section class="card"><h3>Rules of Engagement</h3><p><strong>Environment:</strong> '+esc(x.roe.environment)+'<br><strong>Approver:</strong> '+esc(x.roe.approver_name)+'<br><strong>Approved targets:</strong><br>'+pills(x.roe.approved_targets)+'</p></section><section class="card"><h3>Selected safe abilities</h3><p>'+x.abilities.map(a=>'<strong>'+esc(a.id)+'</strong> · '+esc(a.name)+'<br><span class="muted">'+esc(a.technique_id)+' · '+esc(a.network_scope)+' · '+esc(a.telemetry_count)+' expected telemetry signals</span>').join('<hr>')+'</p></section><section class="card"><h3>Stop conditions</h3><p>'+pills(x.stop_conditions)+'</p></section><section class="card"><h3>Report review</h3><p>'+esc(x.report_review)+' '+report+'</p></section></div><details><summary>Show raw campaign record</summary><pre>'+esc(JSON.stringify(d,null,2))+'</pre></details>'}
+async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
 async function recordDecision(id,action){let reason=prompt(action==='reject'?'Why should this draft be rejected?':'Why should this draft be cancelled?');if(!reason)return;let body={reason};if(action==='reject'){body.approver=prompt('Enter the RoE approver name to record this rejection:')||'';if(!body.approver)return}if(!confirm('Record this '+action+' decision for '+id+'? This does not execute any campaign.'))return;try{await api('/api/campaigns/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await loadCampaigns();await inspectCampaign(id)}catch(e){alert('Could not record decision: '+e.message)}}
 async function loadCampaigns(){try{let d=await api('/api/campaigns');if(!d.campaigns.length){q('campaigns').textContent='No saved campaigns yet. Create an offline draft after step 1.';return}q('campaigns').innerHTML='<table><tr><th>Campaign</th><th>Status</th><th>Provider</th><th>Safe next action</th></tr>'+d.campaigns.map(c=>'<tr><td>'+esc(c.campaign_id)+'</td><td>'+esc(c.status)+'</td><td>'+esc(c.provider)+'</td><td class="inline">'+actions(c)+'</td></tr>').join('')+'</table>'}catch(e){q('campaigns').textContent='Could not load campaigns: '+e.message}}
 function actions(c){let id=encodeURIComponent(c.campaign_id),x='<button class="secondary" onclick="inspectCampaign(\''+id+'\')">Inspect</button>';if(c.status==='awaiting-approval')return x+'<button class="warn" onclick="recordDecision(\''+id+'\',\'reject\')">Reject</button><button class="warn" onclick="recordDecision(\''+id+'\',\'cancel\')">Cancel</button>';if(c.status==='completed'&&c.report_url)return x+'<a href="'+esc(c.report_url)+'">Open report</a>';return x+' Recorded decision; create a new draft if scope changes.'}
@@ -77,6 +79,44 @@ def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: d
     return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": "offline", "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft. Approval and emulation remain CLI-only."}
 
 
+def _campaign_detail(campaign_root: str, campaign_id: str, roe_path: str, catalog_path: str) -> dict[str, object]:
+    """Return a human-readable, read-only review summary for one saved campaign."""
+    campaign = inspect_campaign(campaign_root, campaign_id)
+    draft, metadata = load_campaign_draft(campaign["campaign_dir"])
+    roe = _manager_roe(roe_path)
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    abilities = load_catalog(catalog_path)
+    current_hashes = campaign_integrity_hashes(draft, roe, abilities)
+    matches = [metadata.get(key) == value for key, value in current_hashes.items()]
+    if all(matches):
+        integrity = {"status": "verified", "detail": "Saved plan, RoE, and safe ability catalog match the current review inputs."}
+    elif any(key not in metadata for key in current_hashes):
+        integrity = {"status": "unavailable", "detail": "This older draft has incomplete integrity metadata; create a new draft before approval."}
+    else:
+        integrity = {"status": "review-required", "detail": "The saved plan, RoE, or ability catalog changed. Do not approve; create a new reviewed draft."}
+    selected = [ability for ability in abilities if ability.id in draft.ability_ids]
+    status = str(metadata.get("status", "unknown"))
+    next_action = {
+        "awaiting-approval": "Verify this summary, confirm the schedule, then use the CLI approval command only if the RoE approver authorizes it.",
+        "completed": "Open the report, review detection gaps, and create a new focused draft for any retest.",
+        "rejected": "The rejection is recorded. Create a new draft only if scope or scheduling changes.",
+        "cancelled": "The cancellation is recorded. Inspect the reason and create a new draft if work should resume.",
+    }.get(status, "Inspect the recorded campaign state before taking any further action.")
+    report = Path(campaign["campaign_dir"]) / "campaign-report.html"
+    campaign["detail"] = {
+        "scope": {"target": draft.target, "objective": draft.objective, "risk_level": draft.risk_level},
+        "roe": {"environment": roe.environment, "approver_name": roe.approver_name, "approved_targets": list(roe.approved_targets), "excluded_targets": list(roe.excluded_targets), "allowed_actions": list(roe.allowed_actions)},
+        "integrity": integrity,
+        "abilities": [{"id": ability.id, "name": ability.name, "technique_id": ability.technique_id, "network_scope": ability.network_scope, "telemetry_count": len(ability.expected_telemetry)} for ability in selected],
+        "stop_conditions": list(draft.stop_conditions),
+        "next_action": next_action,
+        "report_url": f"/api/campaigns/{campaign_id}/report" if report.is_file() else None,
+        "report_review": "A report is available for review." if report.is_file() else "No report exists until a CLI-authorized local synthetic emulation completes.",
+    }
+    return campaign
+
+
 def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json"):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, payload: object, content_type: str = "application/json") -> None:
@@ -116,7 +156,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                         report = Path(inspect_campaign(campaign_root, campaign_id)["campaign_dir"]) / "campaign-report.html"
                         if not report.is_file(): raise FileNotFoundError(f"Campaign report not found: {campaign_id}")
                         self._send(200, report.read_text(encoding="utf-8"), "text/html; charset=utf-8")
-                    elif len(parts) == 4: self._send(200, inspect_campaign(campaign_root, campaign_id))
+                    elif len(parts) == 4: self._send(200, _campaign_detail(campaign_root, campaign_id, roe_path, catalog_path))
                     else: self._send(404, {"error": "not found"})
                 except (OSError, ValueError) as exc: self._send(404, {"error": str(exc)})
             else: self._send(404, {"error": "not found"})

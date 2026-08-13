@@ -88,6 +88,9 @@ def test_manager_includes_existing_html_report_for_completed_campaign():
         report_url = payload["campaigns"][0]["report_url"]
         assert report_url == f"/api/campaigns/{campaign.name}/report"
         assert "Report" in urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{report_url}").read().decode()
+        detail = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/campaigns/{campaign.name}").read())
+        assert detail["detail"]["report_url"] == report_url
+        assert "report is available" in detail["detail"]["report_review"]
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -117,6 +120,10 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         inspected = json.loads(urllib.request.urlopen(base + f"/api/campaigns/{campaign_id}").read())
         assert inspected["metadata"]["status"] == "awaiting-approval"
         assert inspected["metadata"]["provider"] == "offline"
+        assert inspected["detail"]["integrity"]["status"] == "verified"
+        assert inspected["detail"]["scope"]["target"] == "local-lab"
+        assert inspected["detail"]["abilities"]
+        assert "CLI" in inspected["detail"]["next_action"]
         with pytest.raises(HTTPError) as wrong_approver:
             _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "not-the-approver", "reason": "not scheduled"})
         assert wrong_approver.value.code == 403
