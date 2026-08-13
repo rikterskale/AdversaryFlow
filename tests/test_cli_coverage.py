@@ -2,10 +2,15 @@
 
 import json
 import sys
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
 from adversaryflow import cli
+from adversaryflow.ai import CampaignRequest, OfflinePlanner
+from adversaryflow.emulation import load_catalog
+from adversaryflow.workflow import save_campaign_draft
 
 
 def _run(monkeypatch, capsys, *arguments):
@@ -65,3 +70,30 @@ def test_cli_draft_path_generates_an_offline_reviewable_plan(monkeypatch, capsys
     drafted = json.loads(_run(monkeypatch, capsys, "draft", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate process visibility"))
     assert drafted["mode"] == "offline-ai-fallback"
     assert drafted["draft"]["target"] == "local-lab"
+
+
+def test_cli_campaign_lifecycle_commands_record_local_decisions(monkeypatch, capsys):
+    root = Path("artifacts") / f"cli-lifecycle-{uuid4()}"
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test lifecycle"), load_catalog("content/abilities/catalog.json"))
+    first = save_campaign_draft(draft, "hash", "offline", root)
+    assert json.loads(_run(monkeypatch, capsys, "campaign", "list", "--campaign-root", str(root)))[0]["campaign_id"] == first.name
+    inspected = json.loads(_run(monkeypatch, capsys, "campaign", "inspect", "--campaign-id", first.name, "--campaign-root", str(root)))
+    assert inspected["metadata"]["status"] == "awaiting-approval"
+    rejected = json.loads(_run(monkeypatch, capsys, "campaign", "reject", "--campaign-id", first.name, "--approver", "manager@example.test", "--reason", "not scheduled", "--campaign-root", str(root)))
+    assert rejected["status"] == "rejected"
+    second = save_campaign_draft(draft, "hash", "offline", root)
+    cancelled = json.loads(_run(monkeypatch, capsys, "campaign", "cancel", "--campaign-id", second.name, "--reason", "operator stop", "--campaign-root", str(root)))
+    assert cancelled["status"] == "cancelled"
+    reset = json.loads(_run(monkeypatch, capsys, "campaign", "reset", "--campaign-id", second.name, "--confirm", "--campaign-root", str(root)))
+    assert reset["status"] == "reset"
+
+
+def test_cli_campaign_offline_draft_and_synthetic_completion(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
+    root = Path("artifacts") / f"cli-campaign-{uuid4()}"
+    drafted = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate process visibility", "--campaign-root", str(root)))
+    assert drafted["stage"] == "drafted"
+    completed_root = Path("artifacts") / f"cli-completed-{uuid4()}"
+    completed = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate process visibility", "--approve", "--approver", "manager@example.test", "--campaign-root", str(completed_root), "--output", str(completed_root / "runs")))
+    assert completed["stage"] == "completed"
+    assert completed["telemetry_gap_report"]["behavior_success"] is True
