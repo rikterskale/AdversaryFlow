@@ -6,6 +6,6 @@ Catalog abilities must declare expected telemetry and `writes_only_run_root: tru
 
 Approval validates the AI draft against the RoE and catalog and accepts only the approver named in the RoE. A rejected decision cannot start local emulation.
 
-Local emulation writes only local run artifacts and uses an engine-owned loopback sink for the fixed synthetic marker. It records synthetic events and expected telemetry; production-log validation remains separate.
+Local emulation writes only local run artifacts and uses an engine-owned loopback sink for the fixed synthetic marker. The run manifest records the fixed adapter name, selected abilities, simulation-only boundary, permitted network scopes, and an event hash. If the adapter fails, progress and manifest records are marked failed and an audit event is written; the failure does not fall back to another adapter or execute a command. It records synthetic events and expected telemetry; production-log validation remains separate.
 
 See [campaign-workflow.md](campaign-workflow.md) and [../ARCHITECTURE.md](../ARCHITECTURE.md).

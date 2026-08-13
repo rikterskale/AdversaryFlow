@@ -89,13 +89,33 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     if approval.decision != "approved":
         raise PermissionError("Cannot emulate a rejected draft")
     selected = [a for a in abilities if a.id in draft.ability_ids]
+    adapter = resolve_adapter(adapter_name)
     run_dir = Path(output_root) / f"run-{uuid.uuid4()}"
     run_dir.mkdir(parents=True, exist_ok=False)
     progress_path = run_dir / "progress.json"
     progress = {"status": "running", "completed_abilities": [], "total_abilities": len(draft.ability_ids)}
     progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
-    adapter = resolve_adapter(adapter_name)
-    result = adapter.execute(AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name))
+    manifest = {
+        "run_id": run_dir.name,
+        "approval": asdict(approval),
+        "mode": adapter.name,
+        "adapter": adapter.name,
+        "status": "running",
+        "execution_boundary": "simulation-only",
+        "allowed_network_scopes": ["none", "loopback"],
+        "selected_ability_ids": [ability.id for ability in selected],
+    }
+    manifest_path = run_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    try:
+        result = adapter.execute(AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name))
+    except Exception as error:
+        progress.update({"status": "failed", "failed_at": datetime.now(timezone.utc).isoformat(), "failure": "adapter_failed"})
+        progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")
+        manifest.update({"status": "failed", "failed_at": progress["failed_at"], "failure_type": type(error).__name__})
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        AuditLog(run_dir / "audit.jsonl").record("local_emulation_failed", run_id=run_dir.name, approval_id=approval.approval_id, adapter=adapter.name, failure_type=type(error).__name__)
+        raise
     events = list(result.events)
     for ability in selected:
         progress["completed_abilities"].append(ability.id)
@@ -103,8 +123,8 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     event_bytes = ("\n".join(json.dumps(event, sort_keys=True) for event in events) + "\n").encode()
     (run_dir / "events.jsonl").write_bytes(event_bytes)
     (run_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
-    manifest = {"run_id": run_dir.name, "approval": asdict(approval), "events_sha256": sha256_bytes(event_bytes), "mode": result.adapter, "adapter": result.adapter}
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    manifest.update({"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat(), "events_sha256": sha256_bytes(event_bytes)})
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     AuditLog(run_dir / "audit.jsonl").record("local_emulation_completed", run_id=run_dir.name, approval_id=approval.approval_id, ability_count=len(selected))
     progress.update({"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()})
     progress_path.write_text(json.dumps(progress, indent=2), encoding="utf-8")

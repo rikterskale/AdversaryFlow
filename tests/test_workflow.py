@@ -21,6 +21,9 @@ def test_complete_local_workflow():
     assert report["behavior_success"] is True
     assert report["telemetry_expected"] == report["telemetry_observed"]
     assert report["detection_gap_count"] == 0
+    manifest = __import__("json").loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["adapter"] == "local-synthetic"
+    assert manifest["execution_boundary"] == "simulation-only"
 
 
 def test_rejected_draft_cannot_start_local_emulation():
@@ -39,3 +42,27 @@ def test_adapter_rejects_unsupported_name_and_unreviewed_ability():
         resolve_adapter("remote-shell")
     with __import__("pytest").raises(ValueError, match="exactly match"):
         LocalSyntheticAdapter().execute(AdapterRequest(draft, abilities, "run-test"))
+
+
+def test_adapter_failure_is_recorded_as_a_failed_run(monkeypatch):
+    class FailingAdapter:
+        name = "local-synthetic"
+
+        def execute(self, request):
+            raise RuntimeError("simulated adapter failure")
+
+    import adversaryflow.adapters as adapters
+
+    abilities = load_catalog("content/abilities/catalog.json")
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "x", "operator_name": "o", "approver_name": "manager", "approved_targets": ["local-lab"]})
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test telemetry"), abilities)
+    approval = approve_draft(draft, roe, abilities, "manager", "plan-hash")
+    monkeypatch.setitem(adapters._REGISTERED_ADAPTERS, "local-synthetic", FailingAdapter())
+    output_root = Path("artifacts/test-runs") / str(uuid4())
+    with __import__("pytest").raises(RuntimeError, match="simulated"):
+        run_local_emulation(draft, abilities, approval, output_root)
+    run_dir = next(output_root.iterdir())
+    progress = __import__("json").loads((run_dir / "progress.json").read_text(encoding="utf-8"))
+    manifest = __import__("json").loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert progress["status"] == manifest["status"] == "failed"
+    assert manifest["failure_type"] == "RuntimeError"
