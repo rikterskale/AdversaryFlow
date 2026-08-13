@@ -102,7 +102,7 @@ Completed campaigns also produce `campaign-report.md` and `campaign-report.html`
 
 ## Guided local campaign workspace
 
-Run `adversaryflow manager --open` to launch a loopback-only browser workspace. It explains the safe campaign stages, generates copyable draft commands, lists locally saved campaigns, and provides context-sensitive next steps. The workspace does not execute commands or expose any non-loopback service; approval and emulation remain explicit CLI operations gated by the RoE.
+Run `adversaryflow manager --open` to launch a loopback-only browser workspace. Start with the five-step walkthrough at the top; select any step to see one clear command, explanation, and next action at a time. The workspace can run the allowlisted, local `doctor` health check and display its result. It also generates copyable draft commands, lists locally saved campaigns, and provides context-sensitive help. It does not provide an arbitrary command runner or expose any non-loopback service; approval and emulation remain explicit CLI operations gated by the RoE.
 
 ![Campaign Guide quick start](docs/assets/campaign-guide.png)
 

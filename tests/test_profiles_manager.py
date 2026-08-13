@@ -50,7 +50,8 @@ def test_manager_health_and_campaign_listing():
         assert campaigns["campaigns"] == []
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "Campaign Guide" in page
-        assert "Build a safe draft command" in page
+        assert "Start a safe campaign in five clear steps" in page
+        assert "Create my draft command" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
@@ -58,6 +59,12 @@ def test_manager_health_and_campaign_listing():
         with pytest.raises(HTTPError) as unknown_route:
             urllib.request.urlopen(base + "/not-a-route")
         assert unknown_route.value.code == 404
+        request = urllib.request.Request(base + "/api/doctor", method="POST")
+        doctor = json.loads(urllib.request.urlopen(request).read())
+        assert doctor["passed"] is True
+        with pytest.raises(HTTPError) as unsupported_post:
+            urllib.request.urlopen(urllib.request.Request(base + "/api/not-allowed", method="POST"))
+        assert unsupported_post.value.code == 404
     finally:
         server.shutdown()
         thread.join(timeout=2)
