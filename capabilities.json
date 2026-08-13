@@ -1,0 +1,11 @@
+{
+  "format": "ADVERSARYFLOW-CAPABILITIES-1",
+  "capabilities": [
+    {"id": "roe-validation", "name": "Rules of Engagement validation", "status": "available", "risk": "low"},
+    {"id": "offline-ai-draft", "name": "Offline AI campaign drafting", "status": "available", "risk": "low"},
+    {"id": "safe-emulation", "name": "Cataloged local synthetic emulation", "status": "available", "risk": "low"},
+    {"id": "loopback-sink", "name": "Ephemeral loopback telemetry sink", "status": "available", "risk": "low"},
+    {"id": "telemetry-gap-report", "name": "Telemetry gap report", "status": "available", "risk": "low"},
+    {"id": "provider-adapter", "name": "Hosted/local AI provider adapter", "status": "planned", "risk": "medium"}
+  ]
+}

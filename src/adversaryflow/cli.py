@@ -8,6 +8,8 @@ from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import load_catalog
 from .workflow import approve_draft, build_gap_report, run_local_emulation
+from .doctor import run_doctor
+from .support import create_support_bundle
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
 from .planner import build_plan
@@ -43,6 +45,14 @@ def main() -> None:
     demo.add_argument("--approver", default=None)
     demo.add_argument("--catalog", default="content/abilities/catalog.json")
     demo.add_argument("--output", default="artifacts/runs")
+    doctor = sub.add_parser("doctor", help="diagnose installation and local runtime")
+    doctor.add_argument("--roe", default="examples/roe.yaml")
+    doctor.add_argument("--catalog", default="content/abilities/catalog.json")
+    doctor.add_argument("--json", action="store_true")
+    support = sub.add_parser("support-bundle", help="create a redacted troubleshooting bundle")
+    support.add_argument("--output", default="artifacts/support")
+    support.add_argument("--roe", default="examples/roe.yaml")
+    sub.add_parser("capabilities", help="list advertised capabilities")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -70,6 +80,22 @@ def main() -> None:
         run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
         report = build_gap_report(run_dir)
         print(json.dumps({"draft": draft_result.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": report}, indent=2))
+        return
+
+    if args.command == "doctor":
+        result = run_doctor(args.roe, args.catalog)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print("\n".join(f"{'PASS' if item['passed'] else 'FAIL'} {item['name']}: {item['detail']}" for item in result["checks"]))
+        raise SystemExit(0 if result["passed"] else 1)
+
+    if args.command == "support-bundle":
+        print(create_support_bundle(args.output, args.roe))
+        return
+
+    if args.command == "capabilities":
+        print(Path("capabilities.json").read_text(encoding="utf-8"))
         return
 
     roe = load_roe(args.roe)

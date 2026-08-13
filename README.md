@@ -2,6 +2,8 @@
 
 AdversaryFlow is a safety-first purple-team platform for turning current threat-intelligence into reviewable, scoped, defensive campaign simulations.
 
+Supported platforms are Windows, Debian, Ubuntu, and Kali Linux. Supported environments are validated by `adversaryflow doctor`; unsupported platforms fail closed with a remediation message.
+
 ## MVP
 
 The first vertical slice provides:
@@ -36,11 +38,16 @@ python -m adversaryflow validate examples\roe.yaml
 python -m adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
 python -m adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
 python -m adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
+python -m adversaryflow doctor
+python -m adversaryflow support-bundle
+python -m adversaryflow capabilities
 ```
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.
 
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
+
+See [docs/INSTALL.md](docs/INSTALL.md) for Windows, Linux/Kali, and Docker setup. `doctor` is the first troubleshooting command, and `support-bundle` creates a redacted diagnostics archive.
 
 ## Product direction
 

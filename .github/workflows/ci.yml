@@ -1,0 +1,70 @@
+name: AdversaryFlow CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m pytest -q
+      - run: python -m adversaryflow doctor --json
+      - run: python -m adversaryflow demo
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
+      - uses: github/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+
+  artifact-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python -m pip install dist/*.whl
+      - run: adversaryflow doctor --json
+      - run: adversaryflow demo
+
+  distro-matrix:
+    strategy:
+      matrix:
+        include:
+          - name: debian
+            image: debian:12
+          - name: ubuntu
+            image: ubuntu:24.04
+          - name: kali
+            image: kalilinux/kali-rolling
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y python3 python3-venv python3-pip
+      - run: python3 -m venv .venv
+      - run: .venv/bin/python -m pip install --break-system-packages -e '.[dev]'
+      - run: .venv/bin/python -m adversaryflow doctor --json
+      - run: .venv/bin/python -m pytest -q
+      - run: .venv/bin/python -m adversaryflow demo
