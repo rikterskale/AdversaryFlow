@@ -2,6 +2,8 @@
 
 AdversaryFlow is a safety-first purple-team platform for turning current threat-intelligence into reviewable, scoped, defensive campaign simulations.
 
+Licensed under the [Apache License 2.0](LICENSE). See the [installation guide](docs/INSTALL.md), [CLI reference](docs/CLI_REFERENCE.md), [usage guide](docs/USAGE.md), and [security policy](SECURITY.md).
+
 Supported platforms are Windows, Debian, Ubuntu, and Kali Linux. Supported environments are validated by `adversaryflow doctor`; unsupported platforms fail closed with a remediation message.
 
 ## MVP
@@ -133,7 +135,7 @@ python scripts/release.py
 
 The release script verifies artifact hashes after building. A clean install should run `adversaryflow doctor --json` and `adversaryflow demo` before release publication.
 
-CI security gates include branch/line coverage, Bandit, pip-audit, Gitleaks, workflow security analysis, and SBOM validation. Coverage currently has a ratcheted 50% floor based on the measured baseline; it must only increase as critical safety-module tests are added. These job names should be configured as required checks before merging into `main`.
+CI security gates include branch/line coverage, Bandit, pip-audit, Gitleaks, workflow security analysis, and SBOM validation. The test suite currently measures 100% line and branch coverage; release readiness remains separately enforced through clean-install journeys.
 
 Run the clean artifact journey locally after building:
 
