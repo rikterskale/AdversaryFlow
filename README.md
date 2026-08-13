@@ -116,6 +116,14 @@ python scripts/release.py
 
 The release script verifies artifact hashes after building. A clean install should run `adversaryflow doctor --json` and `adversaryflow demo` before release publication.
 
+Run the clean artifact journey locally after building:
+
+```powershell
+python scripts/artifact_journey.py artifacts/release
+```
+
+This creates fresh virtual environments for the wheel, source distribution, and source ZIP, then runs doctor, the offline demo, report discovery, and support-bundle generation for each artifact.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.
