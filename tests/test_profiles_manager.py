@@ -44,15 +44,21 @@ def test_manager_health_and_campaign_listing():
     try:
         base = f"http://127.0.0.1:{server.server_port}"
         health = json.loads(urllib.request.urlopen(base + "/api/health").read())
+        context = json.loads(urllib.request.urlopen(base + "/api/context").read())
         campaigns = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())
         assert health["ok"] is True
         assert health["mode"] == "local-guided-manager"
+        assert context["mode"] == "offline-only"
+        assert context["roe"]["approved_targets"] == ["local-lab"]
+        assert context["roe"]["excluded_targets"] == ["production"]
+        assert context["catalog"] == {"ability_count": 2, "technique_count": 2}
         assert campaigns["campaigns"] == []
         assert campaigns["summary"] == {"total": 0, "statuses": {"awaiting-approval": 0, "completed": 0, "rejected": 0, "cancelled": 0, "other": 0}}
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "Campaign Guide" in page
         assert "Start a safe campaign in five clear steps" in page
         assert "Create safe offline draft" in page
+        assert "Current local scope" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
