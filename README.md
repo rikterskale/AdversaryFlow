@@ -4,6 +4,8 @@ AdversaryFlow is a safety-first purple-team platform for turning current threat-
 
 Licensed under the [Apache License 2.0](LICENSE). See the [installation guide](docs/INSTALL.md), [CLI reference](docs/CLI_REFERENCE.md), [usage guide](docs/USAGE.md), and [security policy](SECURITY.md).
 
+See the [implementation roadmap](docs/ROADMAP.md) for completed and next delivery slices.
+
 Supported platforms are Windows, Debian, Ubuntu, and Kali Linux. Supported environments are validated by `adversaryflow doctor`; unsupported platforms fail closed with a remediation message.
 
 ## MVP

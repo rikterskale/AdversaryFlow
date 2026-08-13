@@ -3,6 +3,7 @@
 import json
 import runpy
 import sys
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -79,6 +80,8 @@ def test_cli_capabilities_and_provider_status_are_read_only(monkeypatch, capsys)
     advertised = json.loads(capabilities)
     assert advertised["format"] == "ADVERSARYFLOW-CAPABILITIES-1"
     assert advertised["capabilities"]
+    provider = next(item for item in advertised["capabilities"] if item["id"] == "provider-adapter")
+    assert provider["status"] == "available"
     status = json.loads(_run(monkeypatch, capsys, "provider", "status"))
     assert status["provider"] == "offline"
 
@@ -99,6 +102,32 @@ def test_cli_provider_validate_exits_successfully_for_offline_defaults(monkeypat
         cli.main()
     assert exit_code.value.code == 0
     assert json.loads(capsys.readouterr().out)["valid"] is True
+
+
+def test_cli_provider_test_validates_returned_draft_against_roe(monkeypatch, capsys):
+    config = ProviderConfig("openai-compatible", "fixture", "https://example.test/v1", True, "secret")
+    safe_draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test"), load_catalog("content/abilities/catalog.json"))
+
+    class HostedPlanner:
+        def __init__(self, _config): pass
+        def draft(self, *_args): return safe_draft
+
+    monkeypatch.setattr(cli, "load_provider_config", lambda: config)
+    monkeypatch.setattr(cli, "OpenAICompatiblePlanner", HostedPlanner)
+    result = json.loads(_run(monkeypatch, capsys, "provider", "test", "--roe", "examples/roe.yaml"))
+    assert result["success"] is True
+    assert result["stage"] == "draft-validated"
+
+    class UnsafePlanner:
+        def __init__(self, _config): pass
+        def draft(self, *_args): return replace(safe_draft, target="outside-roE")
+
+    monkeypatch.setattr(cli, "OpenAICompatiblePlanner", UnsafePlanner)
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "provider", "test", "--roe", "examples/roe.yaml"])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 1
+    assert "outside the approved RoE" in json.loads(capsys.readouterr().out)["error"]
 
 
 def test_cli_draft_path_generates_an_offline_reviewable_plan(monkeypatch, capsys):

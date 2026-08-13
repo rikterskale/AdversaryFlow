@@ -145,6 +145,8 @@ def main() -> None:
     test_provider.add_argument("--actor", default="APT29")
     test_provider.add_argument("--target", default="local-lab")
     test_provider.add_argument("--objective", default="validate endpoint process visibility")
+    test_provider.add_argument("--roe", default="examples/roe.yaml", help="Rules of Engagement used to validate the returned draft")
+    test_provider.add_argument("--platform", default="linux")
     test_provider.add_argument("--catalog", default="content/abilities/catalog.json")
     campaign = sub.add_parser("campaign", help="draft, validate, approve, and optionally emulate a campaign")
     campaign.add_argument("--roe", default="examples/roe.yaml")
@@ -383,10 +385,12 @@ def main() -> None:
                 print("Provider test requires ADVERSARYFLOW_PROVIDER=openai-compatible.")
                 raise SystemExit(1)
             try:
-                request = CampaignRequest(args.actor, args.target, args.objective, "linux")
-                draft = OpenAICompatiblePlanner(config).draft(request, load_catalog(args.catalog))
-                print(json.dumps({"success": True, "draft": draft.as_dict()}, indent=2))
-            except ProviderError as exc:
+                request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
+                abilities = load_catalog(args.catalog)
+                draft = OpenAICompatiblePlanner(config).draft(request, abilities)
+                validate_ai_draft(draft, load_roe(args.roe), abilities)
+                print(json.dumps({"success": True, "stage": "draft-validated", "draft": draft.as_dict()}, indent=2))
+            except (ProviderError, ValueError, OSError, json.JSONDecodeError) as exc:
                 print(json.dumps({"success": False, "error": str(exc)}, indent=2))
                 raise SystemExit(1)
         else:

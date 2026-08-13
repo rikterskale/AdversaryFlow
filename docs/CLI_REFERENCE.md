@@ -23,7 +23,7 @@
 
 ## Provider commands
 
-`provider status`, `configure`, `diagnose`, and `validate` do not send a provider request. `provider test [--actor APT29] [--target local-lab] [--objective TEXT] [--catalog PATH]` sends one planning request only when the provider is `openai-compatible`.
+`provider status`, `configure`, `diagnose`, and `validate` do not send a provider request. `provider test [--actor APT29] [--target local-lab] [--objective TEXT] [--roe examples/roe.yaml] [--platform linux] [--catalog PATH]` sends one planning request only when the provider is `openai-compatible`; it then applies the same RoE and safe-draft validation as campaign creation. It does not save, approve, or execute a campaign.
 
 Profile commands: `provider profile list`; `provider profile status`; `provider profile use NAME`; `provider profile remove NAME`; and `provider profile save NAME --endpoint HTTPS_URL --model MODEL [--provider openai-compatible] [--credential-env ADVERSARYFLOW_API_KEY]`.
 

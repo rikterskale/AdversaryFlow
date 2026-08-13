@@ -13,7 +13,7 @@ Profile data is stored by default in `artifacts/providers/profiles.json`. Profil
 1. Run `adversaryflow provider configure` for PowerShell environment-variable instructions.
 2. Run `adversaryflow provider validate`; it does not send a request.
 3. Run `adversaryflow provider profile status` to see readiness without revealing the credential value.
-4. Optionally run `adversaryflow provider test` for one planning request.
+4. Optionally run `adversaryflow provider test` for one planning request. The returned draft is checked against the selected RoE and safe catalog before success is reported; it is not saved, approved, or executed.
 
 Provider request metadata stored with a campaign contains hashes, timing, model, endpoint, and status; it does not retain the API key or raw prompt/response.
 
