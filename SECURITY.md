@@ -1,14 +1,14 @@
 # Security Policy
 
-## Supported version
+## Project status and supported versions
 
-The current repository release is `0.2.3`. [VERIFY: supported-version maintenance window]
+AdversaryFlow is an internal development project. No release is currently designated for security maintenance, and no supported-version maintenance window is offered.
 
 ## Reporting a vulnerability
 
-[VERIFY: private vulnerability-reporting contact or process]
+Use the organization's established internal security-reporting process. [VERIFY: internal security-reporting channel or process]
 
-Do not include credentials, provider keys, production target data, or exploit payloads in a public issue.
+Do not include credentials, provider keys, production target data, or exploit payloads in repository issues.
 
 ## Security boundaries
 
