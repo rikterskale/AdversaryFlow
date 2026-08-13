@@ -73,6 +73,8 @@ def test_manager_health_and_campaign_listing():
         assert "Your setup checklist" in page
         assert "Saved in this browser only" in page
         assert "function statusLabel(status)" in page
+        assert "function doctorSummary(result)" in page
+        assert "Copy fix" in page
         assert "Current local scope" in page
         assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
         assert "active local RoE" in page
