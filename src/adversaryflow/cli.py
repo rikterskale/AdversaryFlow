@@ -7,7 +7,7 @@ import yaml
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import default_catalog_path, load_catalog
-from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
+from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from .doctor import run_doctor
@@ -176,7 +176,9 @@ def main() -> None:
             try:
                 campaign_dir = Path(args.campaign_root) / args.campaign_id
                 draft_result, saved_metadata = load_campaign_draft(campaign_dir)
-                plan_hash = saved_metadata["plan_hash"]
+                integrity = campaign_integrity_hashes(draft_result, roe, abilities)
+                verify_campaign_integrity(draft_result, saved_metadata, roe, abilities)
+                plan_hash = integrity["plan_hash"]
                 validate_ai_draft(draft_result, roe, abilities)
                 provider_name = saved_metadata["provider"]
             except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
@@ -206,8 +208,9 @@ def main() -> None:
                 validate_ai_draft(draft_result, roe, abilities)
                 provider_metadata = {"provider": config.name, "status": "fallback-offline", "error": str(exc)}
                 provider_name = "offline-fallback"
-            plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
-            campaign_dir = save_campaign_draft(draft_result, plan_hash, provider_name, args.campaign_root, provider_metadata=provider_metadata)
+            integrity = campaign_integrity_hashes(draft_result, roe, abilities)
+            plan_hash = integrity["plan_hash"]
+            campaign_dir = save_campaign_draft(draft_result, plan_hash, provider_name, args.campaign_root, provider_metadata=provider_metadata, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"])
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
@@ -242,7 +245,7 @@ def main() -> None:
         request = CampaignRequest(args.actor, "local-lab", args.objective, "linux")
         draft_result = OfflinePlanner().draft(request, abilities)
         validate_ai_draft(draft_result, roe, abilities)
-        plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
+        plan_hash = campaign_integrity_hashes(draft_result, roe, abilities)["plan_hash"]
         approval = approve_draft(draft_result, roe, abilities, args.approver or roe.approver_name, plan_hash)
         run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
         report = build_gap_report(run_dir)

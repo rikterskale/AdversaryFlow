@@ -25,10 +25,38 @@ class Approval:
     scope_acknowledged: bool = True
 
 
-def save_campaign_draft(draft: AICampaignDraft, plan_hash: str, provider: str, output_root: str | Path = "artifacts/campaigns", campaign_id: str | None = None, provider_metadata: dict[str, Any] | None = None) -> Path:
+def _integrity_hash(value: Any) -> str:
+    """Return a stable hash for reviewed, JSON-serializable campaign inputs."""
+    return sha256_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def campaign_integrity_hashes(draft: AICampaignDraft, roe: RulesOfEngagement, abilities: tuple[Ability, ...]) -> dict[str, str]:
+    return {
+        "plan_hash": _integrity_hash(draft.as_dict()),
+        "roe_sha256": _integrity_hash(asdict(roe)),
+        "catalog_sha256": _integrity_hash([asdict(ability) for ability in abilities]),
+    }
+
+
+def verify_campaign_integrity(draft: AICampaignDraft, metadata: dict[str, Any], roe: RulesOfEngagement, abilities: tuple[Ability, ...]) -> None:
+    """Reject a resumed campaign when any reviewed input has changed."""
+    expected = campaign_integrity_hashes(draft, roe, abilities)
+    for key, actual in expected.items():
+        saved = metadata.get(key)
+        if not isinstance(saved, str):
+            raise ValueError(f"Saved campaign is missing {key}; create a new reviewed draft.")
+        if saved != actual:
+            raise ValueError(f"Saved campaign {key} does not match the current reviewed input.")
+
+
+def save_campaign_draft(draft: AICampaignDraft, plan_hash: str, provider: str, output_root: str | Path = "artifacts/campaigns", campaign_id: str | None = None, provider_metadata: dict[str, Any] | None = None, roe_hash: str | None = None, catalog_hash: str | None = None) -> Path:
     campaign_dir = Path(output_root) / (campaign_id or f"campaign-{uuid.uuid4()}")
     campaign_dir.mkdir(parents=True, exist_ok=False)
     metadata = {"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider, "provider_metadata": provider_metadata or {"provider": provider, "status": "offline"}, "status": "awaiting-approval", "created_at": datetime.now(timezone.utc).isoformat()}
+    if roe_hash is not None:
+        metadata["roe_sha256"] = roe_hash
+    if catalog_hash is not None:
+        metadata["catalog_sha256"] = catalog_hash
     (campaign_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
     (campaign_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return campaign_dir

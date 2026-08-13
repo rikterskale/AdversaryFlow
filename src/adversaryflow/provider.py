@@ -90,17 +90,19 @@ def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfi
     endpoint = env.get("ADVERSARYFLOW_ENDPOINT") or None
     api_key = env.get("ADVERSARYFLOW_API_KEY") or None
     profile_name = env.get("ADVERSARYFLOW_PROFILE")
-    if profile_name and profile_name != "offline":
-        profile_path = Path(env.get("ADVERSARYFLOW_PROFILE_FILE", "artifacts/providers/profiles.json"))
-        if profile_path.exists():
-            try:
-                profile = json.loads(profile_path.read_text(encoding="utf-8")).get("profiles", {}).get(profile_name, {})
+    profile_path = Path(env.get("ADVERSARYFLOW_PROFILE_FILE", "artifacts/providers/profiles.json"))
+    if profile_path.exists():
+        try:
+            profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
+            profile_name = profile_name or profile_data.get("active", "offline")
+            if profile_name != "offline":
+                profile = profile_data.get("profiles", {}).get(profile_name, {})
                 name = str(profile.get("provider", name))
                 model = model or profile.get("model")
                 endpoint = endpoint or profile.get("endpoint")
                 api_key = api_key or env.get(profile.get("credential_env", "ADVERSARYFLOW_API_KEY"))
-            except (OSError, json.JSONDecodeError):
-                pass
+        except (OSError, json.JSONDecodeError):
+            pass
     credential = bool(api_key)
     return ProviderConfig(name, model, endpoint, credential, api_key)
 
