@@ -60,6 +60,8 @@ def test_manager_health_and_campaign_listing():
         assert "Start a safe campaign in five clear steps" in page
         assert "Create safe offline draft" in page
         assert "Current local scope" in page
+        assert '<select id="target" disabled>' in page
+        assert "active local RoE" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404

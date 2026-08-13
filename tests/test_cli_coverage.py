@@ -305,3 +305,24 @@ def test_cli_doctor_guidance_and_package_entrypoint_are_exercised(monkeypatch, c
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "guide", "--objective", "entrypoint"])
     runpy.run_module("adversaryflow.__main__", run_name="__main__")
     assert "entrypoint" in capsys.readouterr().out
+
+
+def test_cli_interactive_guide_packaged_roe_and_hosted_campaign_metadata(monkeypatch, capsys):
+    answers = iter(["actor", "local-lab", "objective"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    guide = _run(monkeypatch, capsys, "guide", "--interactive")
+    assert 'campaign --actor "actor" --target "local-lab" --objective "objective"' in guide
+    assert cli.load_roe("examples/roe.yaml").approver_name == "manager@example.test"
+    config = provider_config({"ADVERSARYFLOW_PROVIDER": "openai-compatible", "ADVERSARYFLOW_ENDPOINT": "https://example.test/v1", "ADVERSARYFLOW_MODEL": "fixture", "ADVERSARYFLOW_API_KEY": "secret"})
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "hosted"), load_catalog("content/abilities/catalog.json"))
+
+    class HostedPlanner:
+        def __init__(self, _config): self.last_request_metadata = {"status": "fixture"}
+        def draft(self, *_args): return draft
+
+    monkeypatch.setattr(cli, "load_provider_config", lambda: config)
+    monkeypatch.setattr(cli, "OpenAICompatiblePlanner", HostedPlanner)
+    root = Path("artifacts") / f"cli-hosted-{uuid4()}"
+    result = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "hosted", "--campaign-root", str(root)))
+    metadata = json.loads((root / result["campaign_id"] / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["provider_metadata"] == {"status": "fixture"}
