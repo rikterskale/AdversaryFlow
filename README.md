@@ -35,6 +35,7 @@ pip install -e ".[dev]"
 python -m adversaryflow validate examples\roe.yaml
 python -m adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
 python -m adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
+python -m adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
 ```
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.

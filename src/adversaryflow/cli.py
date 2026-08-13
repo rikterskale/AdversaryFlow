@@ -7,6 +7,7 @@ import yaml
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import load_catalog
+from .workflow import approve_draft, build_gap_report, run_local_emulation
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
 from .planner import build_plan
@@ -35,6 +36,13 @@ def main() -> None:
     draft.add_argument("--target", default="local-lab")
     draft.add_argument("--platform", default="linux")
     draft.add_argument("--catalog", default="content/abilities/catalog.json")
+    demo = sub.add_parser("demo", help="run the complete safe local workflow")
+    demo.add_argument("--roe", default="examples/roe.yaml")
+    demo.add_argument("--actor", default="APT29")
+    demo.add_argument("--objective", default="validate endpoint process visibility")
+    demo.add_argument("--approver", default=None)
+    demo.add_argument("--catalog", default="content/abilities/catalog.json")
+    demo.add_argument("--output", default="artifacts/runs")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -49,6 +57,19 @@ def main() -> None:
         draft_result = OfflinePlanner().draft(request, abilities)
         validate_ai_draft(draft_result, roe, abilities)
         print(json.dumps({"mode": "offline-ai-fallback", "draft": draft_result.as_dict(), "next": "send to manager approval before emulation"}, indent=2))
+        return
+
+    if args.command == "demo":
+        roe = load_roe(args.roe)
+        abilities = load_catalog(args.catalog)
+        request = CampaignRequest(args.actor, "local-lab", args.objective, "linux")
+        draft_result = OfflinePlanner().draft(request, abilities)
+        validate_ai_draft(draft_result, roe, abilities)
+        plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
+        approval = approve_draft(draft_result, roe, abilities, args.approver or roe.approver_name, plan_hash)
+        run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
+        report = build_gap_report(run_dir)
+        print(json.dumps({"draft": draft_result.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": report}, indent=2))
         return
 
     roe = load_roe(args.roe)
