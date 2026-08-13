@@ -19,6 +19,13 @@ def run_capture(command: list[str], cwd: Path, env: dict[str, str] | None = None
     return result.stdout
 
 
+def run_expect_failure(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, env=env)
+    if result.returncode == 0:
+        raise RuntimeError(f"Expected command to fail: {' '.join(command)}")
+    return result.stdout
+
+
 def journey(release_dir: str | Path) -> list[str]:
     release = Path(release_dir).resolve()
     artifacts = [*release.glob("*.whl"), *release.glob("*.tar.gz")]
@@ -48,6 +55,11 @@ def journey(release_dir: str | Path) -> list[str]:
             run([str(python), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], env_root)
             run([str(python), "-m", "pip", "install", str(install_target)], env_root)
             run([str(python), "-m", "adversaryflow", "doctor", "--json"], env_root)
+            run([str(python), "-m", "adversaryflow", "doctor", "--fix", "--json"], env_root)
+            guide = run_capture([str(python), "-m", "adversaryflow", "guide"], env_root)
+            if "Approve the local synthetic emulation" not in guide or "manager --open" not in guide:
+                raise RuntimeError(f"Campaign guidance missing for {artifact.name}")
+            run([str(python), "-m", "adversaryflow", "manager", "--help"], env_root)
             run([str(python), "-m", "adversaryflow", "demo", "--output", str(env_root / "runs")], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "validate"], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "diagnose"], env_root)
@@ -70,6 +82,22 @@ def journey(release_dir: str | Path) -> list[str]:
             ], env_root, env=failure_env)
             if json.loads(fallback_output).get("provider") != "offline-fallback":
                 raise RuntimeError(f"Offline provider fallback was not exercised for {artifact.name}")
+            draft_output = run_capture([
+                str(python), "-m", "adversaryflow", "campaign", "--actor", "APT29",
+                "--objective", "cancellation recovery rehearsal", "--campaign-root", str(env_root / "recovery-campaigns"),
+            ], env_root)
+            draft_id = json.loads(draft_output)["campaign_id"]
+            cancel_output = run_capture([
+                str(python), "-m", "adversaryflow", "campaign", "cancel", "--campaign-id", draft_id,
+                "--reason", "operator requested stop", "--campaign-root", str(env_root / "recovery-campaigns"),
+            ], env_root)
+            if json.loads(cancel_output).get("status") != "cancelled":
+                raise RuntimeError(f"Campaign cancellation recovery was not exercised for {artifact.name}")
+            invalid_provider = run_expect_failure([
+                str(python), "-m", "adversaryflow", "provider", "validate",
+            ], env_root, env={**os.environ, "ADVERSARYFLOW_PROVIDER": "unsupported-provider"})
+            if "Unsupported provider" not in invalid_provider:
+                raise RuntimeError(f"Provider troubleshooting did not explain invalid configuration for {artifact.name}")
             run([str(python), "-m", "adversaryflow", "support-bundle", "--output", str(env_root / "support")], env_root)
             if not list((env_root / "runs").rglob("telemetry-gap-report.json")):
                 raise RuntimeError(f"Demo report missing for {artifact.name}")
