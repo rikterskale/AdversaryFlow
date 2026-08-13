@@ -64,11 +64,52 @@ def main() -> None:
     test_provider.add_argument("--target", default="local-lab")
     test_provider.add_argument("--objective", default="validate endpoint process visibility")
     test_provider.add_argument("--catalog", default="content/abilities/catalog.json")
+    campaign = sub.add_parser("campaign", help="draft, validate, approve, and optionally emulate a campaign")
+    campaign.add_argument("--roe", default="examples/roe.yaml")
+    campaign.add_argument("--actor", required=True)
+    campaign.add_argument("--target", default="local-lab")
+    campaign.add_argument("--objective", required=True)
+    campaign.add_argument("--platform", default="linux")
+    campaign.add_argument("--approver", default=None)
+    campaign.add_argument("--approve", action="store_true", help="approve and run the safe local emulation")
+    campaign.add_argument("--catalog", default="content/abilities/catalog.json")
+    campaign.add_argument("--output", default="artifacts/runs")
     args = parser.parse_args()
 
     if args.command == "validate":
         roe = load_roe(args.roe)
         print(json.dumps({"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}, indent=2))
+        return
+
+    if args.command == "campaign":
+        roe = load_roe(args.roe)
+        abilities = load_catalog(args.catalog)
+        request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
+        config = load_provider_config()
+        try:
+            if config.name == "offline":
+                draft_result = OfflinePlanner().draft(request, abilities)
+            elif config.name == "openai-compatible":
+                draft_result = OpenAICompatiblePlanner(config).draft(request, abilities)
+            else:
+                raise ProviderError(f"Unsupported provider '{config.name}'.")
+            validate_ai_draft(draft_result, roe, abilities)
+        except (ProviderError, ValueError) as exc:
+            print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc)}, indent=2))
+            raise SystemExit(1)
+        plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
+        result = {"success": True, "stage": "drafted", "provider": config.name, "plan_hash": plan_hash, "draft": draft_result.as_dict(), "approval_required": True}
+        if args.approve:
+            try:
+                approval = approve_draft(draft_result, roe, abilities, args.approver or "", plan_hash)
+                run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
+                result.update({"stage": "completed", "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)})
+            except (PermissionError, ValueError) as exc:
+                print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))
+                raise SystemExit(1)
+        else:
+            result["next"] = "Review the draft, then rerun with --approve --approver <RoE approver>"
+        print(json.dumps(result, indent=2))
         return
 
     if args.command == "draft":

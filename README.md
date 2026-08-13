@@ -41,6 +41,7 @@ adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate
 adversaryflow doctor
 adversaryflow support-bundle
 adversaryflow capabilities
+adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"
 ```
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.
@@ -68,6 +69,20 @@ adversaryflow provider test
 ```
 
 This is the only provider command that sends a network request. It sends a planning prompt and ability catalog, never an execution command or target data.
+
+## Unified campaign workflow
+
+Create a provider-backed or offline draft without executing anything:
+
+```powershell
+adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"
+```
+
+After review, the approver named in the RoE can authorize the safe local emulation:
+
+```powershell
+adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility" --approve --approver "manager@example.test"
+```
 
 ## Product direction
 
