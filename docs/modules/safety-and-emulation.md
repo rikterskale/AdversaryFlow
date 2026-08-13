@@ -2,6 +2,8 @@
 
 Rules of Engagement require an engagement name, operator name, approver name, and approved targets. RoEs must remain dry-run. A target is permitted only when it is approved and not excluded.
 
+Run `adversaryflow adapter status` to inspect the registered adapter, contract version, allowed scopes, and compatibility with the local catalog. This is read-only; `adversaryflow doctor` includes the same readiness check.
+
 Catalog abilities must declare expected telemetry and `writes_only_run_root: true`. Their network scope is restricted to `none` or `loopback`.
 
 Approval validates the AI draft against the RoE and catalog and accepts only the approver named in the RoE. A rejected decision cannot start local emulation.

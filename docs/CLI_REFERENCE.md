@@ -11,12 +11,13 @@
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective TEXT] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
 | `capabilities` | Print `capabilities.json`. |
+| `adapter status [--catalog content/abilities/catalog.json]` | Read-only report of the registered local-synthetic adapter, its contract version, allowed scopes, and catalog compatibility. |
 
 ## Diagnostics and support
 
 | Command | Purpose |
 |---|---|
-| `doctor [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--json] [--fix]` | Check platform, Python, PyYAML, RoE, catalog, loopback, and offline mode. `--fix` creates local artifact folders only. |
+| `doctor [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--json] [--fix]` | Check platform, Python, PyYAML, RoE, catalog, execution-adapter readiness, loopback, and offline mode. `--fix` creates local artifact folders only. |
 | `support-bundle [--output artifacts/support] [--roe examples/roe.yaml]` | Create a redacted diagnostics ZIP. |
 | `demo [--roe examples/roe.yaml] [--actor APT29] [--objective TEXT] [--approver NAME] [--catalog PATH] [--output artifacts/runs]` | Run the complete local synthetic demo. |
 

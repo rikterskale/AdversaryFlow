@@ -116,3 +116,32 @@ def preflight_adapter(name: str, request: AdapterRequest) -> tuple[ExecutionAdap
         ability_ids=tuple(ability.id for ability in request.abilities),
         network_scopes=tuple(sorted({ability.network_scope for ability in request.abilities})),
     )
+
+
+def adapter_readiness(abilities: tuple[Ability, ...], name: str = "local-synthetic") -> dict:
+    """Return a read-only compatibility report for the fixed adapter boundary."""
+    try:
+        adapter = resolve_adapter(name)
+        for ability in abilities:
+            validate_ability(ability)
+            if ability.fidelity not in {"synthetic", "behavioral"}:
+                raise ValueError(f"Unsupported ability fidelity: {ability.fidelity}")
+        scopes = sorted({ability.network_scope for ability in abilities})
+        return {
+            "adapter": adapter.name,
+            "contract_version": ADAPTER_CONTRACT_VERSION,
+            "execution_boundary": "simulation-only",
+            "allowed_network_scopes": ["none", "loopback"],
+            "catalog_network_scopes": scopes,
+            "ability_count": len(abilities),
+            "compatible": bool(abilities),
+            "detail": f"{len(abilities)} reviewed abilities are compatible with {adapter.name}.",
+        }
+    except ValueError as error:
+        return {
+            "adapter": name,
+            "contract_version": ADAPTER_CONTRACT_VERSION,
+            "execution_boundary": "simulation-only",
+            "compatible": False,
+            "detail": str(error),
+        }

@@ -10,6 +10,8 @@ from adversaryflow.platforms import SUPPORTED_PLATFORMS, detect_platform
 def test_doctor_passes_repository_defaults():
     result = run_doctor()
     assert result["passed"] is True
+    assert result["adapter_readiness"]["compatible"] is True
+    assert any(item["name"] == "execution-adapter" and item["passed"] for item in result["checks"])
     assert detect_platform() in SUPPORTED_PLATFORMS
 
 

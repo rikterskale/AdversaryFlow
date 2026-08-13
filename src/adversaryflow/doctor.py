@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .emulation import default_catalog_path, load_catalog
+from .adapters import adapter_readiness
 from .models import RulesOfEngagement
 from .platforms import detect_platform, platform_supported
 
@@ -55,11 +56,14 @@ def run_doctor(
         checks.append(_check("roe", True, f"valid: {roe_path}"))
     except Exception as exc:
         checks.append(_check("roe", False, str(exc), f"Fix or recreate {roe_path}."))
+    abilities = ()
     try:
         abilities = load_catalog(catalog_path)
         checks.append(_check("ability-catalog", bool(abilities), f"{len(abilities)} abilities loaded"))
     except Exception as exc:
         checks.append(_check("ability-catalog", False, str(exc), f"Fix {catalog_path}."))
+    readiness = adapter_readiness(abilities)
+    checks.append(_check("execution-adapter", bool(readiness["compatible"]), str(readiness["detail"]), "Use a reviewed catalog with the built-in local-synthetic adapter."))
     try:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -88,4 +92,5 @@ def run_doctor(
         "checks": checks,
         "fixes_applied": fixes_applied,
         "guided_fixes": guidance,
+        "adapter_readiness": readiness,
     }

@@ -7,6 +7,7 @@ import yaml
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import default_catalog_path, load_catalog
+from .adapters import adapter_readiness
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
@@ -111,6 +112,10 @@ def main() -> None:
     support.add_argument("--output", default="artifacts/support")
     support.add_argument("--roe", default="examples/roe.yaml")
     sub.add_parser("capabilities", help="list advertised capabilities")
+    adapter = sub.add_parser("adapter", help="inspect the fixed local execution adapter")
+    adapter_sub = adapter.add_subparsers(dest="adapter_command", required=True)
+    adapter_status = adapter_sub.add_parser("status", help="show read-only adapter readiness")
+    adapter_status.add_argument("--catalog", default="content/abilities/catalog.json")
     guide = sub.add_parser("guide", help="walk through the safe campaign workflow and next steps")
     guide.add_argument("--actor", default="APT29")
     guide.add_argument("--target", default="local-lab")
@@ -192,6 +197,12 @@ def main() -> None:
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
         return
+
+    if args.command == "adapter":
+        abilities = load_catalog(args.catalog)
+        readiness = adapter_readiness(abilities)
+        print(json.dumps(readiness, indent=2))
+        raise SystemExit(0 if readiness["compatible"] else 1)
 
     if args.command == "manager":
         serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)

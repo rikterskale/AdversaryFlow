@@ -82,6 +82,16 @@ def test_cli_capabilities_and_provider_status_are_read_only(monkeypatch, capsys)
     assert status["provider"] == "offline"
 
 
+def test_cli_adapter_status_reports_only_fixed_safe_capabilities(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "adapter", "status"])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["adapter"] == "local-synthetic"
+    assert status["execution_boundary"] == "simulation-only"
+
+
 def test_cli_provider_validate_exits_successfully_for_offline_defaults(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "provider", "validate"])
     with pytest.raises(SystemExit) as exit_code:

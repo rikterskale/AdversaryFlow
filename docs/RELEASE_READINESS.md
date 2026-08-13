@@ -4,7 +4,7 @@ A release is ready only when CI proves the following standard using the built wh
 
 ## Proven installation
 
-Each release artifact must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, loopback, and offline-mode checks.
+Each release artifact must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, execution-adapter readiness, loopback, and offline-mode checks. The adapter readiness result must identify only the built-in local-synthetic adapter and the simulation-only boundary.
 
 ## Guided troubleshooting
 
