@@ -13,6 +13,23 @@ def test_doctor_passes_repository_defaults():
     assert detect_platform() in SUPPORTED_PLATFORMS
 
 
+def test_doctor_fix_creates_local_artifact_folders(monkeypatch):
+    root = Path("artifacts") / f"doctor-fix-{uuid4()}"
+    root.mkdir(parents=True)
+    monkeypatch.chdir(root)
+    result = run_doctor(fix=True)
+    assert result["passed"] is True
+    assert set(result["fixes_applied"]).issuperset({"artifacts", "artifacts/runs", "artifacts/campaigns", "artifacts/support"})
+
+
+def test_doctor_reports_guided_fix_for_invalid_roe():
+    invalid = Path("artifacts") / f"invalid-roe-{uuid4()}.yaml"
+    invalid.write_text("engagement_name: missing-required-fields\n", encoding="utf-8")
+    result = run_doctor(str(invalid))
+    assert result["passed"] is False
+    assert any(item["check"] == "roe" and item["fix"] for item in result["guided_fixes"])
+
+
 def test_support_bundle_contains_redacted_diagnostics():
     bundle = create_support_bundle(Path("artifacts/test-support") / str(uuid4()))
     with zipfile.ZipFile(bundle) as archive:

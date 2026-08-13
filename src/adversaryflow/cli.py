@@ -54,6 +54,7 @@ def main() -> None:
     doctor.add_argument("--roe", default="examples/roe.yaml")
     doctor.add_argument("--catalog", default="content/abilities/catalog.json")
     doctor.add_argument("--json", action="store_true")
+    doctor.add_argument("--fix", action="store_true", help="apply safe local fixes, then diagnose again")
     support = sub.add_parser("support-bundle", help="create a redacted troubleshooting bundle")
     support.add_argument("--output", default="artifacts/support")
     support.add_argument("--roe", default="examples/roe.yaml")
@@ -207,11 +208,15 @@ def main() -> None:
         return
 
     if args.command == "doctor":
-        result = run_doctor(args.roe, args.catalog)
+        result = run_doctor(args.roe, args.catalog, fix=args.fix)
         if args.json:
             print(json.dumps(result, indent=2))
         else:
             print("\n".join(f"{'PASS' if item['passed'] else 'FAIL'} {item['name']}: {item['detail']}" for item in result["checks"]))
+            if result["fixes_applied"]:
+                print(f"FIXED local folders: {', '.join(result['fixes_applied'])}")
+            for item in result["guided_fixes"]:
+                print(f"NEXT {item['check']}: {item['fix']}")
         raise SystemExit(0 if result["passed"] else 1)
 
     if args.command == "support-bundle":
