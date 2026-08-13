@@ -4,6 +4,7 @@ from adversaryflow.models import RulesOfEngagement
 from adversaryflow.workflow import campaign_integrity_hashes, load_campaign_draft, save_campaign_draft, verify_campaign_integrity
 from pathlib import Path
 from uuid import uuid4
+import pytest
 
 
 def test_campaign_draft_can_be_saved_and_resumed():
@@ -28,6 +29,26 @@ def test_campaign_resume_rejects_tampered_draft():
     data["objective"] = "tampered"
     draft_path.write_text(__import__("json").dumps(data), encoding="utf-8")
     loaded, metadata = load_campaign_draft(directory)
-    import pytest
     with pytest.raises(ValueError, match="plan_hash"):
         verify_campaign_integrity(loaded, metadata, roe, abilities)
+
+
+def test_campaign_resume_rejects_changed_roe_and_catalog():
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test"), load_catalog("content/abilities/catalog.json"))
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "test", "operator_name": "operator@example.test", "approver_name": "manager@example.test", "approved_targets": ["local-lab"]})
+    abilities = load_catalog("content/abilities/catalog.json")
+    integrity = campaign_integrity_hashes(draft, roe, abilities)
+    metadata = {**integrity}
+    changed_roe = RulesOfEngagement.from_mapping({"engagement_name": "test", "operator_name": "operator@example.test", "approver_name": "new-manager@example.test", "approved_targets": ["local-lab"]})
+    with pytest.raises(ValueError, match="roe_sha256"):
+        verify_campaign_integrity(draft, metadata, changed_roe, abilities)
+    with pytest.raises(ValueError, match="catalog_sha256"):
+        verify_campaign_integrity(draft, metadata, roe, tuple(reversed(abilities)))
+
+
+def test_campaign_resume_rejects_legacy_metadata_without_integrity_hashes():
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test"), load_catalog("content/abilities/catalog.json"))
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "test", "operator_name": "operator@example.test", "approver_name": "manager@example.test", "approved_targets": ["local-lab"]})
+    abilities = load_catalog("content/abilities/catalog.json")
+    with pytest.raises(ValueError, match="roe_sha256"):
+        verify_campaign_integrity(draft, {"plan_hash": campaign_integrity_hashes(draft, roe, abilities)["plan_hash"]}, roe, abilities)

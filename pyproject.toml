@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adversaryflow"
-version = "0.2.0"
+version = "0.2.1"
 description = "Safety-first AI-assisted purple-team campaign planning"
 requires-python = ">=3.11"
 dependencies = ["PyYAML>=6.0"]
