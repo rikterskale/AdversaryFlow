@@ -45,12 +45,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - uses: actions/setup-python@v5
         with:
-          args: "check .github"
-      - uses: zizmorcore/zizmor-action@v0.2.0
-        with:
-          persona: pedantic
+          python-version: '3.12'
+      - run: python -m pip install zizmor
+      - run: zizmor .github/workflows/ci.yml
 
   sbom-check:
     runs-on: ubuntu-latest
@@ -100,12 +99,11 @@ jobs:
           - name: kali
             image: kalilinux/kali-rolling
     runs-on: ubuntu-latest
-    container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
-      - run: apt-get update && apt-get install -y python3 python3-venv python3-pip
-      - run: python3 -m venv .venv
-      - run: .venv/bin/python -m pip install --break-system-packages -e '.[dev]'
-      - run: .venv/bin/python -m adversaryflow doctor --json
-      - run: .venv/bin/python -m pytest -q
-      - run: .venv/bin/python -m adversaryflow demo
+      - run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/workspace"
+          -w /workspace
+          "${{ matrix.image }}"
+          bash -lc "apt-get update && apt-get install -y python3 python3-venv python3-pip && python3 -m venv .venv && .venv/bin/python -m pip install --break-system-packages -e '.[dev]' && .venv/bin/python -m adversaryflow doctor --json && .venv/bin/python -m pytest -q && .venv/bin/python -m adversaryflow demo"
