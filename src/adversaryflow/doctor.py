@@ -71,6 +71,11 @@ def run_doctor(
     except OSError as exc:
         checks.append(_check("loopback", False, str(exc), "Allow local loopback binding."))
     checks.append(_check("offline-mode", True, "available; no provider key required"))
+    from .provider import load_provider_config, validate_provider_config
+    provider_config = load_provider_config()
+    provider_errors = validate_provider_config(provider_config)
+    provider_detail = "offline mode is active" if provider_config.name == "offline" else (f"profile '{provider_config.profile_name}' is policy-approved and ready" if not provider_errors else "Hosted provider is not ready; run adversaryflow provider diagnose.")
+    provider_readiness = {"ready": not provider_errors, "configuration": provider_config.as_dict(), "detail": provider_detail, "next": "Run: adversaryflow provider policy status, then allow the reviewed profile before a hosted request." if provider_errors else "Provider profile and policy are ready."}
     failed = [item for item in checks if not item["passed"]]
     guidance = [
         {"check": item["name"], "problem": item["detail"], "fix": item["remediation"]}
@@ -93,4 +98,5 @@ def run_doctor(
         "fixes_applied": fixes_applied,
         "guided_fixes": guidance,
         "adapter_readiness": readiness,
+        "provider_readiness": provider_readiness,
     }

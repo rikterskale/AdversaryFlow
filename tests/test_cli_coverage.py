@@ -76,6 +76,7 @@ def test_cli_doctor_json_exits_successfully_after_safe_checks(monkeypatch, capsy
 
 
 def test_cli_capabilities_and_provider_status_are_read_only(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
     capabilities = _run(monkeypatch, capsys, "capabilities")
     advertised = json.loads(capabilities)
     assert advertised["format"] == "ADVERSARYFLOW-CAPABILITIES-1"
@@ -97,6 +98,7 @@ def test_cli_adapter_status_reports_only_fixed_safe_capabilities(monkeypatch, ca
 
 
 def test_cli_provider_validate_exits_successfully_for_offline_defaults(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "provider", "validate"])
     with pytest.raises(SystemExit) as exit_code:
         cli.main()
@@ -252,6 +254,7 @@ def test_cli_lifecycle_errors_are_returned_as_safe_json(monkeypatch, capsys, lif
 
 
 def test_cli_provider_test_refuses_network_when_offline(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "provider", "test"])
     with pytest.raises(SystemExit) as exit_code:
         cli.main()

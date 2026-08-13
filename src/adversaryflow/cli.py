@@ -14,7 +14,7 @@ from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
-from .profiles import activation_summary, list_profiles, remove_profile, save_profile, use_profile
+from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, remove_profile, save_profile, use_profile
 from .manager import serve as serve_manager
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
@@ -141,6 +141,11 @@ def main() -> None:
     profile_save.add_argument("--credential-env", default="ADVERSARYFLOW_API_KEY")
     profile_remove = profile_sub.add_parser("remove")
     profile_remove.add_argument("name")
+    policy = provider_sub.add_parser("policy", help="inspect or update the local hosted-provider allowlist")
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True)
+    policy_sub.add_parser("status", help="show the non-secret profile allowlist")
+    policy_allow = policy_sub.add_parser("allow", help="allow the exact endpoint and model of a saved profile")
+    policy_allow.add_argument("name")
     test_provider = provider_sub.add_parser("test", help="send one harmless planning request")
     test_provider.add_argument("--actor", default="APT29")
     test_provider.add_argument("--target", default="local-lab")
@@ -273,6 +278,8 @@ def main() -> None:
                     planner = OpenAICompatiblePlanner(config)
                     draft_result = planner.draft(request, abilities)
                     provider_metadata = planner.last_request_metadata
+                    if config.profile_name:
+                        provider_metadata = {**provider_metadata, "profile": config.profile_name, "policy_version": policy_summary().get("version")}
                 else:
                     raise ProviderError(f"Unsupported provider '{config.name}'.")
                 validate_ai_draft(draft_result, roe, abilities)
@@ -338,6 +345,9 @@ def main() -> None:
                 print(f"FIXED local folders: {', '.join(result['fixes_applied'])}")
             for item in result["guided_fixes"]:
                 print(f"NEXT {item['check']}: {item['fix']}")
+            provider_readiness = result.get("provider_readiness")
+            if provider_readiness:
+                print(f"PROVIDER {'READY' if provider_readiness['ready'] else 'NOT READY'}: {provider_readiness['detail']}")
         raise SystemExit(0 if result["passed"] else 1)
 
     if args.command == "support-bundle":
@@ -391,6 +401,15 @@ def main() -> None:
                 validate_ai_draft(draft, load_roe(args.roe), abilities)
                 print(json.dumps({"success": True, "stage": "draft-validated", "draft": draft.as_dict()}, indent=2))
             except (ProviderError, ValueError, OSError, json.JSONDecodeError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+        elif args.provider_command == "policy":
+            try:
+                if args.policy_command == "status":
+                    print(json.dumps(policy_summary(), indent=2))
+                else:
+                    print(json.dumps({"allowed": args.name, "file": str(allow_profile(args.name))}, indent=2))
+            except (OSError, KeyError, ValueError) as exc:
                 print(json.dumps({"success": False, "error": str(exc)}, indent=2))
                 raise SystemExit(1)
         else:

@@ -27,6 +27,8 @@
 
 Profile commands: `provider profile list`; `provider profile status`; `provider profile use NAME`; `provider profile remove NAME`; and `provider profile save NAME --endpoint HTTPS_URL --model MODEL [--provider openai-compatible] [--credential-env ADVERSARYFLOW_API_KEY]`.
 
+Policy commands: `provider policy status` and `provider policy allow NAME`. A hosted profile must have an exact allowlist entry for its provider, endpoint, and model before any provider request is made.
+
 ## Campaign commands
 
 Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs]` only after review by the named RoE approver.

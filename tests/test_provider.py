@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from adversaryflow.provider import _draft_from_mapping, load_provider_config, validate_provider_config
-from adversaryflow.profiles import activation_summary, save_profile, use_profile
+from adversaryflow.profiles import activation_summary, allow_profile, policy_summary, save_profile, use_profile
 
 
 def test_offline_provider_is_valid_without_secret():
@@ -70,4 +70,19 @@ def test_profile_activation_summary_is_redacted_and_gives_a_recovery_step():
     assert activation_summary(root=root / "no-profile-file", environ={})["active"] == "offline"
     with pytest.raises(KeyError, match="Provider profile not found"):
         activation_summary("missing", root=root, environ={})
+
+
+def test_hosted_profile_requires_an_exact_policy_allowlist_entry():
+    root = Path("artifacts/test-profiles") / str(uuid4())
+    save_profile("approved", "openai-compatible", "https://example.test/v1", "model", "TEAM_AI_KEY", root)
+    use_profile("approved", root)
+    environment = {"ADVERSARYFLOW_PROFILE_FILE": str(root / "profiles.json"), "TEAM_AI_KEY": "secret-value"}
+    config = load_provider_config(environment)
+    assert "policy is not configured" in validate_provider_config(config)[0]
+    policy_path = allow_profile("approved", root)
+    assert policy_path.name == "policy.json"
+    assert policy_summary(root)["version"] == 1
+    config = load_provider_config(environment)
+    assert validate_provider_config(config) == []
+    assert config.profile_name == "approved"
 

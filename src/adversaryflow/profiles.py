@@ -15,6 +15,10 @@ def _profile_path(root: str | Path = "artifacts/providers") -> Path:
     return Path(root) / "profiles.json"
 
 
+def _policy_path(root: str | Path = "artifacts/providers") -> Path:
+    return Path(root) / "policy.json"
+
+
 def _load(root: str | Path) -> dict[str, Any]:
     path = _profile_path(root)
     if not path.exists():
@@ -25,6 +29,51 @@ def _load(root: str | Path) -> dict[str, Any]:
 def list_profiles(root: str | Path = "artifacts/providers") -> dict[str, Any]:
     data = _load(root)
     return {"active": data.get("active", "offline"), "profiles": {name: {key: value for key, value in profile.items() if key != "api_key"} for name, profile in data.get("profiles", {}).items()}}
+
+
+def policy_summary(root: str | Path = "artifacts/providers") -> dict[str, Any]:
+    """Return the non-secret provider policy, or a clear setup action."""
+    path = _policy_path(root)
+    if not path.exists():
+        return {"configured": False, "version": None, "allowed_profiles": [], "next": "Allow the selected profile with: adversaryflow provider policy allow <profile-name>"}
+    try:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+        allowed = policy.get("allowed_profiles", [])
+        if not isinstance(allowed, list):
+            raise ValueError("allowed_profiles must be a list")
+        return {"configured": True, "version": policy.get("version"), "allowed_profiles": allowed, "next": "Review policy before changing provider settings."}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {"configured": False, "version": None, "allowed_profiles": [], "next": "Repair artifacts/providers/policy.json before using a hosted provider."}
+
+
+def allow_profile(name: str, root: str | Path = "artifacts/providers") -> Path:
+    """Explicitly allow one saved, non-secret provider profile."""
+    profiles = list_profiles(root)["profiles"]
+    profile = profiles.get(name)
+    if not profile or name == "offline":
+        raise KeyError(f"Provider profile not found: {name}")
+    allowed = {"name": name, "provider": profile.get("provider"), "endpoint": profile.get("endpoint"), "model": profile.get("model")}
+    path = _policy_path(root)
+    summary = policy_summary(root)
+    existing = summary["allowed_profiles"] if summary["configured"] else []
+    remaining = [item for item in existing if item.get("name") != name]
+    remaining.append(allowed)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"version": 1, "allowed_profiles": remaining}, indent=2), encoding="utf-8")
+    return path
+
+
+def policy_error(profile_name: str | None, provider: str, endpoint: str | None, model: str | None, root: str | Path = "artifacts/providers") -> str | None:
+    """Reject a hosted profile unless its exact settings are policy-approved."""
+    if provider == "offline" or not profile_name:
+        return None
+    summary = policy_summary(root)
+    if not summary["configured"]:
+        return f"Provider policy is not configured for profile '{profile_name}'."
+    for allowed in summary["allowed_profiles"]:
+        if allowed == {"name": profile_name, "provider": provider, "endpoint": endpoint, "model": model}:
+            return None
+    return f"Provider profile '{profile_name}' is not allowed by the active policy."
 
 
 def activation_summary(name: str | None = None, root: str | Path = "artifacts/providers", environ: dict[str, str] | None = None) -> dict[str, Any]:

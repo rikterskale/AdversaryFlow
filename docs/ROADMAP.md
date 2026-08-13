@@ -15,12 +15,12 @@ The current release provides RoE validation, deterministic offline drafting, an 
 
 ## Slice 2: governed provider profiles and provenance
 
-**Status: next.**
+**Status: implemented.**
 
-- Add a profile-policy file that allowlists approved provider endpoints and models.
-- Record the selected profile name and policy version in campaign metadata, without recording credentials, prompts, or responses.
-- Add a read-only provider readiness report to `doctor` and the manager.
-- Acceptance: an unapproved endpoint/model is rejected before any provider request, and provenance remains redacted.
+- A profile-policy file allowlists approved provider endpoints and models.
+- Campaign metadata records the selected profile name and policy version, without recording credentials, prompts, or responses.
+- `doctor` and the loopback manager expose a read-only provider readiness report.
+- An unapproved endpoint/model is rejected before any provider request, and provenance remains redacted.
 
 ## Slice 3: detection-validation export
 

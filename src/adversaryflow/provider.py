@@ -13,6 +13,7 @@ from typing import Any
 
 from .ai import AICampaignDraft, CampaignRequest, build_ai_request_prompt
 from .emulation import Ability
+from .profiles import policy_error
 
 
 SUPPORTED_PROVIDERS = {"offline", "openai-compatible"}
@@ -100,12 +101,15 @@ class ProviderConfig:
     credential_configured: bool
     api_key: str | None = None
     profile_error: str | None = None
+    profile_name: str | None = None
+    policy_error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"provider": self.name, "model": self.model, "endpoint": self.endpoint, "credential_configured": self.credential_configured, "profile_error": self.profile_error}
+        return {"provider": self.name, "model": self.model, "endpoint": self.endpoint, "credential_configured": self.credential_configured, "profile": self.profile_name, "profile_error": self.profile_error, "policy_error": self.policy_error}
 
 
 def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfig:
+    environment_supplied = environ is not None
     env = os.environ if environ is None else environ
     name = env.get("ADVERSARYFLOW_PROVIDER", "offline").strip().lower()
     model = env.get("ADVERSARYFLOW_MODEL") or None
@@ -114,9 +118,11 @@ def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfi
     profile_name = env.get("ADVERSARYFLOW_PROFILE")
     profile_error = None
     profile_path = Path(env.get("ADVERSARYFLOW_PROFILE_FILE", "artifacts/providers/profiles.json"))
-    if profile_name and profile_name != "offline" and not profile_path.exists():
+    direct_settings = any(env.get(key) for key in ("ADVERSARYFLOW_PROVIDER", "ADVERSARYFLOW_ENDPOINT", "ADVERSARYFLOW_MODEL"))
+    use_profile = (not environment_supplied or "ADVERSARYFLOW_PROFILE" in env or "ADVERSARYFLOW_PROFILE_FILE" in env) and (bool(profile_name) or not direct_settings)
+    if use_profile and profile_name and profile_name != "offline" and not profile_path.exists():
         profile_error = f"Provider profile '{profile_name}' was not found."
-    elif profile_path.exists():
+    elif use_profile and profile_path.exists():
         try:
             profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
             profile_name = profile_name or profile_data.get("active", "offline")
@@ -132,7 +138,10 @@ def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfi
         except (OSError, json.JSONDecodeError):
             profile_error = "Provider profile file could not be read."
     credential = bool(api_key)
-    return ProviderConfig(name, model, endpoint, credential, api_key, profile_error)
+    policy_root = profile_path.parent
+    active_profile = profile_name if use_profile and profile_name and profile_name != "offline" else None
+    active_policy_error = policy_error(active_profile, name, endpoint, model, policy_root) if not profile_error else None
+    return ProviderConfig(name, model, endpoint, credential, api_key, profile_error, active_profile, active_policy_error)
 
 
 def _draft_from_mapping(data: dict[str, Any]) -> AICampaignDraft:
@@ -152,6 +161,8 @@ def validate_provider_config(config: ProviderConfig) -> list[str]:
     errors: list[str] = []
     if config.profile_error:
         errors.append(config.profile_error)
+    if config.policy_error:
+        errors.append(config.policy_error)
     if config.name not in SUPPORTED_PROVIDERS:
         errors.append(f"Unsupported provider '{config.name}'. Choose offline or openai-compatible.")
     if config.name == "offline" and config.credential_configured:
