@@ -5,7 +5,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _offline_draft, _portfolio_summary, _report_summary, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _offline_draft, _portfolio_summary, _report_summary, _terminal_next_step, make_handler, serve
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -60,8 +60,11 @@ def test_manager_health_and_campaign_listing():
         assert "Start a safe campaign in five clear steps" in page
         assert "Create safe offline draft" in page
         assert "Current local scope" in page
-        assert '<select id="target" disabled>' in page
+        assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
         assert "active local RoE" in page
+        assert 'id="create-draft" onclick="createDraft()" disabled' in page
+        assert "It will not contact a target, run a command, use a hosted provider, approve a campaign, or start emulation." in page
+        assert "function updateDraftPreview()" in page
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
@@ -116,6 +119,30 @@ def test_manager_includes_existing_html_report_for_completed_campaign():
     finally:
         server.shutdown()
         thread.join(timeout=2)
+
+
+def test_manager_uses_packaged_defaults_outside_the_source_checkout(monkeypatch):
+    """An installed user can start the manager without copied example files."""
+    from pathlib import Path
+
+    original_exists = Path.exists
+
+    def missing_checkout_defaults(path):
+        if str(path) in {"examples\\roe.yaml", "content\\abilities\\catalog.json"}:
+            return False
+        return original_exists(path)
+
+    monkeypatch.setattr(Path, "exists", missing_checkout_defaults)
+    context = _manager_context("examples/roe.yaml", "content/abilities/catalog.json")
+    assert context["roe"]["approved_targets"] == ["local-lab"]
+    assert context["catalog"]["ability_count"] == 2
+
+    root = Path("artifacts") / f"manager-packaged-{uuid4()}"
+    created = _offline_draft(str(root), "examples/roe.yaml", "content/abilities/catalog.json", {
+        "actor": "APT29", "target": "local-lab", "objective": "validate installed manager defaults",
+    })
+    detail = _campaign_detail(str(root), created["campaign_id"], "examples/roe.yaml", "content/abilities/catalog.json")
+    assert detail["detail"]["integrity"]["status"] == "verified"
 
 
 def _manager_post(base, path, payload):
@@ -200,6 +227,8 @@ def test_manager_report_and_portfolio_helpers_preserve_local_boundaries():
     (root / "telemetry-gap-report.json").write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="JSON object"):
         _report_summary({"run_dir": str(root)})
+    (root / "telemetry-gap-report.json").write_text(json.dumps({"gaps": "not-a-list"}), encoding="utf-8")
+    assert _report_summary({"run_dir": str(root)})["gaps"] == []
     summary = _portfolio_summary([{"status": "awaiting-approval"}, {"status": "unexpected"}])
     assert summary["statuses"]["awaiting-approval"] == 1
     assert summary["statuses"]["other"] == 1

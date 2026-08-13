@@ -54,6 +54,7 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
         "",
         "3. Create a reviewable draft (no execution)",
         f"   Run: {draft_command}",
+        "   This command creates a local draft only: it does not contact the target, run a command, use a hosted provider, approve the campaign, or start emulation.",
         "   Save the returned campaign ID. The draft is bound to its plan, RoE, and ability-catalog integrity hashes.",
         "",
         "4. Review before approval",
