@@ -37,7 +37,8 @@ async function createDraft(){let b=event.currentTarget;b.disabled=true;b.textCon
 function copyCommand(){let text='adversaryflow campaign --actor "'+q('actor').value.replaceAll('"','')+'" --target "'+q('target').value.replaceAll('"','')+'" --objective "'+q('objective').value.replaceAll('"','')+'" --fallback-offline';navigator.clipboard.writeText(text);q('command').textContent=text;q('command-next').innerHTML='<strong>Copied:</strong> This CLI command creates a draft only; review it before approval.'}
 function pills(items){return items.length?items.map(x=>'<span style="display:inline-block;padding:2px 8px;margin:3px;border:1px solid #31516e;border-radius:99px;font-size:.85rem">'+esc(x)+'</span>').join(''):'<span class="muted">None recorded</span>'}
 function reportSummary(s){if(s.status!=='available')return '<p class="muted">'+esc(s.detail)+'</p>';let gaps=s.gaps.length?s.gaps.map(g=>'<li>'+esc(g.category)+': '+esc(g.description)+'</li>').join(''):'<li>No required telemetry gaps reported.</li>';return '<p><strong>Behavior:</strong> '+(s.behavior_success?'completed':'needs review')+'<br><strong>Telemetry:</strong> '+esc(s.telemetry_observed)+' observed of '+esc(s.telemetry_expected)+' expected<br><strong>Detection gaps:</strong> '+esc(s.detection_gap_count)+'</p><p class="muted">'+esc(s.assessment)+'</p><details><summary>Detection-gap findings</summary><ul>'+gaps+'</ul></details>'}
-function renderDetail(d){let x=d.detail,verified=x.integrity.status==='verified',color=verified?'#8de0ac':x.integrity.status==='review-required'?'#f3cb72':'#ff9d9d',report=x.report_url?'<a href="'+esc(x.report_url)+'">Open report</a>':'';q('campaign-detail').innerHTML='<p class="eyebrow">Campaign review</p><h2>'+esc(d.metadata.campaign_id)+'</h2><p class="next" style="border-left-color:'+color+'"><strong>Next:</strong> '+esc(x.next_action)+'</p><div class="layout"><section class="card"><h3>Scope</h3><p><strong>Target:</strong> '+esc(x.scope.target)+'<br><strong>Objective:</strong> '+esc(x.scope.objective)+'<br><strong>Risk:</strong> '+esc(x.scope.risk_level)+'<br><strong>Mode:</strong> local synthetic simulation only</p></section><section class="card"><h3>Integrity</h3><p style="color:'+color+'"><strong>'+esc(x.integrity.status.replaceAll('-',' '))+'</strong></p><p class="muted">'+esc(x.integrity.detail)+'</p></section><section class="card"><h3>Rules of Engagement</h3><p><strong>Environment:</strong> '+esc(x.roe.environment)+'<br><strong>Approver:</strong> '+esc(x.roe.approver_name)+'<br><strong>Approved targets:</strong><br>'+pills(x.roe.approved_targets)+'</p></section><section class="card"><h3>Selected safe abilities</h3><p>'+x.abilities.map(a=>'<strong>'+esc(a.id)+'</strong> · '+esc(a.name)+'<br><span class="muted">'+esc(a.technique_id)+' · '+esc(a.network_scope)+' · '+esc(a.telemetry_count)+' expected telemetry signals</span>').join('<hr>')+'</p></section><section class="card"><h3>Stop conditions</h3><p>'+pills(x.stop_conditions)+'</p></section><section class="card"><h3>Report review</h3><p>'+esc(x.report_review)+' '+report+'</p>'+reportSummary(x.report_summary)+'</section></div><details><summary>Show raw campaign record</summary><pre>'+esc(JSON.stringify(d,null,2))+'</pre></details>'}
+function timeline(items){return '<ol>'+items.map(i=>'<li><strong>'+esc(i.event)+'</strong><br><span class="muted">'+esc(i.at)+' · '+esc(i.detail)+'</span></li>').join('')+'</ol>'}
+function renderDetail(d){let x=d.detail,verified=x.integrity.status==='verified',color=verified?'#8de0ac':x.integrity.status==='review-required'?'#f3cb72':'#ff9d9d',report=x.report_url?'<a href="'+esc(x.report_url)+'">Open report</a>':'';q('campaign-detail').innerHTML='<p class="eyebrow">Campaign review</p><h2>'+esc(d.metadata.campaign_id)+'</h2><p class="next" style="border-left-color:'+color+'"><strong>Next:</strong> '+esc(x.next_action)+'</p><div class="layout"><section class="card"><h3>Scope</h3><p><strong>Target:</strong> '+esc(x.scope.target)+'<br><strong>Objective:</strong> '+esc(x.scope.objective)+'<br><strong>Risk:</strong> '+esc(x.scope.risk_level)+'<br><strong>Mode:</strong> local synthetic simulation only</p></section><section class="card"><h3>Integrity</h3><p style="color:'+color+'"><strong>'+esc(x.integrity.status.replaceAll('-',' '))+'</strong></p><p class="muted">'+esc(x.integrity.detail)+'</p></section><section class="card"><h3>Rules of Engagement</h3><p><strong>Environment:</strong> '+esc(x.roe.environment)+'<br><strong>Approver:</strong> '+esc(x.roe.approver_name)+'<br><strong>Approved targets:</strong><br>'+pills(x.roe.approved_targets)+'</p></section><section class="card"><h3>Selected safe abilities</h3><p>'+x.abilities.map(a=>'<strong>'+esc(a.id)+'</strong> · '+esc(a.name)+'<br><span class="muted">'+esc(a.technique_id)+' · '+esc(a.network_scope)+' · '+esc(a.telemetry_count)+' expected telemetry signals</span>').join('<hr>')+'</p></section><section class="card"><h3>Stop conditions</h3><p>'+pills(x.stop_conditions)+'</p></section><section class="card"><h3>Report review</h3><p>'+esc(x.report_review)+' '+report+'</p>'+reportSummary(x.report_summary)+'</section></div><section class="card"><h3>Decision timeline</h3>'+timeline(x.decision_timeline)+'</section><details><summary>Show raw campaign record</summary><pre>'+esc(JSON.stringify(d,null,2))+'</pre></details>'}
 async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
 async function recordDecision(id,action){let reason=prompt(action==='reject'?'Why should this draft be rejected?':'Why should this draft be cancelled?');if(!reason)return;let body={reason};if(action==='reject'){body.approver=prompt('Enter the RoE approver name to record this rejection:')||'';if(!body.approver)return}if(!confirm('Record this '+action+' decision for '+id+'? This does not execute any campaign.'))return;try{await api('/api/campaigns/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await loadCampaigns();await inspectCampaign(id)}catch(e){alert('Could not record decision: '+e.message)}}
 async function loadCampaigns(){try{let d=await api('/api/campaigns');if(!d.campaigns.length){q('campaigns').textContent='No saved campaigns yet. Create an offline draft after step 1.';return}q('campaigns').innerHTML='<table><tr><th>Campaign</th><th>Status</th><th>Provider</th><th>Safe next action</th></tr>'+d.campaigns.map(c=>'<tr><td>'+esc(c.campaign_id)+'</td><td>'+esc(c.status)+'</td><td>'+esc(c.provider)+'</td><td class="inline">'+actions(c)+'</td></tr>').join('')+'</table>'}catch(e){q('campaigns').textContent='Could not load campaigns: '+e.message}}
@@ -110,6 +111,28 @@ def _report_summary(metadata: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _decision_timeline(campaign_dir: str, metadata: dict[str, object]) -> list[dict[str, str]]:
+    """Return only known local lifecycle records in chronological display order."""
+    entries = [{"event": "Draft created", "at": str(metadata.get("created_at", "Unknown time")), "detail": "A reviewable campaign draft was saved locally."}]
+    root = Path(campaign_dir)
+    records = (
+        ("approval.json", "Approval recorded", "approved_at", "approver", "decision"),
+        ("rejection.json", "Rejection recorded", "rejected_at", "approver", "reason"),
+        ("cancellation.json", "Cancellation recorded", "cancelled_at", "", "reason"),
+    )
+    for filename, event, timestamp, actor_key, detail_key in records:
+        path = root / filename
+        if not path.is_file():
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            continue
+        actor = f" by {data[actor_key]}" if actor_key and data.get(actor_key) else ""
+        detail = str(data.get(detail_key, "Recorded local lifecycle decision."))
+        entries.append({"event": event + actor, "at": str(data.get(timestamp, "Unknown time")), "detail": detail})
+    return sorted(entries, key=lambda entry: entry["at"])
+
+
 def _campaign_detail(campaign_root: str, campaign_id: str, roe_path: str, catalog_path: str) -> dict[str, object]:
     """Return a human-readable, read-only review summary for one saved campaign."""
     campaign = inspect_campaign(campaign_root, campaign_id)
@@ -145,6 +168,7 @@ def _campaign_detail(campaign_root: str, campaign_id: str, roe_path: str, catalo
         "report_url": f"/api/campaigns/{campaign_id}/report" if report.is_file() else None,
         "report_review": "A report is available for review." if report.is_file() else "No report exists until a CLI-authorized local synthetic emulation completes.",
         "report_summary": _report_summary(metadata),
+        "decision_timeline": _decision_timeline(campaign["campaign_dir"], metadata),
     }
     return campaign
 

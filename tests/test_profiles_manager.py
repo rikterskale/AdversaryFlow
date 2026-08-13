@@ -141,6 +141,12 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         assert wrong_approver.value.code == 403
         rejected = _manager_post(base, f"/api/campaigns/{campaign_id}/reject", {"approver": "manager@example.test", "reason": "not scheduled"})
         assert rejected["status"] == "rejected"
+        rejected_detail = json.loads(urllib.request.urlopen(base + f"/api/campaigns/{campaign_id}").read())
+        assert [entry["event"] for entry in rejected_detail["detail"]["decision_timeline"]] == [
+            "Draft created",
+            "Rejection recorded by manager@example.test",
+        ]
+        assert rejected_detail["detail"]["decision_timeline"][1]["detail"] == "not scheduled"
         second = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "validate process visibility"})
         cancelled = _manager_post(base, f"/api/campaigns/{second['campaign_id']}/cancel", {"reason": "operator requested stop"})
         assert cancelled["status"] == "cancelled"
