@@ -76,6 +76,14 @@ def test_manager_includes_existing_html_report_for_completed_campaign():
     campaign = save_campaign_draft(draft, "hash", "offline", root)
     report = campaign / "campaign-report.html"
     report.write_text("<h1>Report</h1>", encoding="utf-8")
+    (campaign / "telemetry-gap-report.json").write_text(json.dumps({
+        "behavior_success": True,
+        "telemetry_expected": 3,
+        "telemetry_observed": 2,
+        "detection_gap_count": 1,
+        "gaps": [{"category": "process", "description": "missing alert"}],
+        "assessment": "Use this synthetic finding to define a focused retest.",
+    }), encoding="utf-8")
     metadata_path = campaign / "metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata.update({"status": "completed", "run_dir": str(campaign)})
@@ -91,6 +99,10 @@ def test_manager_includes_existing_html_report_for_completed_campaign():
         detail = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/campaigns/{campaign.name}").read())
         assert detail["detail"]["report_url"] == report_url
         assert "report is available" in detail["detail"]["report_review"]
+        summary = detail["detail"]["report_summary"]
+        assert summary["status"] == "available"
+        assert summary["telemetry_expected"] == 3
+        assert summary["gaps"][0]["description"] == "missing alert"
     finally:
         server.shutdown()
         thread.join(timeout=2)
