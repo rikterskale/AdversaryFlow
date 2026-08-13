@@ -6,7 +6,7 @@ import yaml
 
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
-from .emulation import load_catalog
+from .emulation import default_catalog_path, load_catalog
 from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
 from .reports import write_campaign_reports
 from .lifecycle import inspect_campaign, list_campaigns, reject_campaign, reset_campaign
@@ -19,6 +19,8 @@ from .planner import build_plan
 
 
 def load_roe(path: str) -> RulesOfEngagement:
+    if not Path(path).exists() and path == "examples/roe.yaml":
+        path = str(__import__("importlib.resources", fromlist=["files"]).files("adversaryflow.resources").joinpath("roe.yaml"))
     with Path(path).open(encoding="utf-8") as handle:
         return RulesOfEngagement.from_mapping(yaml.safe_load(handle) or {})
 
@@ -94,6 +96,8 @@ def main() -> None:
     reset.add_argument("--confirm", action="store_true")
     reset.add_argument("--campaign-root", default="artifacts/campaigns")
     args = parser.parse_args()
+    if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
+        args.catalog = str(default_catalog_path())
 
     if args.command == "validate":
         roe = load_roe(args.roe)

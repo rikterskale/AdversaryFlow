@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .emulation import load_catalog
+from .emulation import default_catalog_path, load_catalog
 from .models import RulesOfEngagement
 from .platforms import detect_platform, platform_supported
 
@@ -18,6 +18,10 @@ def _check(name: str, passed: bool, detail: str, remediation: str = "") -> dict[
 
 def run_doctor(roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json") -> dict[str, Any]:
     checks: list[dict[str, str | bool]] = []
+    if not Path(roe_path).exists() and roe_path == "examples/roe.yaml":
+        roe_path = str(__import__("importlib.resources", fromlist=["files"]).files("adversaryflow.resources").joinpath("roe.yaml"))
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
     detected = detect_platform()
     checks.append(_check("supported-platform", platform_supported(), detected, "Supported platforms: Windows, Debian, Ubuntu, and Kali."))
     version_ok = sys.version_info >= (3, 11)

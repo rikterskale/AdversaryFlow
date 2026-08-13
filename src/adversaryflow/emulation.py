@@ -6,12 +6,17 @@ execute operator-supplied commands or provide a remote execution channel.
 
 import hashlib
 import json
+from importlib.resources import files
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 
 SAFE_NETWORK_SCOPES = {"none", "loopback"}
+
+
+def default_catalog_path() -> Path:
+    return Path(str(files("adversaryflow.resources").joinpath("catalog.json")))
 
 
 @dataclass(frozen=True)
@@ -89,4 +94,3 @@ def build_emulation_plan(abilities: tuple[Ability, ...], target: str, actor: str
     }
     plan["plan_sha256"] = canonical_plan_hash(plan)
     return plan
-

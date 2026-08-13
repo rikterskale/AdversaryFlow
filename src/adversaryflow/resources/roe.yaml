@@ -1,0 +1,12 @@
+engagement_name: "Local Purple-Team Telemetry Validation"
+operator_name: "operator@example.test"
+approver_name: "manager@example.test"
+environment: "local-lab"
+approved_targets:
+  - "local-lab"
+excluded_targets:
+  - "production"
+dry_run: true
+allowed_actions:
+  - "simulation"
+  - "telemetry_validation"
