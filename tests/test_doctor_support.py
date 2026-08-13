@@ -20,6 +20,7 @@ def test_doctor_fix_creates_local_artifact_folders(monkeypatch):
     result = run_doctor(fix=True)
     assert result["passed"] is True
     assert set(result["fixes_applied"]).issuperset({"artifacts", "artifacts/runs", "artifacts/campaigns", "artifacts/support"})
+    assert run_doctor(fix=True)["fixes_applied"] == []
 
 
 def test_doctor_reports_guided_fix_for_invalid_roe():
@@ -28,6 +29,13 @@ def test_doctor_reports_guided_fix_for_invalid_roe():
     result = run_doctor(str(invalid))
     assert result["passed"] is False
     assert any(item["check"] == "roe" and item["fix"] for item in result["guided_fixes"])
+
+
+def test_doctor_uses_a_safe_version_fallback_when_package_metadata_is_unavailable(monkeypatch):
+    import adversaryflow.doctor as doctor
+
+    monkeypatch.setattr(doctor, "package_version", lambda _name: (_ for _ in ()).throw(doctor.PackageNotFoundError()))
+    assert run_doctor()["version"] == "0.2.0"
 
 
 def test_support_bundle_contains_redacted_diagnostics():

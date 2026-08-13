@@ -6,6 +6,7 @@ import pytest
 
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
+from adversaryflow import lifecycle
 from adversaryflow.lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from adversaryflow.workflow import save_campaign_draft
 
@@ -23,6 +24,12 @@ def test_lifecycle_list_inspect_and_reject():
     assert inspect_campaign(root, campaign_id)["draft"]["actor"] == "APT29"
     rejection = reject_campaign(root, campaign_id, "manager@example.test", "Not scheduled")
     assert json.loads(rejection.read_text(encoding="utf-8"))["decision"] == "rejected"
+
+
+def test_lifecycle_ignores_campaign_directories_without_metadata():
+    root = Path("artifacts/test-lifecycle") / str(uuid4())
+    (root / "campaign-incomplete").mkdir(parents=True)
+    assert list_campaigns(root) == []
 
 
 def test_reset_requires_confirmation():
@@ -67,6 +74,22 @@ def test_lifecycle_recovery_rejects_unsafe_roots_invalid_ids_and_missing_campaig
             operation()
     assert directory.is_dir()
     assert campaign_id == directory.name
+
+
+def test_lifecycle_rejects_a_campaign_path_that_resolves_outside_its_direct_root(monkeypatch):
+    root = Path("artifacts/test-lifecycle") / str(uuid4())
+    root.mkdir(parents=True)
+    original_resolve = Path.resolve
+    candidate = root.resolve() / "campaign-safe"
+
+    def resolved(path, *args, **kwargs):
+        if path == candidate:
+            return root / "escaped" / "campaign-safe"
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(lifecycle.Path, "resolve", resolved)
+    with pytest.raises(ValueError, match="directly under the campaign root"):
+        lifecycle._campaign_dir(root, "campaign-safe")
 
 
 def test_completed_campaign_cannot_be_cancelled_and_is_left_unchanged():

@@ -52,6 +52,8 @@ def test_provider_validation_rejects_missing_active_profile_invalid_drafts_and_h
         _draft_from_mapping({})
     insecure = load_provider_config({"ADVERSARYFLOW_PROVIDER": "openai-compatible", "ADVERSARYFLOW_ENDPOINT": "http://example.test/v1", "ADVERSARYFLOW_MODEL": "model", "ADVERSARYFLOW_API_KEY": "secret"})
     assert any("must use HTTPS" in error for error in validate_provider_config(insecure))
+    profile.write_text('{"active": "offline", "profiles": {}}', encoding="utf-8")
+    assert load_provider_config({"ADVERSARYFLOW_PROFILE_FILE": str(profile)}).name == "offline"
 
 
 def test_profile_activation_summary_is_redacted_and_gives_a_recovery_step():

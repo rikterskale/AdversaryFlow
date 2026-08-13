@@ -36,6 +36,17 @@ def test_cli_manager_passes_only_explicit_local_configuration(monkeypatch, capsy
     assert received["args"] == ("127.0.0.1", 8899, "artifacts/cli-manager", False, "examples/roe.yaml", "content/abilities/catalog.json")
 
 
+def test_cli_uses_packaged_defaults_when_source_assets_are_absent(monkeypatch, capsys):
+    original_exists = Path.exists
+    monkeypatch.setattr(Path, "exists", lambda path: False if str(path) in {"examples\\roe.yaml", "content\\abilities\\catalog.json"} else original_exists(path))
+    assert cli.load_roe("examples/roe.yaml").approver_name == "manager@example.test"
+    monkeypatch.setattr(cli, "default_catalog_path", lambda: Path("packaged-catalog.json"))
+    received = {}
+    monkeypatch.setattr(cli, "serve_manager", lambda *args: received.update(args=args))
+    _run(monkeypatch, capsys, "manager")
+    assert received["args"][5] == "packaged-catalog.json"
+
+
 def test_cli_provider_diagnose_and_campaign_list_are_nonexecuting(monkeypatch, capsys):
     diagnose = json.loads(_run(monkeypatch, capsys, "provider", "diagnose"))
     assert any("Offline mode requires no key" in item for item in diagnose["recovery"])
@@ -317,6 +328,7 @@ def test_cli_doctor_guidance_and_package_entrypoint_are_exercised(monkeypatch, c
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "guide", "--objective", "entrypoint"])
     runpy.run_module("adversaryflow.__main__", run_name="__main__")
     assert "entrypoint" in capsys.readouterr().out
+    __import__("importlib").import_module("adversaryflow.__main__")
 
 
 def test_cli_interactive_guide_packaged_roe_and_hosted_campaign_metadata(monkeypatch, capsys):

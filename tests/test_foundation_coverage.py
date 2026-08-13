@@ -25,11 +25,20 @@ def _roe(*, actions=("simulation", "telemetry_validation")):
 def test_platform_detection_reads_supported_linux_release_data(monkeypatch, identifier, expected):
     class Release:
         def exists(self): return True
-        def read_text(self, **_kwargs): return f'ID="{identifier}"\nNAME=test\n'
+        def read_text(self, **_kwargs): return f'UNRELATED\nID="{identifier}"\nNAME=test\n'
 
     monkeypatch.setattr(platforms.platform, "system", lambda: "Linux")
     monkeypatch.setattr(platforms, "Path", lambda _path: Release())
     assert platforms.detect_platform() == expected
+
+
+def test_platform_detection_falls_back_to_the_system_when_release_metadata_is_missing(monkeypatch):
+    class MissingRelease:
+        def exists(self): return False
+
+    monkeypatch.setattr(platforms.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platforms, "Path", lambda _path: MissingRelease())
+    assert platforms.detect_platform() == "Linux"
 
 
 def test_platform_detection_and_supported_check_handle_windows(monkeypatch):

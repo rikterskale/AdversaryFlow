@@ -1,4 +1,5 @@
 import json
+import http.client
 import threading
 import urllib.request
 from urllib.error import HTTPError
@@ -12,6 +13,7 @@ from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
 from adversaryflow.workflow import save_campaign_draft
 import pytest
+import adversaryflow.manager as manager_module
 
 
 def test_provider_profiles_never_store_credentials():
@@ -23,6 +25,15 @@ def test_provider_profiles_never_store_credentials():
     assert list_profiles(root)["active"] == "approved"
     remove_profile("approved", root)
     assert list_profiles(root)["active"] == "offline"
+
+
+def test_removing_an_inactive_profile_preserves_the_active_selection():
+    root = __import__("pathlib").Path("artifacts") / f"profiles-inactive-{uuid4()}"
+    save_profile("first", "openai-compatible", "https://example.test/v1", "model", "FIRST_KEY", root)
+    save_profile("second", "openai-compatible", "https://example.test/v1", "model", "SECOND_KEY", root)
+    use_profile("first", root)
+    remove_profile("second", root)
+    assert list_profiles(root)["active"] == "first"
 
 
 @pytest.mark.parametrize("name,provider,endpoint,model,credential_env", [
@@ -246,6 +257,20 @@ def test_manager_rejects_malformed_and_oversized_json_request_bodies():
             with pytest.raises(HTTPError) as error:
                 urllib.request.urlopen(request)
             assert error.value.code == 400
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.putrequest("POST", "/api/campaigns")
+        connection.putheader("Content-Length", "not-a-number")
+        connection.endheaders()
+        response = connection.getresponse()
+        assert response.status == 400
+        assert "Content-Length must be an integer" in response.read().decode()
+        connection.close()
+        with pytest.raises(HTTPError) as unsupported_campaign_path:
+            urllib.request.urlopen(base + "/api/campaigns/campaign-safe/unexpected")
+        assert unsupported_campaign_path.value.code == 404
+        with pytest.raises(HTTPError) as unsupported_campaign_post:
+            _manager_post(base, "/api/campaigns/campaign-safe/unexpected", {"reason": "fixture"})
+        assert unsupported_campaign_post.value.code == 404
     finally:
         server.shutdown()
         thread.join(timeout=2)
@@ -288,3 +313,23 @@ def test_manager_rejects_absent_reports_and_nonloopback_binding():
         thread.join(timeout=2)
     with pytest.raises(ValueError, match="loopback"):
         serve("0.0.0.0")
+
+
+def test_manager_startup_remains_loopback_only_without_opening_a_real_service(monkeypatch, capsys):
+    calls = {}
+
+    class Server:
+        server_port = 8787
+        def serve_forever(self): calls["served"] = True
+
+    class Timer:
+        def __init__(self, _delay, callback, args): self.callback, self.args = callback, args
+        def start(self): calls["browser_url"] = self.args[0]
+
+    monkeypatch.setattr(manager_module, "ThreadingHTTPServer", lambda address, handler: calls.update(address=address, handler=handler) or Server())
+    monkeypatch.setattr(manager_module.threading, "Timer", Timer)
+    serve("127.0.0.1", 0, "artifacts/manager-startup", open_browser=True)
+    assert calls["address"] == ("127.0.0.1", 0)
+    assert calls["served"] is True
+    assert calls["browser_url"] == "http://127.0.0.1:8787"
+    assert "listening on http://127.0.0.1:8787" in capsys.readouterr().out
