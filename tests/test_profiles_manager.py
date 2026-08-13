@@ -48,6 +48,7 @@ def test_manager_health_and_campaign_listing():
         assert health["ok"] is True
         assert health["mode"] == "local-guided-manager"
         assert campaigns["campaigns"] == []
+        assert campaigns["summary"] == {"total": 0, "statuses": {"awaiting-approval": 0, "completed": 0, "rejected": 0, "cancelled": 0, "other": 0}}
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "Campaign Guide" in page
         assert "Start a safe campaign in five clear steps" in page
@@ -147,6 +148,9 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
             "Rejection recorded by manager@example.test",
         ]
         assert rejected_detail["detail"]["decision_timeline"][1]["detail"] == "not scheduled"
+        summary = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())["summary"]
+        assert summary["total"] == 1
+        assert summary["statuses"]["rejected"] == 1
         second = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "validate process visibility"})
         cancelled = _manager_post(base, f"/api/campaigns/{second['campaign_id']}/cancel", {"reason": "operator requested stop"})
         assert cancelled["status"] == "cancelled"
