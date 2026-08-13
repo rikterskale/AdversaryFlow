@@ -24,7 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Initial tagged release.
 
-[Unreleased]: https://github.com/rikterskale/AdversaryFlow/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/rikterskale/AdversaryFlow/compare/v0.2.3...HEAD
 [0.2.3]: https://github.com/rikterskale/AdversaryFlow/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/rikterskale/AdversaryFlow/releases/tag/v0.2.2
 [0.2.1]: https://github.com/rikterskale/AdversaryFlow/releases/tag/v0.2.1

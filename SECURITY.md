@@ -2,7 +2,7 @@
 
 ## Supported version
 
-The current repository release is `0.2.2`. [VERIFY: supported-version maintenance window]
+The current repository release is `0.2.3`. [VERIFY: supported-version maintenance window]
 
 ## Reporting a vulnerability
 

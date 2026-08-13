@@ -49,7 +49,7 @@ adversaryflow manager --open
 adversaryflow guide --interactive
 ```
 
-Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.
+The current release supports only scoped, local synthetic simulation; it has no `--live` option.
 
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
 
@@ -80,7 +80,7 @@ After configuring a provider, explicitly test one harmless planning request:
 adversaryflow provider test
 ```
 
-This is the only provider command that sends a network request. It sends a planning prompt and ability catalog, never an execution command or target data.
+This is the only provider command that sends a network request. It sends a planning prompt containing the campaign actor, target, and objective, plus the ability catalog; it never sends an execution command.
 
 Provider profiles store non-secret endpoint and model settings. After selecting a profile, `adversaryflow provider profile status` reports whether its required credential environment variable is available and gives the exact safe next step; it never displays the credential value.
 
