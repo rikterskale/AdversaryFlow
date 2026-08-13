@@ -12,7 +12,7 @@ adversaryflow support-bundle
 
 ## Installation and platform checks
 
-The diagnostic reports the detected platform, Python version, PyYAML availability, RoE validity, ability-catalog validity, loopback binding, and offline mode. The supported platforms are Windows, Debian, Ubuntu, and Kali. Install Python 3.11 or newer when the Python check fails.
+The diagnostic reports the detected platform, Python version, PyYAML availability, RoE validity, ability-catalog validity, execution-adapter readiness, loopback binding, and offline mode. The supported platforms are Windows, Debian, Ubuntu, and Kali. Install Python 3.11 or newer when the Python check fails.
 
 ## RoE or catalog errors
 

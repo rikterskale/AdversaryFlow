@@ -1,6 +1,6 @@
 # Examples
 
-These examples use the packaged defaults and remain within the local simulation boundary.
+These examples use the packaged defaults. All examples remain within the local simulation boundary except `plan`, which retrieves the MITRE ATT&CK Enterprise STIX bundle over HTTPS while producing a dry-run plan.
 
 ## Validate the local setup
 

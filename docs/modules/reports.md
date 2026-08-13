@@ -4,6 +4,6 @@ Campaign drafts are stored under `artifacts/campaigns` by default. Each draft di
 
 An approved local synthetic emulation writes a run directory under `artifacts/runs` by default. It includes `progress.json`, `events.jsonl`, `manifest.json`, `audit.jsonl`, a copy of the draft, and `telemetry-gap-report.json`.
 
-After a campaign completes, AdversaryFlow writes `campaign-report.md` and `campaign-report.html` in the campaign directory. The reports include campaign scope and status, plan hash, approval record, synthetic behavior result, expected and observed telemetry counts, detection gaps, and a safety note that production-log validation remains separate.
+After a campaign completes, AdversaryFlow writes `campaign-report.md` and `campaign-report.html` in the campaign directory. The Markdown report includes campaign scope and status, plan hash, approval record, synthetic behavior result, expected and observed telemetry counts, detection gaps, and a safety note that production-log validation remains separate. The HTML report is a concise view containing campaign ID, actor, objective, behavior success, and detection gaps.
 
 The local manager may display an existing HTML campaign report but does not create approval or emulation results. See [campaign-workflow.md](campaign-workflow.md) and [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md).

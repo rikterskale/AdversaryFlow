@@ -1,6 +1,6 @@
 # Diagnostics and support
 
-`adversaryflow doctor` checks supported platform, Python version, PyYAML, the configured RoE, ability catalog, loopback binding, and offline mode. Use `--json` for structured output.
+`adversaryflow doctor` checks supported platform, Python version, PyYAML, the configured RoE, ability catalog, execution-adapter readiness, loopback binding, and offline mode. Use `--json` for structured output.
 
 `doctor --fix` creates missing local artifact directories only. It does not install software, change system settings, or contact a provider.
 
