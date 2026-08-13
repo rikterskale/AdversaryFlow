@@ -94,6 +94,17 @@ Resuming verifies the saved draft, plan hash, RoE, and ability catalog before em
 
 Completed campaigns also produce `campaign-report.md` and `campaign-report.html` containing the scope, approval, plan hash, behavior result, telemetry counts, and detection gaps. Provider metadata stores hashes, timing, model, and status only; API keys and raw prompts/responses are not persisted.
 
+Campaign lifecycle commands:
+
+```powershell
+adversaryflow campaign list
+adversaryflow campaign inspect --campaign-id campaign-...
+adversaryflow campaign reject --campaign-id campaign-... --approver manager@example.test --reason "Not scheduled"
+adversaryflow campaign reset --campaign-id campaign-... --confirm
+```
+
+`list` and `inspect` are read-only. `reject` preserves an auditable decision. `reset` requires explicit confirmation and only operates inside the configured campaign root.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

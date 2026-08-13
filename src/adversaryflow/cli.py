@@ -9,6 +9,7 @@ from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import load_catalog
 from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
 from .reports import write_campaign_reports
+from .lifecycle import inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
@@ -77,6 +78,21 @@ def main() -> None:
     campaign.add_argument("--output", default="artifacts/runs")
     campaign.add_argument("--campaign-root", default="artifacts/campaigns")
     campaign.add_argument("--campaign-id", default=None, help="resume a saved campaign directory")
+    campaign_sub = campaign.add_subparsers(dest="lifecycle_command")
+    list_campaign = campaign_sub.add_parser("list", help="list saved campaigns")
+    list_campaign.add_argument("--campaign-root", default="artifacts/campaigns")
+    inspect = campaign_sub.add_parser("inspect", help="inspect a saved campaign")
+    inspect.add_argument("--campaign-id", required=True)
+    inspect.add_argument("--campaign-root", default="artifacts/campaigns")
+    reject = campaign_sub.add_parser("reject", help="record a campaign rejection")
+    reject.add_argument("--campaign-id", required=True)
+    reject.add_argument("--approver", required=True)
+    reject.add_argument("--reason", required=True)
+    reject.add_argument("--campaign-root", default="artifacts/campaigns")
+    reset = campaign_sub.add_parser("reset", help="delete a saved campaign")
+    reset.add_argument("--campaign-id", required=True)
+    reset.add_argument("--confirm", action="store_true")
+    reset.add_argument("--campaign-root", default="artifacts/campaigns")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -85,6 +101,32 @@ def main() -> None:
         return
 
     if args.command == "campaign":
+        if args.lifecycle_command == "list":
+            print(json.dumps(list_campaigns(args.campaign_root), indent=2))
+            return
+        if args.lifecycle_command == "inspect":
+            try:
+                print(json.dumps(inspect_campaign(args.campaign_root, args.campaign_id), indent=2))
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            return
+        if args.lifecycle_command == "reject":
+            try:
+                path = reject_campaign(args.campaign_root, args.campaign_id, args.approver, args.reason)
+                print(json.dumps({"success": True, "status": "rejected", "record": str(path)}, indent=2))
+            except (OSError, KeyError, ValueError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            return
+        if args.lifecycle_command == "reset":
+            try:
+                reset_campaign(args.campaign_root, args.campaign_id, args.confirm)
+                print(json.dumps({"success": True, "status": "reset", "campaign_id": args.campaign_id}, indent=2))
+            except (OSError, ValueError, PermissionError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            return
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
         config = load_provider_config()
