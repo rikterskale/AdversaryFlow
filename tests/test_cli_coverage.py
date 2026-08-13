@@ -10,6 +10,7 @@ import pytest
 from adversaryflow import cli
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
+from adversaryflow.provider import ProviderConfig
 from adversaryflow.workflow import save_campaign_draft
 
 
@@ -97,3 +98,28 @@ def test_cli_campaign_offline_draft_and_synthetic_completion(monkeypatch, capsys
     completed = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate process visibility", "--approve", "--approver", "manager@example.test", "--campaign-root", str(completed_root), "--output", str(completed_root / "runs")))
     assert completed["stage"] == "completed"
     assert completed["telemetry_gap_report"]["behavior_success"] is True
+
+
+def test_cli_provider_configure_and_invalid_validation_are_guided(monkeypatch, capsys):
+    configured = _run(monkeypatch, capsys, "provider", "configure")
+    assert "Offline (default): no configuration required." in configured
+    monkeypatch.setattr(cli, "load_provider_config", lambda: ProviderConfig("unsupported", None, None, False))
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "provider", "validate"])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 1
+    assert "Unsupported provider" in json.loads(capsys.readouterr().out)["errors"][0]
+
+
+def test_cli_provider_profile_commands_use_nonsecret_profile_helpers(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "list_profiles", lambda: {"active": "offline", "profiles": {}})
+    assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "list"))["active"] == "offline"
+    monkeypatch.setattr(cli, "use_profile", lambda name: Path("artifacts/providers") / f"{name}.json")
+    assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "use", "approved"))["active"] == "approved"
+    monkeypatch.setattr(cli, "save_profile", lambda *args: Path("artifacts/providers") / f"{args[0]}.json")
+    saved = json.loads(_run(monkeypatch, capsys, "provider", "profile", "save", "approved", "--endpoint", "https://example.test/v1", "--model", "approved-model"))
+    assert saved["saved"] == "approved"
+    removed = []
+    monkeypatch.setattr(cli, "remove_profile", lambda name: removed.append(name))
+    assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "remove", "approved"))["removed"] == "approved"
+    assert removed == ["approved"]
