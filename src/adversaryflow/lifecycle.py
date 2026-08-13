@@ -1,12 +1,24 @@
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
-def _campaign_dir(root: str | Path, campaign_id: str) -> Path:
+def _safe_root(root: str | Path) -> Path:
     base = Path(root).resolve()
+    try:
+        base.relative_to(Path.cwd().resolve())
+    except ValueError as exc:
+        raise ValueError("Campaign root must remain inside the current working directory") from exc
+    return base
+
+
+def _campaign_dir(root: str | Path, campaign_id: str) -> Path:
+    base = _safe_root(root)
+    if not re.fullmatch(r"campaign-[A-Za-z0-9][A-Za-z0-9._-]*", campaign_id):
+        raise ValueError("campaign ID contains unsupported path characters")
     candidate = (base / campaign_id).resolve()
     if candidate.parent != base or not candidate.name.startswith("campaign-"):
         raise ValueError("campaign ID must name a campaign-* directory directly under the campaign root")
@@ -14,7 +26,7 @@ def _campaign_dir(root: str | Path, campaign_id: str) -> Path:
 
 
 def list_campaigns(root: str | Path = "artifacts/campaigns") -> list[dict[str, Any]]:
-    base = Path(root)
+    base = _safe_root(root)
     if not base.exists():
         return []
     results = []

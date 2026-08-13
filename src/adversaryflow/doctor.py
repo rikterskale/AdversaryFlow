@@ -4,6 +4,7 @@ import os
 import platform
 import socket
 import sys
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from typing import Any
 
@@ -72,9 +73,13 @@ def run_doctor(
         for item in failed
         if item["remediation"]
     ]
+    try:
+        product_version = package_version("adversaryflow")
+    except PackageNotFoundError:
+        product_version = "0.2.0"
     return {
         "product": "AdversaryFlow",
-        "version": "0.1.0",
+        "version": product_version,
         "platform": detected,
         "platform_detail": platform.platform(),
         "cwd": os.getcwd(),

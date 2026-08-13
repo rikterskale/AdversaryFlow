@@ -13,6 +13,8 @@ from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
+from .profiles import list_profiles, remove_profile, save_profile, use_profile
+from .manager import serve as serve_manager
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
 from .planner import build_plan
@@ -65,6 +67,19 @@ def main() -> None:
     provider_sub.add_parser("validate", help="validate settings without network access")
     provider_sub.add_parser("configure", help="show provider configuration instructions")
     provider_sub.add_parser("diagnose", help="show guided provider troubleshooting")
+    profile = provider_sub.add_parser("profile", help="manage non-secret provider profiles")
+    profile_sub = profile.add_subparsers(dest="profile_command", required=True)
+    profile_sub.add_parser("list")
+    profile_use = profile_sub.add_parser("use")
+    profile_use.add_argument("name")
+    profile_save = profile_sub.add_parser("save")
+    profile_save.add_argument("name")
+    profile_save.add_argument("--provider", default="openai-compatible")
+    profile_save.add_argument("--endpoint", required=True)
+    profile_save.add_argument("--model", required=True)
+    profile_save.add_argument("--credential-env", default="ADVERSARYFLOW_API_KEY")
+    profile_remove = profile_sub.add_parser("remove")
+    profile_remove.add_argument("name")
     test_provider = provider_sub.add_parser("test", help="send one harmless planning request")
     test_provider.add_argument("--actor", default="APT29")
     test_provider.add_argument("--target", default="local-lab")
@@ -102,6 +117,10 @@ def main() -> None:
     reset.add_argument("--campaign-id", required=True)
     reset.add_argument("--confirm", action="store_true")
     reset.add_argument("--campaign-root", default="artifacts/campaigns")
+    manager = sub.add_parser("manager", help="start the loopback-only campaign manager")
+    manager.add_argument("--host", default="127.0.0.1")
+    manager.add_argument("--port", type=int, default=8787)
+    manager.add_argument("--campaign-root", default="artifacts/campaigns")
     args = parser.parse_args()
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
         args.catalog = str(default_catalog_path())
@@ -109,6 +128,10 @@ def main() -> None:
     if args.command == "validate":
         roe = load_roe(args.roe)
         print(json.dumps({"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}, indent=2))
+        return
+
+    if args.command == "manager":
+        serve_manager(args.host, args.port, args.campaign_root)
         return
 
     if args.command == "campaign":
@@ -260,6 +283,20 @@ def main() -> None:
                 "Use provider validate before provider test; provider test is the only command here that sends a request.",
                 "If a hosted request fails, rerun campaign with --fallback-offline to continue a safe local rehearsal.",
             ]}, indent=2))
+        elif args.provider_command == "profile":
+            try:
+                if args.profile_command == "list":
+                    print(json.dumps(list_profiles(), indent=2))
+                elif args.profile_command == "use":
+                    print(json.dumps({"active": args.name, "file": str(use_profile(args.name))}, indent=2))
+                elif args.profile_command == "save":
+                    print(json.dumps({"saved": args.name, "file": str(save_profile(args.name, args.provider, args.endpoint, args.model, args.credential_env))}, indent=2))
+                else:
+                    remove_profile(args.name)
+                    print(json.dumps({"removed": args.name}, indent=2))
+            except (OSError, KeyError, ValueError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
         elif args.provider_command == "test":
             if config.name != "openai-compatible":
                 print("Provider test requires ADVERSARYFLOW_PROVIDER=openai-compatible.")

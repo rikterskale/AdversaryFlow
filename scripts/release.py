@@ -7,11 +7,17 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def project_version() -> str:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["project"]["version"]
 
 
 def sha256(path: Path) -> str:
@@ -41,7 +47,7 @@ def build_release(output: str | Path = "artifacts/release") -> Path:
     artifacts = sorted(path for path in destination.iterdir() if path.is_file())
     manifest = {"format": "ADVERSARYFLOW-RELEASE-MANIFEST-1", "created_at": datetime.now(timezone.utc).isoformat(), "artifacts": [{"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size} for path in artifacts]}
     (destination / "SHA256SUMS.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": "0.1.0"}}, "components": [{"type": "library", "name": "PyYAML", "version": ">=6.0"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
+    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": project_version()}}, "components": [{"type": "library", "name": "PyYAML", "version": ">=6.0"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
     (destination / "sbom.cdx.json").write_text(json.dumps(sbom, indent=2), encoding="utf-8")
     signing_key = os.environ.get("ADVERSARYFLOW_RELEASE_GPG_KEY")
     if signing_key:
