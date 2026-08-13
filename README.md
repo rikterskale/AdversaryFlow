@@ -104,6 +104,8 @@ Completed campaigns also produce `campaign-report.md` and `campaign-report.html`
 
 Run `adversaryflow manager --open` to launch a loopback-only browser workspace. It explains the safe campaign stages, generates copyable draft commands, lists locally saved campaigns, and provides context-sensitive next steps. The workspace does not execute commands or expose any non-loopback service; approval and emulation remain explicit CLI operations gated by the RoE.
 
+![Campaign Guide quick start](docs/assets/campaign-guide.png)
+
 The same step-by-step guidance is available in the terminal with `adversaryflow guide`. Add `--interactive` to enter a threat actor, approved target, and defensive objective; it only generates a copyable draft command and never runs a campaign.
 
 Campaign lifecycle commands:

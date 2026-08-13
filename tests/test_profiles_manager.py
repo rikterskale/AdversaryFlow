@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from adversaryflow.manager import make_handler
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
+from adversaryflow.ai import CampaignRequest, OfflinePlanner
+from adversaryflow.emulation import load_catalog
+from adversaryflow.workflow import save_campaign_draft
 import pytest
 
 
@@ -55,6 +58,29 @@ def test_manager_health_and_campaign_listing():
         with pytest.raises(HTTPError) as unknown_route:
             urllib.request.urlopen(base + "/not-a-route")
         assert unknown_route.value.code == 404
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_manager_includes_existing_html_report_for_completed_campaign():
+    root = __import__("pathlib").Path("artifacts") / f"manager-report-{uuid4()}"
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test"), load_catalog("content/abilities/catalog.json"))
+    campaign = save_campaign_draft(draft, "hash", "offline", root)
+    report = campaign / "campaign-report.html"
+    report.write_text("<h1>Report</h1>", encoding="utf-8")
+    metadata_path = campaign / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.update({"status": "completed", "run_dir": str(campaign)})
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(str(root)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        payload = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/api/campaigns").read())
+        report_url = payload["campaigns"][0]["report_url"]
+        assert report_url == f"/api/campaigns/{campaign.name}/report"
+        assert "Report" in urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}{report_url}").read().decode()
     finally:
         server.shutdown()
         thread.join(timeout=2)

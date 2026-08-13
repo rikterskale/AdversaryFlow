@@ -4,6 +4,7 @@ import json
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
 
 from .lifecycle import inspect_campaign, list_campaigns
@@ -16,7 +17,7 @@ PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Adve
 <section class="steps"><div class="card"><span class="num">1. Scope</span><p>Confirm the target is in the RoE allowlist. Start with <code>adversaryflow doctor --json</code></p></div><div class="card"><span class="num">2. Draft</span><p>Create a reviewable plan. This does not run an emulation.</p></div><div class="card"><span class="num">3. Review</span><p>Check abilities, telemetry expectations, stop conditions, and plan integrity.</p></div><div class="card"><span class="num">4. Approve & learn</span><p>Only the named RoE approver can run the local synthetic harness. Review its gap report afterwards.</p></div></section>
 <section class="card" style="margin-top:16px"><h2>Build a safe draft command</h2><p class="help">This form only creates a copyable CLI command; it does not send data or execute anything.</p><label>Threat actor<input id="actor" value="APT29"></label><label>Objective<input id="objective" value="validate endpoint process visibility"></label><label>Target<input id="target" value="local-lab"></label><button onclick="draft()">Create command</button><code id="command">Fill in the fields to generate a draft command.</code><button onclick="copyCommand()">Copy command</button><p class="help">After drafting, use the campaign ID shown by the CLI to inspect it here or resume it with <code>adversaryflow campaign --campaign-id campaign-... --approve --approver manager@example.test</code>.</p></section>
 <section class="card" style="margin-top:16px"><h2>Saved campaigns</h2><p class="help">Refreshes from this machine's configured campaign folder only.</p><button onclick="loadCampaigns()">Refresh campaigns</button><div id="campaigns">Loading…</div></section>
-</main><script>function q(id){return document.getElementById(id)}function draft(){q('command').textContent='adversaryflow campaign --actor "'+q('actor').value.replaceAll('"','')+'" --target "'+q('target').value.replaceAll('"','')+'" --objective "'+q('objective').value.replaceAll('"','')+'"'}function copyCommand(){navigator.clipboard.writeText(q('command').textContent)}async function loadCampaigns(){let r=await fetch('/api/campaigns'),d=await r.json();if(!d.campaigns.length){q('campaigns').textContent='No saved campaigns yet. Create a draft using the command above.';return}q('campaigns').innerHTML='<table><tr><th>ID</th><th>Status</th><th>Provider</th><th>Next step</th></tr>'+d.campaigns.map(c=>'<tr><td>'+c.campaign_id+'</td><td>'+c.status+'</td><td>'+c.provider+'</td><td>'+next(c)+'</td></tr>').join('')+'</table>'}function next(c){return c.status==='awaiting-approval'?'Review draft, then approve from the CLI.':c.status==='completed'?'Open the campaign report and plan a retest.':'Inspect the recorded decision.'}loadCampaigns()</script></body></html>"""
+</main><script>function q(id){return document.getElementById(id)}function draft(){q('command').textContent='adversaryflow campaign --actor "'+q('actor').value.replaceAll('"','')+'" --target "'+q('target').value.replaceAll('"','')+'" --objective "'+q('objective').value.replaceAll('"','')+'"'}function copyCommand(){navigator.clipboard.writeText(q('command').textContent)}async function loadCampaigns(){let r=await fetch('/api/campaigns'),d=await r.json();if(!d.campaigns.length){q('campaigns').textContent='No saved campaigns yet. Create a draft using the command above.';return}q('campaigns').innerHTML='<table><tr><th>ID</th><th>Status</th><th>Provider</th><th>Next step</th></tr>'+d.campaigns.map(c=>'<tr><td>'+c.campaign_id+'</td><td>'+c.status+'</td><td>'+c.provider+'</td><td>'+next(c)+'</td></tr>').join('')+'</table>'}function next(c){if(c.status==='awaiting-approval')return 'Review draft, then approve from the CLI.';if(c.status==='completed'){let link=c.report_url?'<a href="'+c.report_url+'">Open report</a> · ':'';return link+'Plan a retest from the detection gaps.'}return 'Inspect the recorded decision.'}loadCampaigns()</script></body></html>"""
 
 
 def make_handler(campaign_root: str):
@@ -36,10 +37,25 @@ def make_handler(campaign_root: str):
             elif path == "/api/health":
                 self._send(200, {"ok": True, "mode": "local-guided-manager"})
             elif path == "/api/campaigns":
-                self._send(200, {"campaigns": list_campaigns(campaign_root)})
+                campaigns = list_campaigns(campaign_root)
+                for campaign in campaigns:
+                    report = Path(campaign_root) / campaign["campaign_id"] / "campaign-report.html"
+                    campaign["report_url"] = f"/api/campaigns/{campaign['campaign_id']}/report" if report.exists() else None
+                self._send(200, {"campaigns": campaigns})
             elif path.startswith("/api/campaigns/"):
                 try:
-                    self._send(200, inspect_campaign(campaign_root, path.rsplit("/", 1)[-1]))
+                    parts = path.split("/")
+                    campaign_id = parts[3]
+                    if len(parts) == 5 and parts[4] == "report":
+                        campaign = inspect_campaign(campaign_root, campaign_id)
+                        report = Path(campaign["campaign_dir"]) / "campaign-report.html"
+                        if not report.is_file():
+                            raise FileNotFoundError(f"Campaign report not found: {campaign_id}")
+                        self._send(200, report.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+                    elif len(parts) == 4:
+                        self._send(200, inspect_campaign(campaign_root, campaign_id))
+                    else:
+                        self._send(404, {"error": "not found"})
                 except (OSError, ValueError) as exc:
                     self._send(404, {"error": str(exc)})
             else:
