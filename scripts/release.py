@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,26 @@ def build_release(output: str | Path = "artifacts/release") -> Path:
     (destination / "SHA256SUMS.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": "0.1.0"}}, "components": [{"type": "library", "name": "PyYAML", "version": ">=6.0"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
     (destination / "sbom.cdx.json").write_text(json.dumps(sbom, indent=2), encoding="utf-8")
+    signing_key = os.environ.get("ADVERSARYFLOW_RELEASE_GPG_KEY")
+    if signing_key:
+        sign_release(destination, signing_key)
     return destination
+
+
+def sign_release(release_dir: str | Path, key: str) -> Path:
+    """Create an armored detached GPG signature for the release manifest."""
+    root = Path(release_dir)
+    signature = root / "SHA256SUMS.json.asc"
+    subprocess.run(["gpg", "--batch", "--yes", "--armor", "--detach-sign", "--local-user", key, "--output", str(signature), str(root / "SHA256SUMS.json")], check=True)
+    return signature
+
+
+def verify_release_signature(release_dir: str | Path, keyring: str | Path | None = None) -> bool:
+    root = Path(release_dir)
+    command = ["gpg", "--batch", "--verify", str(root / "SHA256SUMS.json.asc"), str(root / "SHA256SUMS.json")]
+    if keyring:
+        command[1:1] = ["--no-default-keyring", "--keyring", str(keyring)]
+    return subprocess.run(command, capture_output=True).returncode == 0
 
 
 def verify_release(release_dir: str | Path) -> bool:
@@ -53,5 +73,7 @@ def verify_release(release_dir: str | Path) -> bool:
 
 if __name__ == "__main__":
     destination = build_release(sys.argv[1] if len(sys.argv) > 1 else "artifacts/release")
-    print(json.dumps({"release_dir": str(destination), "verified": verify_release(destination)}, indent=2))
-
+    result = {"release_dir": str(destination), "verified": verify_release(destination)}
+    if (destination / "SHA256SUMS.json.asc").exists():
+        result["signature"] = str(destination / "SHA256SUMS.json.asc")
+    print(json.dumps(result, indent=2))

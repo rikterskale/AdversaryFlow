@@ -6,7 +6,7 @@ import pytest
 
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
 from adversaryflow.emulation import load_catalog
-from adversaryflow.lifecycle import inspect_campaign, list_campaigns, reject_campaign, reset_campaign
+from adversaryflow.lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from adversaryflow.workflow import save_campaign_draft
 
 
@@ -33,3 +33,10 @@ def test_reset_requires_confirmation():
     reset_campaign(root, campaign_id, True)
     assert not directory.exists()
 
+
+def test_cancel_records_stop_request():
+    root = Path("artifacts/test-lifecycle") / str(uuid4())
+    directory, campaign_id = _campaign(root)
+    cancellation = cancel_campaign(root, campaign_id, "operator requested stop")
+    assert json.loads(cancellation.read_text(encoding="utf-8"))["decision"] == "cancelled"
+    assert inspect_campaign(root, campaign_id)["metadata"]["status"] == "cancelled"
