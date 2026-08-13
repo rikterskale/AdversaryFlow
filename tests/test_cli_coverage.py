@@ -123,3 +123,46 @@ def test_cli_provider_profile_commands_use_nonsecret_profile_helpers(monkeypatch
     monkeypatch.setattr(cli, "remove_profile", lambda name: removed.append(name))
     assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "remove", "approved"))["removed"] == "approved"
     assert removed == ["approved"]
+
+
+def test_cli_campaign_resume_rejects_tampered_reviewed_inputs(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
+    root = Path("artifacts") / f"cli-tampered-{uuid4()}"
+    created = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate integrity", "--campaign-root", str(root)))
+    metadata_path = root / created["campaign_id"] / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["catalog_sha256"] = "0" * 64
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "campaign", "--campaign-id", created["campaign_id"], "--campaign-root", str(root)])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 1
+    assert "catalog_sha256" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_cli_campaign_lifecycle_errors_remain_non_destructive(monkeypatch, capsys):
+    root = Path("artifacts") / f"cli-errors-{uuid4()}"
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test errors"), load_catalog("content/abilities/catalog.json"))
+    campaign = save_campaign_draft(draft, "hash", "offline", root)
+    metadata_path = campaign / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "completed"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    for command in (
+        ("campaign", "cancel", "--campaign-id", campaign.name, "--reason", "too late", "--campaign-root", str(root)),
+        ("campaign", "reset", "--campaign-id", campaign.name, "--campaign-root", str(root)),
+    ):
+        monkeypatch.setattr(sys, "argv", ["adversaryflow", *command])
+        with pytest.raises(SystemExit) as exit_code:
+            cli.main()
+        assert exit_code.value.code == 1
+        assert json.loads(capsys.readouterr().out)["success"] is False
+    assert campaign.is_dir()
+
+
+def test_cli_demo_and_support_bundle_stay_local(monkeypatch, capsys):
+    root = Path("artifacts") / f"cli-demo-{uuid4()}"
+    demo = json.loads(_run(monkeypatch, capsys, "demo", "--roe", "examples/roe.yaml", "--objective", "validate demo", "--output", str(root / "runs")))
+    assert demo["telemetry_gap_report"]["behavior_success"] is True
+    bundle = Path(_run(monkeypatch, capsys, "support-bundle", "--output", str(root / "support"), "--roe", "examples/roe.yaml").strip())
+    assert bundle.is_file()
