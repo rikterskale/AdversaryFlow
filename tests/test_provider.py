@@ -36,3 +36,8 @@ def test_active_provider_profile_is_loaded_without_environment_selector():
     assert config.model == "model"
     assert config.credential_configured is True
 
+
+def test_missing_selected_provider_profile_fails_validation():
+    config = load_provider_config({"ADVERSARYFLOW_PROFILE": "renamed", "ADVERSARYFLOW_PROFILE_FILE": "artifacts/no-profiles.json"})
+    assert validate_provider_config(config) == ["Provider profile 'renamed' was not found."]
+

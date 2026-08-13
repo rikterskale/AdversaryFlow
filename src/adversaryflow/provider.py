@@ -78,9 +78,10 @@ class ProviderConfig:
     endpoint: str | None
     credential_configured: bool
     api_key: str | None = None
+    profile_error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"provider": self.name, "model": self.model, "endpoint": self.endpoint, "credential_configured": self.credential_configured}
+        return {"provider": self.name, "model": self.model, "endpoint": self.endpoint, "credential_configured": self.credential_configured, "profile_error": self.profile_error}
 
 
 def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfig:
@@ -90,21 +91,27 @@ def load_provider_config(environ: dict[str, str] | None = None) -> ProviderConfi
     endpoint = env.get("ADVERSARYFLOW_ENDPOINT") or None
     api_key = env.get("ADVERSARYFLOW_API_KEY") or None
     profile_name = env.get("ADVERSARYFLOW_PROFILE")
+    profile_error = None
     profile_path = Path(env.get("ADVERSARYFLOW_PROFILE_FILE", "artifacts/providers/profiles.json"))
-    if profile_path.exists():
+    if profile_name and profile_name != "offline" and not profile_path.exists():
+        profile_error = f"Provider profile '{profile_name}' was not found."
+    elif profile_path.exists():
         try:
             profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
             profile_name = profile_name or profile_data.get("active", "offline")
             if profile_name != "offline":
                 profile = profile_data.get("profiles", {}).get(profile_name, {})
-                name = str(profile.get("provider", name))
-                model = model or profile.get("model")
-                endpoint = endpoint or profile.get("endpoint")
-                api_key = api_key or env.get(profile.get("credential_env", "ADVERSARYFLOW_API_KEY"))
+                if not profile:
+                    profile_error = f"Provider profile '{profile_name}' was not found."
+                else:
+                    name = str(profile.get("provider", name))
+                    model = model or profile.get("model")
+                    endpoint = endpoint or profile.get("endpoint")
+                    api_key = api_key or env.get(profile.get("credential_env", "ADVERSARYFLOW_API_KEY"))
         except (OSError, json.JSONDecodeError):
-            pass
+            profile_error = "Provider profile file could not be read."
     credential = bool(api_key)
-    return ProviderConfig(name, model, endpoint, credential, api_key)
+    return ProviderConfig(name, model, endpoint, credential, api_key, profile_error)
 
 
 def _draft_from_mapping(data: dict[str, Any]) -> AICampaignDraft:
@@ -122,6 +129,8 @@ def _draft_from_mapping(data: dict[str, Any]) -> AICampaignDraft:
 
 def validate_provider_config(config: ProviderConfig) -> list[str]:
     errors: list[str] = []
+    if config.profile_error:
+        errors.append(config.profile_error)
     if config.name not in SUPPORTED_PROVIDERS:
         errors.append(f"Unsupported provider '{config.name}'. Choose offline or openai-compatible.")
     if config.name == "offline" and config.credential_configured:
