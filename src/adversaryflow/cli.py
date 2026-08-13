@@ -7,7 +7,7 @@ import yaml
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import load_catalog
-from .workflow import approve_draft, build_gap_report, run_local_emulation
+from .workflow import approve_draft, build_gap_report, load_campaign_draft, run_local_emulation, save_campaign_draft
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
@@ -66,14 +66,16 @@ def main() -> None:
     test_provider.add_argument("--catalog", default="content/abilities/catalog.json")
     campaign = sub.add_parser("campaign", help="draft, validate, approve, and optionally emulate a campaign")
     campaign.add_argument("--roe", default="examples/roe.yaml")
-    campaign.add_argument("--actor", required=True)
+    campaign.add_argument("--actor", default=None)
     campaign.add_argument("--target", default="local-lab")
-    campaign.add_argument("--objective", required=True)
+    campaign.add_argument("--objective", default=None)
     campaign.add_argument("--platform", default="linux")
     campaign.add_argument("--approver", default=None)
     campaign.add_argument("--approve", action="store_true", help="approve and run the safe local emulation")
     campaign.add_argument("--catalog", default="content/abilities/catalog.json")
     campaign.add_argument("--output", default="artifacts/runs")
+    campaign.add_argument("--campaign-root", default="artifacts/campaigns")
+    campaign.add_argument("--campaign-id", default=None, help="resume a saved campaign directory")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -84,25 +86,42 @@ def main() -> None:
     if args.command == "campaign":
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
-        request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
         config = load_provider_config()
-        try:
-            if config.name == "offline":
-                draft_result = OfflinePlanner().draft(request, abilities)
-            elif config.name == "openai-compatible":
-                draft_result = OpenAICompatiblePlanner(config).draft(request, abilities)
-            else:
-                raise ProviderError(f"Unsupported provider '{config.name}'.")
-            validate_ai_draft(draft_result, roe, abilities)
-        except (ProviderError, ValueError) as exc:
-            print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc)}, indent=2))
-            raise SystemExit(1)
-        plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
-        result = {"success": True, "stage": "drafted", "provider": config.name, "plan_hash": plan_hash, "draft": draft_result.as_dict(), "approval_required": True}
+        if args.campaign_id:
+            try:
+                campaign_dir = Path(args.campaign_root) / args.campaign_id
+                draft_result, saved_metadata = load_campaign_draft(campaign_dir)
+                plan_hash = saved_metadata["plan_hash"]
+                validate_ai_draft(draft_result, roe, abilities)
+                provider_name = saved_metadata["provider"]
+            except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                print(json.dumps({"success": False, "stage": "resume", "error": f"Could not resume campaign: {exc}"}, indent=2))
+                raise SystemExit(1)
+        else:
+            if not args.actor or not args.objective:
+                parser.error("campaign requires --actor and --objective when --campaign-id is not supplied")
+            request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
+            try:
+                if config.name == "offline":
+                    draft_result = OfflinePlanner().draft(request, abilities)
+                elif config.name == "openai-compatible":
+                    draft_result = OpenAICompatiblePlanner(config).draft(request, abilities)
+                else:
+                    raise ProviderError(f"Unsupported provider '{config.name}'.")
+                validate_ai_draft(draft_result, roe, abilities)
+            except (ProviderError, ValueError) as exc:
+                print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            plan_hash = __import__("hashlib").sha256(json.dumps(draft_result.as_dict(), sort_keys=True).encode()).hexdigest()
+            campaign_dir = save_campaign_draft(draft_result, plan_hash, config.name, args.campaign_root)
+            provider_name = config.name
+        result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
                 approval = approve_draft(draft_result, roe, abilities, args.approver or "", plan_hash)
                 run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
+                (campaign_dir / "approval.json").write_text(json.dumps(approval.__dict__, indent=2), encoding="utf-8")
+                (campaign_dir / "metadata.json").write_text(json.dumps({"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider_name, "status": "completed", "run_dir": str(run_dir)}, indent=2), encoding="utf-8")
                 result.update({"stage": "completed", "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)})
             except (PermissionError, ValueError) as exc:
                 print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))

@@ -84,6 +84,14 @@ After review, the approver named in the RoE can authorize the safe local emulati
 adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility" --approve --approver "manager@example.test"
 ```
 
+Campaign drafts are persisted under `artifacts/campaigns/`. The command returns a campaign ID so approval can resume the exact reviewed draft:
+
+```powershell
+adversaryflow campaign --campaign-id campaign-... --approve --approver "manager@example.test"
+```
+
+Resuming verifies the saved draft, plan hash, RoE, and ability catalog before emulation; it does not regenerate the AI response.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

@@ -24,6 +24,29 @@ class Approval:
     scope_acknowledged: bool = True
 
 
+def save_campaign_draft(draft: AICampaignDraft, plan_hash: str, provider: str, output_root: str | Path = "artifacts/campaigns", campaign_id: str | None = None) -> Path:
+    campaign_dir = Path(output_root) / (campaign_id or f"campaign-{uuid.uuid4()}")
+    campaign_dir.mkdir(parents=True, exist_ok=False)
+    metadata = {"campaign_id": campaign_dir.name, "plan_hash": plan_hash, "provider": provider, "status": "awaiting-approval", "created_at": datetime.now(timezone.utc).isoformat()}
+    (campaign_dir / "draft.json").write_text(json.dumps(draft.as_dict(), indent=2), encoding="utf-8")
+    (campaign_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return campaign_dir
+
+
+def load_campaign_draft(campaign_dir: str | Path) -> tuple[AICampaignDraft, dict[str, Any]]:
+    root = Path(campaign_dir)
+    draft_data = json.loads((root / "draft.json").read_text(encoding="utf-8"))
+    metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))
+    draft = AICampaignDraft(
+        actor=str(draft_data["actor"]), target=str(draft_data["target"]), objective=str(draft_data["objective"]),
+        ability_ids=tuple(map(str, draft_data["ability_ids"])), risk_level=str(draft_data["risk_level"]),
+        approval_required=bool(draft_data["approval_required"]), expected_telemetry=tuple(map(str, draft_data["expected_telemetry"])),
+        stop_conditions=tuple(map(str, draft_data["stop_conditions"])), assumptions=tuple(map(str, draft_data["assumptions"])),
+        source_refs=tuple(map(str, draft_data.get("source_refs", []))),
+    )
+    return draft, metadata
+
+
 def approve_draft(draft: AICampaignDraft, roe: RulesOfEngagement, abilities: tuple[Ability, ...], approver: str, plan_hash: str, decision: str = "approved") -> Approval:
     validate_ai_draft(draft, roe, abilities)
     if approver != roe.approver_name:
