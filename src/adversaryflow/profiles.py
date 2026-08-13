@@ -1,6 +1,7 @@
 """Non-secret provider profile management."""
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,30 @@ def _load(root: str | Path) -> dict[str, Any]:
 def list_profiles(root: str | Path = "artifacts/providers") -> dict[str, Any]:
     data = _load(root)
     return {"active": data.get("active", "offline"), "profiles": {name: {key: value for key, value in profile.items() if key != "api_key"} for name, profile in data.get("profiles", {}).items()}}
+
+
+def activation_summary(name: str | None = None, root: str | Path = "artifacts/providers", environ: dict[str, str] | None = None) -> dict[str, Any]:
+    """Describe the active profile and its safe, non-secret next action."""
+    data = list_profiles(root)
+    selected = name or data["active"]
+    if selected == "offline":
+        return {"active": "offline", "ready": True, "credential_configured": False, "next": "Offline mode is ready. It creates local drafts and sends no provider request."}
+    profile = data["profiles"].get(selected)
+    if not profile:
+        raise KeyError(f"Provider profile not found: {selected}")
+    credential_env = str(profile.get("credential_env") or "ADVERSARYFLOW_API_KEY")
+    environment = os.environ if environ is None else environ
+    credential_configured = bool(environment.get(credential_env))
+    return {
+        "active": selected,
+        "provider": profile.get("provider"),
+        "endpoint": profile.get("endpoint"),
+        "model": profile.get("model"),
+        "credential_env": credential_env,
+        "credential_configured": credential_configured,
+        "ready": credential_configured,
+        "next": "Run adversaryflow provider validate, then provider test." if credential_configured else f"Set {credential_env} in your shell or secret manager, then run adversaryflow provider validate.",
+    }
 
 
 def save_profile(name: str, provider: str, endpoint: str | None, model: str | None, credential_env: str | None, root: str | Path = "artifacts/providers") -> Path:

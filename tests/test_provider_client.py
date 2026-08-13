@@ -62,6 +62,17 @@ def test_client_rejects_invalid_config_and_malformed_provider_body():
             OpenAICompatiblePlanner(_config()).draft(CampaignRequest("APT29", "local-lab", "test"), ())
 
 
+def test_client_rejects_a_json_response_without_a_campaign_draft():
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self): return json.dumps({"choices": []}).encode()
+
+    with patch("adversaryflow.provider.urlopen", return_value=Response()):
+        with pytest.raises(ProviderError, match="valid campaign draft JSON"):
+            OpenAICompatiblePlanner(_config()).draft(CampaignRequest("APT29", "local-lab", "test"), ())
+
+
 def test_provider_profile_loading_and_validation_recover_without_network():
     root = Path("artifacts") / f"provider-profile-{uuid4()}"
     root.mkdir(parents=True)

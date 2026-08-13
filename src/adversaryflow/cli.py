@@ -13,7 +13,7 @@ from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
-from .profiles import list_profiles, remove_profile, save_profile, use_profile
+from .profiles import activation_summary, list_profiles, remove_profile, save_profile, use_profile
 from .manager import serve as serve_manager
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
@@ -125,6 +125,7 @@ def main() -> None:
     profile = provider_sub.add_parser("profile", help="manage non-secret provider profiles")
     profile_sub = profile.add_subparsers(dest="profile_command", required=True)
     profile_sub.add_parser("list")
+    profile_sub.add_parser("status", help="show whether the active profile is ready without revealing credentials")
     profile_use = profile_sub.add_parser("use")
     profile_use.add_argument("name")
     profile_save = profile_sub.add_parser("save")
@@ -352,8 +353,12 @@ def main() -> None:
             try:
                 if args.profile_command == "list":
                     print(json.dumps(list_profiles(), indent=2))
+                elif args.profile_command == "status":
+                    print(json.dumps(activation_summary(), indent=2))
                 elif args.profile_command == "use":
-                    print(json.dumps({"active": args.name, "file": str(use_profile(args.name))}, indent=2))
+                    profile_file = use_profile(args.name)
+                    summary = activation_summary(args.name)
+                    print(json.dumps({**summary, "file": str(profile_file)}, indent=2))
                 elif args.profile_command == "save":
                     print(json.dumps({"saved": args.name, "file": str(save_profile(args.name, args.provider, args.endpoint, args.model, args.credential_env))}, indent=2))
                 else:

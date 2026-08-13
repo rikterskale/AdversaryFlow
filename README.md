@@ -64,6 +64,7 @@ Offline mode is the default and requires no credentials. To inspect or validate 
 adversaryflow provider status
 adversaryflow provider configure
 adversaryflow provider validate
+adversaryflow provider profile status
 ```
 
 The supported hosted configuration is an OpenAI-compatible endpoint using `ADVERSARYFLOW_PROVIDER`, `ADVERSARYFLOW_ENDPOINT`, `ADVERSARYFLOW_MODEL`, and `ADVERSARYFLOW_API_KEY`. The API key is read from the process environment only; it is never written to project files or support bundles. Validation is non-networked.
@@ -75,6 +76,8 @@ adversaryflow provider test
 ```
 
 This is the only provider command that sends a network request. It sends a planning prompt and ability catalog, never an execution command or target data.
+
+Provider profiles store non-secret endpoint and model settings. After selecting a profile, `adversaryflow provider profile status` reports whether its required credential environment variable is available and gives the exact safe next step; it never displays the credential value.
 
 ## Unified campaign workflow
 

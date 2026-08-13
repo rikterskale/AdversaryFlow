@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from adversaryflow.provider import load_provider_config, validate_provider_config
-from adversaryflow.profiles import save_profile, use_profile
+from adversaryflow.profiles import activation_summary, save_profile, use_profile
 
 
 def test_offline_provider_is_valid_without_secret():
@@ -40,4 +40,20 @@ def test_active_provider_profile_is_loaded_without_environment_selector():
 def test_missing_selected_provider_profile_fails_validation():
     config = load_provider_config({"ADVERSARYFLOW_PROFILE": "renamed", "ADVERSARYFLOW_PROFILE_FILE": "artifacts/no-profiles.json"})
     assert validate_provider_config(config) == ["Provider profile 'renamed' was not found."]
+
+
+def test_profile_activation_summary_is_redacted_and_gives_a_recovery_step():
+    root = Path("artifacts/test-profiles") / str(uuid4())
+    save_profile("approved", "openai-compatible", "https://example.test/v1", "model", "TEAM_AI_KEY", root)
+    use_profile("approved", root)
+    missing_key = activation_summary(root=root, environ={})
+    assert missing_key["ready"] is False
+    assert missing_key["next"] == "Set TEAM_AI_KEY in your shell or secret manager, then run adversaryflow provider validate."
+    ready = activation_summary(root=root, environ={"TEAM_AI_KEY": "secret-value"})
+    assert ready["ready"] is True
+    assert ready["credential_configured"] is True
+    assert "secret-value" not in str(ready)
+    assert activation_summary(root=root / "no-profile-file", environ={})["active"] == "offline"
+    with pytest.raises(KeyError, match="Provider profile not found"):
+        activation_summary("missing", root=root, environ={})
 

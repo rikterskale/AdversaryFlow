@@ -43,6 +43,17 @@ def test_cli_provider_diagnose_and_campaign_list_are_nonexecuting(monkeypatch, c
     assert listed == []
 
 
+def test_cli_provider_profile_activation_explains_readiness_without_a_secret(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "use_profile", lambda name: Path("artifacts/providers/profiles.json"))
+    monkeypatch.setattr(cli, "activation_summary", lambda name=None: {"active": name or "approved", "ready": False, "credential_env": "TEAM_AI_KEY", "next": "Set TEAM_AI_KEY in your shell or secret manager, then run adversaryflow provider validate."})
+    activated = json.loads(_run(monkeypatch, capsys, "provider", "profile", "use", "approved"))
+    assert activated["active"] == "approved"
+    assert activated["ready"] is False
+    assert "secret-value" not in json.dumps(activated).lower()
+    status = json.loads(_run(monkeypatch, capsys, "provider", "profile", "status"))
+    assert status["next"].startswith("Set TEAM_AI_KEY")
+
+
 def test_cli_doctor_json_exits_successfully_after_safe_checks(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["adversaryflow", "doctor", "--json"])
     with pytest.raises(SystemExit) as exit_code:
@@ -116,6 +127,7 @@ def test_cli_provider_profile_commands_use_nonsecret_profile_helpers(monkeypatch
     monkeypatch.setattr(cli, "list_profiles", lambda: {"active": "offline", "profiles": {}})
     assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "list"))["active"] == "offline"
     monkeypatch.setattr(cli, "use_profile", lambda name: Path("artifacts/providers") / f"{name}.json")
+    monkeypatch.setattr(cli, "activation_summary", lambda name=None: {"active": name or "offline", "ready": True, "next": "Run adversaryflow provider validate, then provider test."})
     assert json.loads(_run(monkeypatch, capsys, "provider", "profile", "use", "approved"))["active"] == "approved"
     monkeypatch.setattr(cli, "save_profile", lambda *args: Path("artifacts/providers") / f"{args[0]}.json")
     saved = json.loads(_run(monkeypatch, capsys, "provider", "profile", "save", "approved", "--endpoint", "https://example.test/v1", "--model", "approved-model"))
