@@ -61,6 +61,14 @@ adversaryflow provider validate
 
 The supported hosted configuration is an OpenAI-compatible endpoint using `ADVERSARYFLOW_PROVIDER`, `ADVERSARYFLOW_ENDPOINT`, `ADVERSARYFLOW_MODEL`, and `ADVERSARYFLOW_API_KEY`. The API key is read from the process environment only; it is never written to project files or support bundles. Validation is non-networked.
 
+After configuring a provider, explicitly test one harmless planning request:
+
+```powershell
+adversaryflow provider test
+```
+
+This is the only provider command that sends a network request. It sends a planning prompt and ability catalog, never an execution command or target data.
+
 ## Product direction
 
 The intended workflow is: source-backed intelligence → novice-friendly campaign plan → manager review → scoped simulation → telemetry capture → gap report and retest plan.

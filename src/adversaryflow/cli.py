@@ -10,7 +10,7 @@ from .emulation import load_catalog
 from .workflow import approve_draft, build_gap_report, run_local_emulation
 from .doctor import run_doctor
 from .support import create_support_bundle
-from .provider import load_provider_config, provider_setup_instructions, validate_provider_config
+from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
 from .intel import fetch_attack_bundle, find_technique
 from .models import RulesOfEngagement
 from .planner import build_plan
@@ -59,6 +59,11 @@ def main() -> None:
     provider_sub.add_parser("status", help="show redacted provider configuration")
     provider_sub.add_parser("validate", help="validate settings without network access")
     provider_sub.add_parser("configure", help="show provider configuration instructions")
+    test_provider = provider_sub.add_parser("test", help="send one harmless planning request")
+    test_provider.add_argument("--actor", default="APT29")
+    test_provider.add_argument("--target", default="local-lab")
+    test_provider.add_argument("--objective", default="validate endpoint process visibility")
+    test_provider.add_argument("--catalog", default="content/abilities/catalog.json")
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -111,6 +116,17 @@ def main() -> None:
             print(json.dumps(config.as_dict(), indent=2))
         elif args.provider_command == "configure":
             print(provider_setup_instructions())
+        elif args.provider_command == "test":
+            if config.name != "openai-compatible":
+                print("Provider test requires ADVERSARYFLOW_PROVIDER=openai-compatible.")
+                raise SystemExit(1)
+            try:
+                request = CampaignRequest(args.actor, args.target, args.objective, "linux")
+                draft = OpenAICompatiblePlanner(config).draft(request, load_catalog(args.catalog))
+                print(json.dumps({"success": True, "draft": draft.as_dict()}, indent=2))
+            except ProviderError as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
         else:
             print(json.dumps({"valid": not errors, "configuration": config.as_dict(), "errors": errors}, indent=2))
             raise SystemExit(0 if not errors else 1)
