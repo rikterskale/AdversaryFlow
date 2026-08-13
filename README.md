@@ -34,13 +34,13 @@ AdversaryFlow adopts the reference project's useful control-plane patterns: immu
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-python -m adversaryflow validate examples\roe.yaml
-python -m adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
-python -m adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
-python -m adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
-python -m adversaryflow doctor
-python -m adversaryflow support-bundle
-python -m adversaryflow capabilities
+adversaryflow validate examples\roe.yaml
+adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
+adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
+adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
+adversaryflow doctor
+adversaryflow support-bundle
+adversaryflow capabilities
 ```
 
 Use `--live` only in a future approved adapter; the current release always produces a dry-run plan.

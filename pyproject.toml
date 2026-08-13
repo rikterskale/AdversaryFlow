@@ -9,9 +9,11 @@ description = "Safety-first AI-assisted purple-team campaign planning"
 requires-python = ">=3.11"
 dependencies = ["PyYAML>=6.0"]
 
+[project.scripts]
+adversaryflow = "adversaryflow.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-

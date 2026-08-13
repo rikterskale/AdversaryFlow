@@ -4,16 +4,16 @@
 
 ```powershell
 .\scripts\install.ps1
-.\.venv\Scripts\python.exe -m adversaryflow doctor
-.\.venv\Scripts\python.exe -m adversaryflow demo
+.\.venv\Scripts\adversaryflow.exe doctor
+.\.venv\Scripts\adversaryflow.exe demo
 ```
 
 ## Debian and Ubuntu
 
 ```bash
 bash scripts/install.sh
-.venv/bin/python -m adversaryflow doctor
-.venv/bin/python -m adversaryflow demo
+.venv/bin/adversaryflow doctor
+.venv/bin/adversaryflow demo
 ```
 
 The same procedure is supported on current 64-bit Debian and Ubuntu releases. Python 3.11 or newer is required.
@@ -24,8 +24,8 @@ Use a virtual environment rather than installing into the system Python:
 
 ```bash
 bash scripts/install.sh
-.venv/bin/python -m adversaryflow doctor --json
-.venv/bin/python -m adversaryflow demo
+.venv/bin/adversaryflow doctor --json
+.venv/bin/adversaryflow demo
 ```
 
 Kali-specific tools are not required for the offline demo. AdversaryFlow treats Kali as a supported operator workstation, while its safe catalog controls which emulation capabilities can run.
