@@ -23,7 +23,9 @@ def run_expect_failure(command: list[str], cwd: Path, env: dict[str, str] | None
     result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, env=env)
     if result.returncode == 0:
         raise RuntimeError(f"Expected command to fail: {' '.join(command)}")
-    return result.stdout
+    # CLI diagnostics conventionally use stderr; assert against both streams so
+    # the release standard verifies the guidance the operator actually sees.
+    return result.stdout + result.stderr
 
 
 def journey(release_dir: str | Path) -> list[str]:
@@ -56,6 +58,19 @@ def journey(release_dir: str | Path) -> list[str]:
             run([str(python), "-m", "pip", "install", str(install_target)], env_root)
             run([str(python), "-m", "adversaryflow", "doctor", "--json"], env_root)
             run([str(python), "-m", "adversaryflow", "doctor", "--fix", "--json"], env_root)
+            run([str(python), "-m", "adversaryflow", "validate", "examples/roe.yaml"], env_root)
+            run([str(python), "-m", "adversaryflow", "capabilities"], env_root)
+            run([str(python), "-m", "adversaryflow", "adapter", "status"], env_root)
+            run([str(python), "-m", "adversaryflow", "draft", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "release draft"], env_root)
+            plan_output = run_capture([str(python), "-m", "adversaryflow", "plan", "--roe", "examples/roe.yaml", "--actor", "APT29", "--technique", "T1059"], env_root)
+            if "DRY RUN ONLY" not in plan_output:
+                raise RuntimeError(f"MITRE dry-run planning did not complete for {artifact.name}")
+            missing_technique = run_expect_failure([
+                str(python), "-m", "adversaryflow", "plan", "--roe", "examples/roe.yaml",
+                "--actor", "APT29", "--technique", "T0000",
+            ], env_root)
+            if "Technique not found in MITRE ATT&CK source" not in missing_technique:
+                raise RuntimeError(f"MITRE troubleshooting did not explain a missing technique for {artifact.name}")
             guide = run_capture([str(python), "-m", "adversaryflow", "guide"], env_root)
             if "Approve the local synthetic emulation" not in guide or "manager --open" not in guide:
                 raise RuntimeError(f"Campaign guidance missing for {artifact.name}")
@@ -69,6 +84,9 @@ thread = threading.Thread(target=server.serve_forever, daemon=True)
 thread.start()
 try:
     base = f'http://127.0.0.1:{server.server_port}'
+    page = urllib.request.urlopen(base + '/').read().decode()
+    assert '/assets/manager.js' in page and '/assets/manager.css' in page
+    assert 'function draft(provider)' in urllib.request.urlopen(base + '/assets/manager.js').read().decode()
     request = urllib.request.Request(base + '/api/campaigns', data=json.dumps({'actor': 'APT29', 'target': 'local-lab', 'objective': 'installed manager smoke'}).encode(), headers={'Content-Type': 'application/json'}, method='POST')
     created = json.loads(urllib.request.urlopen(request).read())
     detail = json.loads(urllib.request.urlopen(base + '/api/campaigns/' + created['campaign_id']).read())
@@ -79,7 +97,18 @@ finally:
             run([str(python), "-c", manager_smoke], env_root)
             run([str(python), "-m", "adversaryflow", "demo", "--output", str(env_root / "runs")], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "validate"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "configure"], env_root)
             run([str(python), "-m", "adversaryflow", "provider", "diagnose"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "profile", "list"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "profile", "save", "release-test", "--endpoint", "https://example.test/v1", "--model", "test-model", "--credential-env", "RELEASE_TEST_KEY"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "profile", "use", "release-test"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "profile", "status"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "policy", "status"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "policy", "allow", "release-test"], env_root)
+            run([str(python), "-m", "adversaryflow", "provider", "profile", "remove", "release-test"], env_root)
+            provider_test = run_expect_failure([str(python), "-m", "adversaryflow", "provider", "test"], env_root)
+            if "Provider test requires" not in provider_test:
+                raise RuntimeError(f"Provider-test recovery was not actionable for {artifact.name}")
             campaign_output = run_capture([
                 str(python), "-m", "adversaryflow", "campaign", "--actor", "APT29",
                 "--objective", "validate endpoint process visibility", "--approve",
@@ -104,12 +133,26 @@ finally:
                 "--objective", "cancellation recovery rehearsal", "--campaign-root", str(env_root / "recovery-campaigns"),
             ], env_root)
             draft_id = json.loads(draft_output)["campaign_id"]
+            run([str(python), "-m", "adversaryflow", "campaign", "list", "--campaign-root", str(env_root / "recovery-campaigns")], env_root)
+            run([str(python), "-m", "adversaryflow", "campaign", "inspect", "--campaign-id", draft_id, "--campaign-root", str(env_root / "recovery-campaigns")], env_root)
             cancel_output = run_capture([
                 str(python), "-m", "adversaryflow", "campaign", "cancel", "--campaign-id", draft_id,
                 "--reason", "operator requested stop", "--campaign-root", str(env_root / "recovery-campaigns"),
             ], env_root)
             if json.loads(cancel_output).get("status") != "cancelled":
                 raise RuntimeError(f"Campaign cancellation recovery was not exercised for {artifact.name}")
+            rejected = run_capture([
+                str(python), "-m", "adversaryflow", "campaign", "--actor", "APT29", "--objective", "rejection rehearsal",
+                "--campaign-root", str(env_root / "rejection-campaigns"),
+            ], env_root)
+            rejected_id = json.loads(rejected)["campaign_id"]
+            run([str(python), "-m", "adversaryflow", "campaign", "reject", "--campaign-id", rejected_id, "--approver", "manager@example.test", "--reason", "not scheduled", "--campaign-root", str(env_root / "rejection-campaigns")], env_root)
+            reset = run_capture([
+                str(python), "-m", "adversaryflow", "campaign", "--actor", "APT29", "--objective", "reset rehearsal",
+                "--campaign-root", str(env_root / "reset-campaigns"),
+            ], env_root)
+            reset_id = json.loads(reset)["campaign_id"]
+            run([str(python), "-m", "adversaryflow", "campaign", "reset", "--campaign-id", reset_id, "--confirm", "--campaign-root", str(env_root / "reset-campaigns")], env_root)
             invalid_provider = run_expect_failure([
                 str(python), "-m", "adversaryflow", "provider", "validate",
             ], env_root, env={**os.environ, "ADVERSARYFLOW_PROVIDER": "unsupported-provider"})

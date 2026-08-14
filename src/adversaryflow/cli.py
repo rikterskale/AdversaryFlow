@@ -349,7 +349,7 @@ def main() -> None:
         return
 
     if args.command == "capabilities":
-        print(Path("capabilities.json").read_text(encoding="utf-8"))
+        print(__import__("importlib.resources", fromlist=["files"]).files("adversaryflow.resources").joinpath("capabilities.json").read_text(encoding="utf-8"))
         return
 
     if args.command == "provider":

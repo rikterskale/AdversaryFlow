@@ -1,10 +1,10 @@
 # New-user release-readiness standard
 
-A release is ready only when CI proves the following standard using the built wheel, source distribution, and source ZIP in fresh virtual environments. Test coverage is useful feedback, but it is not release readiness on its own.
+This is a mandatory release gate, not a target. A release is ready only when CI proves every checkpoint below from built artifacts in fresh environments. A coverage percentage, a successful import, or a developer-machine run cannot waive a failed checkpoint. There are no exceptions.
 
 ## Proven installation
 
-Each release artifact must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, execution-adapter readiness, loopback, and offline-mode checks. The adapter readiness result must identify only the built-in local-synthetic adapter and the simulation-only boundary.
+Each wheel, source distribution, and source ZIP must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, execution-adapter readiness, loopback, and offline-mode checks. The adapter readiness result must identify only the built-in local-synthetic adapter and the simulation-only boundary.
 
 ## Guided troubleshooting
 
@@ -12,11 +12,11 @@ The installed CLI must run `doctor --fix --json`, `provider validate`, `provider
 
 ## Full-feature validation
 
-The clean install must run the offline demo, create and approve a persisted campaign, generate reports, expose the guided manager CLI, and validate the campaign guide. These checks prove the documented user path rather than only importing modules.
+The canonical clean wheel installation must execute every supported user-facing operation: RoE validation, capability and adapter inspection, offline and provider-configured drafting, campaign lifecycle decisions, approval and fixed local-synthetic emulation, reports, provider profiles and policy, provider diagnostics, MITRE dry-run planning, support bundles, the local demo, and static manager assets. Every parser option must be represented by an executable test or an explicit expected-failure recovery test; documentation coverage alone is insufficient.
 
 ## Tested recovery paths
 
-The release journey must demonstrate `--fallback-offline` when a provider is invalid, cancellation of an incomplete campaign, and actionable validation output for an unsupported provider. No recovery path may bypass RoE approval or the simulation-only boundary.
+The release journey must demonstrate `doctor --fix`, `--fallback-offline` when a provider is invalid, rejection, cancellation, reset with typed confirmation, an invalid provider configuration, missing credentials, and a missing MITRE technique. Each recovery must return an actionable error and must not bypass RoE approval or the simulation-only boundary.
 
 ## Documentation
 
@@ -24,4 +24,4 @@ The README and installation guide must document the guide, local manager, troubl
 
 ## CI enforcement
 
-The `release-readiness` CI job builds the release artifacts and runs `scripts/release_readiness.py` on Ubuntu and Windows. Treat this job as a required check before release tagging.
+The `new-user-release-standard` CI job builds release artifacts and runs `scripts/release_readiness.py` on Ubuntu and Windows. It is required before release tagging. Any failed installation, operation, recovery path, static asset, report, documentation assertion, or parser-surface assertion fails the build.

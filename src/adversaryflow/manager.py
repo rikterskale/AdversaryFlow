@@ -230,7 +230,7 @@ def _operator_readiness(roe_path: str, catalog_path: str) -> dict[str, object]:
     """Combine read-only RoE, capability, and adapter information for the operator UI."""
     context = _manager_context(roe_path, catalog_path)
     active_catalog = catalog_path if Path(catalog_path).exists() or catalog_path != "content/abilities/catalog.json" else str(default_catalog_path())
-    capabilities = json.loads(Path("capabilities.json").read_text(encoding="utf-8"))
+    capabilities = json.loads(files("adversaryflow.resources").joinpath("capabilities.json").read_text(encoding="utf-8"))
     return {"roe": context["roe"], "capabilities": capabilities, "adapter": adapter_readiness(load_catalog(active_catalog))}
 
 
