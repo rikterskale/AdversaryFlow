@@ -1,0 +1,49 @@
+{
+  "format": "ADVERSARYFLOW-CTID-FIXTURES-1",
+  "vocabulary": {
+    "scenario": "CTID APT29 adversary-emulation-inspired identity and cloud detection validation",
+    "notice": "These are benign, pre-registered telemetry fixtures. They do not register devices, alter OAuth applications, authenticate, or contact a cloud service."
+  },
+  "fixtures": [
+    {
+      "id": "fixture-entra-device-registration",
+      "ctid_scenario": "APT29 identity persistence validation",
+      "technique_id": "T1098.005",
+      "name": "Simulated Entra device registration",
+      "source": "entra-audit",
+      "event_type": "synthetic.device_registration",
+      "expected_detection": "Alert or investigation for a new device registration on a protected test account.",
+      "rule_guidance": "Correlate device registration with identity risk, new location, and privileged-account context."
+    },
+    {
+      "id": "fixture-oauth-credential-added",
+      "ctid_scenario": "APT29 cloud persistence validation",
+      "technique_id": "T1098.001",
+      "name": "Simulated OAuth application credential addition",
+      "source": "entra-audit",
+      "event_type": "synthetic.oauth_credential_added",
+      "expected_detection": "Alert or investigation for an application credential addition or permission escalation.",
+      "rule_guidance": "Monitor application credential additions, consent, and high-risk permission changes."
+    },
+    {
+      "id": "fixture-suspicious-sign-in",
+      "ctid_scenario": "APT29 cloud access validation",
+      "technique_id": "T1078.004",
+      "name": "Simulated suspicious cloud sign-in pattern",
+      "source": "entra-signin",
+      "event_type": "synthetic.suspicious_signin",
+      "expected_detection": "Alert or investigation for a test-account sign-in risk pattern.",
+      "rule_guidance": "Correlate unusual location, dormant account, risk state, and sensitive follow-on activity."
+    },
+    {
+      "id": "fixture-encoded-powershell",
+      "ctid_scenario": "APT29 endpoint execution validation",
+      "technique_id": "T1059.001",
+      "name": "Simulated encoded PowerShell detection",
+      "source": "endpoint",
+      "event_type": "synthetic.encoded_powershell",
+      "expected_detection": "Alert or investigation for an encoded PowerShell indicator on a test endpoint.",
+      "rule_guidance": "Alert on encoded-command indicators with parent-process and user context; validate false positives in the lab."
+    }
+  ]
+}

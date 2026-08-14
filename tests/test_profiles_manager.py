@@ -84,6 +84,8 @@ def test_manager_health_and_campaign_listing():
         assert "Provider compatibility wizard" in page
         assert "ATT&amp;CK learning hub" in page
         assert "Rules of Engagement editor" in page
+        assert "APT29 CTID identity-and-cloud fixture validation" in page
+        assert "Actor validation profile" in page
         script = urllib.request.urlopen(base + "/assets/manager.js").read().decode()
         assert "function draft(provider)" in script
         assert "function approve(id)" in script
@@ -95,6 +97,10 @@ def test_manager_health_and_campaign_listing():
         assert "function learnTechnique()" in script
         assert "function detectionMappings()" in script
         assert "function archiveControls(id)" in script
+        assert "function createCtidFixtureBundle()" in script
+        assert "function assessCtidFixtures()" in script
+        assert "function saveActorProfile()" in script
+        assert "function runActorProfile(name)" in script
         assert "function saveRoeEditor()" in script
         compatibility = json.loads(urllib.request.urlopen(base + "/api/provider/compatibility").read())
         assert "checks" in compatibility
@@ -102,6 +108,19 @@ def test_manager_health_and_campaign_listing():
         assert learning["abilities"]
         mappings = json.loads(urllib.request.urlopen(base + "/api/detection-mappings?technique=T1059").read())
         assert mappings["mappings"]
+        fixture_catalog = json.loads(urllib.request.urlopen(base + "/api/ctid-fixtures").read())
+        assert len(fixture_catalog["fixtures"]) == 4
+        assert json.loads(urllib.request.urlopen(base + "/api/actor-profiles").read())["profiles"] == []
+        actor_profile = _manager_post(base, "/api/actor-profiles", {"name": "scattered-spider", "actor": "Scattered Spider", "aliases": ["UNC3944"], "sources": ["internal exercise brief"], "technique_ids": ["T1078.004"], "fixture_ids": ["fixture-suspicious-sign-in"]})
+        assert actor_profile["name"] == "scattered-spider"
+        actor_plan = json.loads(urllib.request.urlopen(base + "/api/actor-profiles/scattered-spider/plan").read())
+        assert len(actor_plan["coverage"]) == 1
+        actor_run = _manager_post(base, "/api/actor-profiles/scattered-spider/run", {})
+        assert len(actor_run["fixtures"]) == 1
+        fixture_run = _manager_post(base, "/api/ctid-fixtures", {})
+        assert fixture_run["run_id"].startswith("ctid-fixture-")
+        assessment = _manager_post(base, "/api/ctid-fixtures/assess", {"bundle": fixture_run["bundle"], "observed_fixture_ids": ["fixture-suspicious-sign-in"]})
+        assert assessment["detection_gap_count"] == 3
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
