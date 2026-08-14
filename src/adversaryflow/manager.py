@@ -6,7 +6,7 @@ import webbrowser
 from importlib.resources import files
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import yaml
 
@@ -25,6 +25,7 @@ from .models import RulesOfEngagement
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
 from .campaign_service import complete_saved_campaign
+from .product_tools import export_executive_summary, read_roe_editor, save_roe_editor, search_campaign_archive, update_campaign_archive, update_campaign_tags
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -170,6 +171,32 @@ def _provider_status() -> dict[str, object]:
     """Return only non-secret provider readiness data for the local UI."""
     config = load_provider_config()
     return {"configuration": config.as_dict(), "valid": not validate_provider_config(config), "errors": validate_provider_config(config), "profiles": list_profiles(), "activation": activation_summary(), "policy": policy_summary(), "setup": provider_setup_instructions()}
+
+
+def _provider_compatibility() -> dict[str, object]:
+    """Explain whether a provider can be tested without exposing a credential."""
+    status = _provider_status(); config = status["configuration"]
+    checks = [
+        {"label": "An active provider profile is selected", "passed": config["provider"] == "openai-compatible"},
+        {"label": "The endpoint uses HTTPS", "passed": not config["endpoint"] or str(config["endpoint"]).startswith("https://")},
+        {"label": "A credential variable is configured in the local environment", "passed": bool(config["credential_configured"])},
+        {"label": "The exact provider settings are policy-approved", "passed": not status["errors"]},
+    ]
+    return {"checks": checks, "ready": all(check["passed"] for check in checks), "next": "Run the one-request compatibility test." if all(check["passed"] for check in checks) else "Complete the failed setup steps; no request has been sent."}
+
+
+def _learning_context(catalog_path: str, technique_id: str = "") -> dict[str, object]:
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    chosen = technique_id.strip().upper()
+    abilities = [ability for ability in load_catalog(catalog_path) if not chosen or ability.technique_id == chosen or ability.technique_id.startswith(chosen + ".")]
+    return {"technique": chosen or "all reviewed techniques", "abilities": [{"id": ability.id, "name": ability.name, "technique_id": ability.technique_id, "simulation_action": ability.simulation_action, "network_scope": ability.network_scope, "expected_telemetry": [item.description for item in ability.expected_telemetry], "interpretation": "Confirm each listed synthetic signal is present, then use any gap to define a narrower retest."} for ability in abilities], "boundary": "Reviewed abilities are local synthetic simulations only; they do not provide remote execution or target contact."}
+
+
+def _detection_mappings(catalog_path: str, technique_id: str = "") -> dict[str, object]:
+    learning = _learning_context(catalog_path, technique_id)
+    mappings = [{"technique_id": ability["technique_id"], "ability": ability["name"], "telemetry": ability["expected_telemetry"], "recommendation": "Create or tune a detection rule for the listed synthetic telemetry, then rerun this local simulation and compare the report.", "rule_formats": ["Sigma concept", "SIEM correlation", "EDR analytic"]} for ability in learning["abilities"]]
+    return {"mappings": mappings, "notice": "Recommendations are defensive validation guidance. Review platform-specific fields before implementing a detection rule."}
 
 
 def _save_provider_profile(data: dict[str, object]) -> dict[str, object]:
@@ -450,14 +477,19 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             return payload
 
         def do_GET(self) -> None:  # noqa: N802
-            path = urlparse(self.path).path
+            parsed = urlparse(self.path); path = parsed.path; query = parse_qs(parsed.query)
             if path == "/": self._send(200, PAGE, "text/html; charset=utf-8")
             elif path == "/assets/manager.css": self._send(200, files("adversaryflow.resources").joinpath("manager.css").read_text(encoding="utf-8"), "text/css; charset=utf-8")
             elif path == "/assets/manager.js": self._send(200, files("adversaryflow.resources").joinpath("manager.js").read_text(encoding="utf-8"), "application/javascript; charset=utf-8")
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
             elif path == "/api/provider": self._send(200, _provider_status())
+            elif path == "/api/provider/compatibility": self._send(200, _provider_compatibility())
             elif path == "/api/operator-readiness": self._send(200, _operator_readiness(roe_path, catalog_path))
+            elif path == "/api/learning": self._send(200, _learning_context(catalog_path, query.get("technique", [""])[0]))
+            elif path == "/api/detection-mappings": self._send(200, _detection_mappings(catalog_path, query.get("technique", [""])[0]))
+            elif path == "/api/archive": self._send(200, {"campaigns": search_campaign_archive(campaign_root, query.get("q", [""])[0], query.get("tag", [""])[0])})
+            elif path == "/api/roe": self._send(200, read_roe_editor(roe_path))
             elif path == "/api/campaigns":
                 campaigns = list_campaigns(campaign_root)
                 for campaign in campaigns:
@@ -489,6 +521,18 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                 elif path == "/api/provider/allow": self._send(200, _allow_provider_profile(self._body()))
                 elif path == "/api/provider/remove": self._send(200, _remove_provider_profile(self._body()))
                 elif path == "/api/provider/test": self._send(200, _provider_test(roe_path, catalog_path, self._body()))
+                elif path == "/api/roe":
+                    data = self._body()
+                    self._send(200, save_roe_editor(roe_path, data, _input(data, "editor", 100)))
+                elif path == "/api/archive/tags":
+                    data = self._body()
+                    self._send(200, update_campaign_tags(campaign_root, _input(data, "campaign_id", 100), data.get("tags", [])))
+                elif path == "/api/archive/controls":
+                    data = self._body()
+                    self._send(200, update_campaign_archive(campaign_root, _input(data, "campaign_id", 100), _input(data, "owner", 100), data.get("retention_days")))
+                elif path == "/api/exports/executive-summary":
+                    data = self._body()
+                    self._send(201, export_executive_summary(campaign_root, _input(data, "campaign_id", 100)))
                 elif path == "/api/campaigns/provider": self._send(201, _provider_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path.startswith("/api/campaigns/"):

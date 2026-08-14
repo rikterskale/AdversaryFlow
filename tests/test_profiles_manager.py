@@ -80,12 +80,28 @@ def test_manager_health_and_campaign_listing():
         assert "Provider setup and troubleshooting" in page
         assert "Run safe local demo" in page
         assert "Common questions" in page
+        assert "Campaign archive and stakeholder export" in page
+        assert "Provider compatibility wizard" in page
+        assert "ATT&amp;CK learning hub" in page
+        assert "Rules of Engagement editor" in page
         script = urllib.request.urlopen(base + "/assets/manager.js").read().decode()
         assert "function draft(provider)" in script
         assert "function approve(id)" in script
         assert "function providerTest()" in script
         assert "function fixReadiness()" in script
         assert "function explainError" in script
+        assert "function archiveSearch()" in script
+        assert "function providerCompatibility()" in script
+        assert "function learnTechnique()" in script
+        assert "function detectionMappings()" in script
+        assert "function archiveControls(id)" in script
+        assert "function saveRoeEditor()" in script
+        compatibility = json.loads(urllib.request.urlopen(base + "/api/provider/compatibility").read())
+        assert "checks" in compatibility
+        learning = json.loads(urllib.request.urlopen(base + "/api/learning?technique=T1059").read())
+        assert learning["abilities"]
+        mappings = json.loads(urllib.request.urlopen(base + "/api/detection-mappings?technique=T1059").read())
+        assert mappings["mappings"]
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
