@@ -480,6 +480,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             path = urlparse(self.path).path
             try:
                 if path == "/api/doctor": self._send(200, run_doctor())
+                elif path == "/api/doctor/fix": self._send(200, run_doctor(fix=True))
                 elif path == "/api/support-bundle": self._send(201, {"success": True, "bundle": str(create_support_bundle("artifacts/support", roe_path))})
                 elif path == "/api/demo": self._send(200, _run_demo(roe_path, catalog_path, self._body()))
                 elif path == "/api/plan": self._send(200, _mitre_plan(roe_path, self._body()))

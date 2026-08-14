@@ -75,12 +75,17 @@ def test_manager_health_and_campaign_listing():
         assert '/assets/manager.css' in page
         assert '/assets/manager.js' in page
         assert "Create a review draft" in page
-        assert "Provider and policy" in page
-        assert "Run local synthetic demo" in page
+        assert "First time here?" in page
+        assert "Your next step" in page
+        assert "Provider setup and troubleshooting" in page
+        assert "Run safe local demo" in page
+        assert "Common questions" in page
         script = urllib.request.urlopen(base + "/assets/manager.js").read().decode()
         assert "function draft(provider)" in script
         assert "function approve(id)" in script
         assert "function providerTest()" in script
+        assert "function fixReadiness()" in script
+        assert "function explainError" in script
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
@@ -91,6 +96,8 @@ def test_manager_health_and_campaign_listing():
         request = urllib.request.Request(base + "/api/doctor", method="POST")
         doctor = json.loads(urllib.request.urlopen(request).read())
         assert doctor["passed"] is True
+        fixed = json.loads(urllib.request.urlopen(urllib.request.Request(base + "/api/doctor/fix", method="POST")).read())
+        assert "fixes_applied" in fixed
         with pytest.raises(HTTPError) as unsupported_post:
             urllib.request.urlopen(urllib.request.Request(base + "/api/not-allowed", method="POST"))
         assert unsupported_post.value.code == 404
