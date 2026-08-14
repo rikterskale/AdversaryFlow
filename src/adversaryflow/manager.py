@@ -15,7 +15,8 @@ from .doctor import run_doctor
 from .emulation import default_catalog_path, load_catalog
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign
 from .models import RulesOfEngagement
-from .workflow import campaign_integrity_hashes, load_campaign_draft, save_campaign_draft
+from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
+from .reports import write_campaign_reports
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -53,6 +54,13 @@ function statusLabel(status){return ({'awaiting-approval':'Needs approval','comp
 async function loadCampaigns(){try{let d=await api('/api/campaigns'),filter=q('status-filter').value;q('portfolio').innerHTML=portfolio(d.summary);let campaigns=filter==='all'?d.campaigns:d.campaigns.filter(c=>c.status===filter);if(!campaigns.length){q('campaigns').textContent=filter==='all'?'No saved campaigns yet. Create an offline draft after step 1.':'No campaigns match this status.';return}q('campaigns').innerHTML='<table><tr><th>Campaign</th><th>Status</th><th>Provider</th><th>Safe next action</th></tr>'+campaigns.map(c=>'<tr><td>'+esc(c.campaign_id)+'</td><td>'+esc(statusLabel(c.status))+'</td><td>'+esc(c.provider)+'</td><td class="inline">'+actions(c)+'</td></tr>').join('')+'</table>'}catch(e){q('campaigns').textContent='Could not load campaigns: '+e.message}}
 function actions(c){let id=encodeURIComponent(c.campaign_id),x='<button class="secondary" onclick="inspectCampaign(\''+id+'\')">Inspect</button>';if(c.status==='awaiting-approval')return x+'<button class="warn" onclick="recordDecision(\''+id+'\',\'reject\')">Reject</button><button class="warn" onclick="recordDecision(\''+id+'\',\'cancel\')">Cancel</button>';if(c.status==='completed'&&c.report_url)return x+'<a href="'+esc(c.report_url)+'">Open report</a>';return x+' Recorded decision; create a new draft if scope changes.'}
 checklist();showStep(0);loadContext();loadCampaigns()
+</script><script>
+document.querySelector('.lede').textContent='Follow one step at a time. This guide checks local readiness, creates reviewed drafts, and lets the named RoE approver run the fixed local-synthetic workflow after explicit confirmation.';
+document.querySelector('.notice').innerHTML='<strong>Boundary:</strong> browser actions remain local and use only the reviewed fixed local-synthetic adapter. Approval requires the named RoE approver, typed campaign-specific confirmation, and integrity verification.';
+steps[3]=['Obtain explicit approval','The RoE-named approver can authorize the reviewed local synthetic emulation here after every readiness check passes.','Inspect the campaign and use the approval panel.','Enter the named approver and the campaign-specific confirmation, then approve and run.','Next: learn from results'];showStep(currentStep);
+function approvalPanel(d){let x=d.detail;if(d.metadata.status!=='awaiting-approval')return '';let disabled=x.approval_readiness.ready?'':' disabled';return '<section class="card"><h3>Approve and run local synthetic emulation</h3><p class="muted">This is available only to the RoE-named approver after every readiness check passes. It runs the fixed local-synthetic adapter; it cannot execute operator-supplied commands or contact an external target.</p><label>RoE approver<input id="gui-approver" value="'+esc(x.roe.approver_name)+'" maxlength="200"></label><label>Type APPROVE '+esc(d.metadata.campaign_id)+' to confirm<input id="gui-confirmation" autocomplete="off" maxlength="300" placeholder="APPROVE '+esc(d.metadata.campaign_id)+'"></label><button id="approve-run"'+disabled+' onclick="approveCampaign(\''+esc(d.metadata.campaign_id)+'\')">Approve and run local simulation</button><p id="approval-result" class="muted"></p></section>'}
+async function approveCampaign(id){let button=q('approve-run'),result=q('approval-result');if(!confirm('Approve '+id+' and start its reviewed local synthetic emulation?'))return;button.disabled=true;result.textContent='Validating reviewed inputs and starting local synthetic emulation…';try{let response=await api('/api/campaigns/'+encodeURIComponent(id)+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approver:q('gui-approver').value,confirmation:q('gui-confirmation').value})});result.textContent='Completed. Local run: '+response.run_dir;showStep(4);await loadCampaigns();await inspectCampaign(id)}catch(e){result.textContent='Approval or emulation did not complete: '+e.message;button.disabled=false}}
+async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));complete('review');q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').insertAdjacentHTML('beforeend',approvalPanel(d));q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
 </script></body></html>"""
 
 
@@ -87,7 +95,34 @@ def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: d
         provider_metadata={"provider": "offline", "status": "browser-offline-draft"},
         roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"],
     )
-    return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": "offline", "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft. Approval and emulation remain CLI-only."}
+    return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": "offline", "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft, then obtain explicit RoE approval before local synthetic emulation."}
+
+
+def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
+    """Approve and run one reviewed campaign through the fixed local-synthetic adapter."""
+    approver = _input(data, "approver")
+    confirmation = _input(data, "confirmation")
+    if confirmation != f"APPROVE {campaign_id}":
+        raise PermissionError(f"Type 'APPROVE {campaign_id}' to confirm approval and local synthetic emulation")
+    campaign = inspect_campaign(campaign_root, campaign_id)
+    metadata = campaign.get("metadata", {})
+    if metadata.get("status") != "awaiting-approval":
+        raise ValueError("Only campaigns awaiting approval can be approved and run")
+    roe = _manager_roe(roe_path)
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    abilities = load_catalog(catalog_path)
+    draft, saved_metadata = load_campaign_draft(campaign["campaign_dir"])
+    verify_campaign_integrity(draft, saved_metadata, roe, abilities)
+    approval = approve_draft(draft, roe, abilities, approver, saved_metadata["plan_hash"])
+    run_dir = run_local_emulation(draft, abilities, approval, "artifacts/runs")
+    campaign_dir = Path(campaign["campaign_dir"])
+    (campaign_dir / "approval.json").write_text(json.dumps(approval.__dict__, indent=2), encoding="utf-8")
+    completed_metadata = json.loads((campaign_dir / "metadata.json").read_text(encoding="utf-8"))
+    completed_metadata.update({"status": "completed", "run_dir": str(run_dir)})
+    (campaign_dir / "metadata.json").write_text(json.dumps(completed_metadata, indent=2), encoding="utf-8")
+    write_campaign_reports(campaign_dir, run_dir)
+    return {"success": True, "stage": "completed", "campaign_id": campaign_id, "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)}
 
 
 def _report_summary(metadata: dict[str, object]) -> dict[str, object]:
@@ -185,7 +220,7 @@ def _approval_readiness(status: str, draft, roe: RulesOfEngagement, abilities: l
     return {
         "ready": ready,
         "checks": checks,
-        "next": "The named RoE approver may use the CLI approval command after confirming schedule and scope." if ready else "Do not approve. Resolve the failed checks or create a new reviewed draft.",
+        "next": "The named RoE approver may approve and run this reviewed local synthetic workflow after confirming schedule and scope." if ready else "Do not approve. Resolve the failed checks or create a new reviewed draft.",
     }
 
 
@@ -223,7 +258,7 @@ def _campaign_detail(campaign_root: str, campaign_id: str, roe_path: str, catalo
     selected = [ability for ability in abilities if ability.id in draft.ability_ids]
     status = str(metadata.get("status", "unknown"))
     next_action = {
-        "awaiting-approval": "Verify this summary, confirm the schedule, then use the CLI approval command only if the RoE approver authorizes it.",
+        "awaiting-approval": "Verify this summary, confirm the schedule, then the RoE approver may approve and run the reviewed local synthetic workflow.",
         "completed": "Open the report, review detection gaps, and create a new focused draft for any retest.",
         "rejected": "The rejection is recorded. Create a new draft only if scope or scheduling changes.",
         "cancelled": "The cancellation is recorded. Inspect the reason and create a new draft if work should resume.",
@@ -238,7 +273,7 @@ def _campaign_detail(campaign_root: str, campaign_id: str, roe_path: str, catalo
         "stop_conditions": list(draft.stop_conditions),
         "next_action": next_action,
         "report_url": f"/api/campaigns/{campaign_id}/report" if report.is_file() else None,
-        "report_review": "A report is available for review." if report.is_file() else "No report exists until a CLI-authorized local synthetic emulation completes.",
+        "report_review": "A report is available for review." if report.is_file() else "No report exists until a RoE-approved local synthetic emulation completes.",
         "report_summary": _report_summary(metadata),
         "decision_timeline": _decision_timeline(campaign["campaign_dir"], metadata),
         "approval_readiness": readiness,
@@ -299,13 +334,19 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path.startswith("/api/campaigns/"):
                     parts = path.split("/")
-                    if len(parts) != 5 or parts[4] not in {"reject", "cancel"}: self._send(404, {"error": "not found"}); return
-                    data = self._body(); campaign_id = parts[3]; reason = _input(data, "reason")
-                    if parts[4] == "reject":
+                    if len(parts) != 5 or parts[4] not in {"approve", "reject", "cancel"}: self._send(404, {"error": "not found"}); return
+                    data = self._body(); campaign_id = parts[3]
+                    if parts[4] == "approve":
+                        self._send(200, _approve_and_run(campaign_root, roe_path, catalog_path, campaign_id, data))
+                        return
+                    elif parts[4] == "reject":
+                        reason = _input(data, "reason")
                         approver = _input(data, "approver")
                         if approver != _manager_roe(roe_path).approver_name: raise PermissionError("Only the RoE approver can record a rejection")
                         record = reject_campaign(campaign_root, campaign_id, approver, reason); status = "rejected"
-                    else: record = cancel_campaign(campaign_root, campaign_id, reason); status = "cancelled"
+                    else:
+                        reason = _input(data, "reason")
+                        record = cancel_campaign(campaign_root, campaign_id, reason); status = "cancelled"
                     self._send(200, {"success": True, "status": status, "record": str(record)})
                 else: self._send(404, {"error": "not found"})
             except PermissionError as exc: self._send(403, {"error": str(exc)})

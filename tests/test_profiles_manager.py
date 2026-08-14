@@ -194,7 +194,7 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         assert inspected["detail"]["integrity"]["status"] == "verified"
         assert inspected["detail"]["scope"]["target"] == "local-lab"
         assert inspected["detail"]["abilities"]
-        assert "CLI" in inspected["detail"]["next_action"]
+        assert "approve and run" in inspected["detail"]["next_action"]
         readiness = inspected["detail"]["approval_readiness"]
         assert readiness["ready"] is True
         assert all(check["passed"] for check in readiness["checks"])
