@@ -24,6 +24,7 @@ from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject
 from .models import RulesOfEngagement
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
+from .campaign_service import complete_saved_campaign
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -90,6 +91,10 @@ q('profile-action-name').insertAdjacentHTML('afterend','<button class="warn" onc
 operatorReadiness();
 providerRefresh();
 </script></body></html>"""
+
+# The browser workspace is packaged as static assets rather than assembled from
+# Python string literals. Keep the API server as the only dynamic boundary.
+PAGE = files("adversaryflow.resources").joinpath("manager.html").read_text(encoding="utf-8")
 
 
 def _manager_roe(path: str) -> RulesOfEngagement:
@@ -258,25 +263,11 @@ def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campa
     confirmation = _input(data, "confirmation")
     if confirmation != f"APPROVE {campaign_id}":
         raise PermissionError(f"Type 'APPROVE {campaign_id}' to confirm approval and local synthetic emulation")
-    campaign = inspect_campaign(campaign_root, campaign_id)
-    metadata = campaign.get("metadata", {})
-    if metadata.get("status") != "awaiting-approval":
-        raise ValueError("Only campaigns awaiting approval can be approved and run")
     roe = _manager_roe(roe_path)
     if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
         catalog_path = str(default_catalog_path())
     abilities = load_catalog(catalog_path)
-    draft, saved_metadata = load_campaign_draft(campaign["campaign_dir"])
-    verify_campaign_integrity(draft, saved_metadata, roe, abilities)
-    approval = approve_draft(draft, roe, abilities, approver, saved_metadata["plan_hash"])
-    run_dir = run_local_emulation(draft, abilities, approval, "artifacts/runs")
-    campaign_dir = Path(campaign["campaign_dir"])
-    (campaign_dir / "approval.json").write_text(json.dumps(approval.__dict__, indent=2), encoding="utf-8")
-    completed_metadata = json.loads((campaign_dir / "metadata.json").read_text(encoding="utf-8"))
-    completed_metadata.update({"status": "completed", "run_dir": str(run_dir)})
-    (campaign_dir / "metadata.json").write_text(json.dumps(completed_metadata, indent=2), encoding="utf-8")
-    write_campaign_reports(campaign_dir, run_dir)
-    return {"success": True, "stage": "completed", "campaign_id": campaign_id, "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)}
+    return {"success": True, **complete_saved_campaign(campaign_root, campaign_id, roe, abilities, approver, "artifacts/runs")}
 
 
 def _report_summary(metadata: dict[str, object]) -> dict[str, object]:
@@ -461,6 +452,8 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
         def do_GET(self) -> None:  # noqa: N802
             path = urlparse(self.path).path
             if path == "/": self._send(200, PAGE, "text/html; charset=utf-8")
+            elif path == "/assets/manager.css": self._send(200, files("adversaryflow.resources").joinpath("manager.css").read_text(encoding="utf-8"), "text/css; charset=utf-8")
+            elif path == "/assets/manager.js": self._send(200, files("adversaryflow.resources").joinpath("manager.js").read_text(encoding="utf-8"), "application/javascript; charset=utf-8")
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
             elif path == "/api/provider": self._send(200, _provider_status())

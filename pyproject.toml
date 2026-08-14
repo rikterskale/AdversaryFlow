@@ -20,4 +20,4 @@ dev = ["pytest>=8.0", "pytest-cov>=5.0", "bandit>=1.7", "pip-audit>=2.7"]
 pythonpath = ["src"]
 
 [tool.setuptools.package-data]
-adversaryflow = ["resources/*.yaml", "resources/*.json"]
+adversaryflow = ["resources/*.yaml", "resources/*.json", "resources/*.html", "resources/*.css", "resources/*.js"]

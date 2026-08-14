@@ -72,30 +72,15 @@ def test_manager_health_and_campaign_listing():
         assert campaigns["summary"] == {"total": 0, "statuses": {"awaiting-approval": 0, "completed": 0, "rejected": 0, "cancelled": 0, "other": 0}}
         page = urllib.request.urlopen(base + "/").read().decode()
         assert "Campaign Guide" in page
-        assert "Start a safe campaign in five clear steps" in page
-        assert "Create safe offline draft" in page
-        assert "Your setup checklist" in page
-        assert "Saved in this browser only" in page
-        assert "function statusLabel(status)" in page
-        assert "function doctorSummary(result)" in page
-        assert "Copy fix" in page
-        assert "Plain-language safety summary" in page
-        assert "What will not happen:" in page
-        assert "Create safe example draft" in page
-        assert "function createSafeExample()" in page
-        assert "Your form entries are unchanged" in page
-        assert "q('create-example').disabled=!targetReady" in page
-        assert "Provider setup and diagnostics" in page
-        assert "MITRE ATT&CK dry-run planner" in page
-        assert "Create redacted support bundle" in page
-        assert 'onclick="inspectCampaign(&quot;' in page
-        assert "Approve and run local synthetic emulation" in page
-        assert "Current local scope" in page
-        assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
-        assert "active local RoE" in page
-        assert 'id="create-draft" onclick="createDraft()" disabled' in page
-        assert "It will not contact a target, run a command, use a hosted provider, approve a campaign, or start emulation." in page
-        assert "function updateDraftPreview()" in page
+        assert '/assets/manager.css' in page
+        assert '/assets/manager.js' in page
+        assert "Create a review draft" in page
+        assert "Provider and policy" in page
+        assert "Run local synthetic demo" in page
+        script = urllib.request.urlopen(base + "/assets/manager.js").read().decode()
+        assert "function draft(provider)" in script
+        assert "function approve(id)" in script
+        assert "function providerTest()" in script
         with pytest.raises(HTTPError) as missing_campaign:
             urllib.request.urlopen(base + "/api/campaigns/campaign-missing")
         assert missing_campaign.value.code == 404
@@ -233,6 +218,27 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
         second = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "validate process visibility"})
         cancelled = _manager_post(base, f"/api/campaigns/{second['campaign_id']}/cancel", {"reason": "operator requested stop"})
         assert cancelled["status"] == "cancelled"
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
+def test_manager_http_journey_drafts_approves_and_reports():
+    root = __import__("pathlib").Path("artifacts") / f"manager-journey-{uuid4()}"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(str(root)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        draft = _manager_post(base, "/api/campaigns", {"actor": "APT29", "target": "local-lab", "objective": "browser journey"})
+        campaign_id = draft["campaign_id"]
+        completed = _manager_post(base, f"/api/campaigns/{campaign_id}/approve", {
+            "approver": "manager@example.test", "confirmation": f"APPROVE {campaign_id}",
+        })
+        assert completed["stage"] == "completed"
+        detail = json.loads(urllib.request.urlopen(base + f"/api/campaigns/{campaign_id}").read())
+        assert detail["metadata"]["status"] == "completed"
+        assert "campaign-report.html" in detail["reports"]
     finally:
         server.shutdown()
         thread.join(timeout=2)

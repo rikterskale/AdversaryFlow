@@ -10,6 +10,7 @@ from .emulation import default_catalog_path, load_catalog
 from .adapters import adapter_readiness
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
+from .campaign_service import complete_saved_campaign
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from .doctor import run_doctor
 from .support import create_support_bundle
@@ -297,14 +298,7 @@ def main() -> None:
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
-                approval = approve_draft(draft_result, roe, abilities, args.approver or "", plan_hash)
-                run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
-                (campaign_dir / "approval.json").write_text(json.dumps(approval.__dict__, indent=2), encoding="utf-8")
-                completed_metadata = json.loads((campaign_dir / "metadata.json").read_text(encoding="utf-8"))
-                completed_metadata.update({"status": "completed", "run_dir": str(run_dir)})
-                (campaign_dir / "metadata.json").write_text(json.dumps(completed_metadata, indent=2), encoding="utf-8")
-                write_campaign_reports(campaign_dir, run_dir)
-                result.update({"stage": "completed", "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir)})
+                result.update(complete_saved_campaign(args.campaign_root, campaign_dir.name, roe, abilities, args.approver or "", args.output))
             except (PermissionError, ValueError) as exc:
                 print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))
                 raise SystemExit(1)
