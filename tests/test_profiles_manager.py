@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _portfolio_summary, _provider_status, _report_summary, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_status, _report_summary, _reset_saved_campaign, _terminal_next_step, make_handler, serve
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -253,6 +253,22 @@ def test_manager_mitre_plan_is_dry_run_and_records_no_execution(monkeypatch):
     result = _mitre_plan("examples/roe.yaml", {"actor": "APT29", "target": "local-lab", "technique": "t1059"})
     assert result["notice"] == "DRY RUN ONLY"
     assert result["plan"]["steps"][0]["technique_id"] == "T1059"
+
+
+def test_manager_operator_readiness_and_campaign_reset_confirmation():
+    readiness = _operator_readiness("examples/roe.yaml", "content/abilities/catalog.json")
+    assert readiness["roe"]["approved_targets"] == ["local-lab"]
+    assert readiness["adapter"]["execution_boundary"] == "simulation-only"
+    assert readiness["capabilities"]["format"] == "ADVERSARYFLOW-CAPABILITIES-1"
+
+    root = f"artifacts/test-manager-reset-{uuid4()}"
+    campaign_id = _offline_draft(root, "examples/roe.yaml", "content/abilities/catalog.json", {
+        "actor": "APT29", "target": "local-lab", "objective": "verify reset confirmation",
+    })["campaign_id"]
+    with pytest.raises(PermissionError, match="Type 'RESET"):
+        _reset_saved_campaign(root, campaign_id, {"confirmation": "RESET another-campaign"})
+    assert _reset_saved_campaign(root, campaign_id, {"confirmation": f"RESET {campaign_id}"})["status"] == "reset"
+    assert not (__import__("pathlib").Path(root) / campaign_id).exists()
 
 
 @pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])

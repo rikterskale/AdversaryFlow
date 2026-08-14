@@ -13,13 +13,14 @@ import yaml
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .doctor import run_doctor
 from .support import create_support_bundle
-from .provider import load_provider_config, provider_setup_instructions, validate_provider_config
+from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
 from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, save_profile, use_profile
 from .intel import fetch_attack_bundle, find_technique
 from .planner import build_plan
 from .audit import AuditLog
 from .emulation import default_catalog_path, load_catalog
-from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign
+from .adapters import adapter_readiness
+from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign, reset_campaign
 from .models import RulesOfEngagement
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
@@ -74,6 +75,13 @@ async function useProviderProfile(){let result=q('provider-result');try{let d=aw
 async function allowProviderProfile(){let result=q('provider-result');try{let d=await api('/api/provider/allow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:q('profile-action-name').value})});result.textContent='Allowed exact settings for '+d.allowed+'.';providerRefresh()}catch(e){result.textContent='Profile was not allowed: '+e.message}}
 async function createMitrePlan(){let out=q('plan-result');out.textContent='Fetching official ATT&CK data and creating a dry-run plan…';try{let d=await api('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('plan-actor').value,target:q('plan-target').value,technique:q('plan-technique').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Plan was not created: '+e.message}}
 async function createSupportBundle(){let out=q('support-result');out.textContent='Creating redacted local diagnostics bundle…';try{let d=await api('/api/support-bundle',{method:'POST'});out.textContent='Created: '+d.bundle}catch(e){out.textContent='Support bundle was not created: '+e.message}}
+document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Operator controls</h2><p class="muted">Read-only readiness data is shown below. A provider test sends exactly one harmless planning request only after you confirm it.</p><button onclick="operatorReadiness()">Refresh RoE, capabilities, and adapter status</button><pre id="operator-readiness">Loading operator readiness…</pre><h3>Test active hosted provider</h3><p class="muted">This sends one planning request to the active approved provider. It does not save, approve, or execute a campaign.</p><label>Actor<input id="provider-test-actor" value="APT29" maxlength="200"></label><label>Target<input id="provider-test-target" value="local-lab" maxlength="200"></label><label>Objective<input id="provider-test-objective" value="validate endpoint process visibility" maxlength="200"></label><button class="secondary" onclick="testProvider()">Test hosted provider once</button><pre id="provider-test-result">No provider test sent.</pre></section>');
+async function operatorReadiness(){try{let d=await api('/api/operator-readiness');q('operator-readiness').textContent=JSON.stringify(d,null,2)}catch(e){q('operator-readiness').textContent='Readiness could not be loaded: '+e.message}}
+async function testProvider(){let out=q('provider-test-result');if(!confirm('Send one harmless planning request to the active hosted provider?'))return;out.textContent='Sending one planning request…';try{let d=await api('/api/provider/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('provider-test-actor').value,target:q('provider-test-target').value,objective:q('provider-test-objective').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Provider test did not complete: '+e.message}}
+async function resetCampaign(id){let confirmation=prompt('Type RESET '+id+' to permanently delete this saved campaign and its local records:')||'';if(!confirmation)return;try{await api('/api/campaigns/'+encodeURIComponent(id)+'/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})});q('campaign-detail').hidden=true;await loadCampaigns()}catch(e){alert('Campaign was not reset: '+e.message)}}
+function resetPanel(id){return '<section class="card"><h3>Remove saved campaign</h3><p class="muted">This permanently deletes this campaign directory and its review records. Type the campaign-specific reset confirmation when prompted.</p><button class="warn" onclick="resetCampaign(\''+esc(id)+'\')">Reset saved campaign</button></section>'}
+async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));complete('review');q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').insertAdjacentHTML('beforeend',approvalPanel(d)+resetPanel(id));q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
+operatorReadiness();
 providerRefresh();
 </script></body></html>"""
 
@@ -145,6 +153,38 @@ def _mitre_plan(roe_path: str, data: dict[str, object]) -> dict[str, object]:
         raise ValueError(f"Technique not found in MITRE ATT&CK source: {technique_id}")
     plan = build_plan(_manager_roe(roe_path), actor, target, technique, "MITRE ATT&CK Enterprise STIX")
     return {"notice": "DRY RUN ONLY", "plan": {"actor": plan.actor, "target": plan.target, "source": plan.source, "steps": [step.__dict__ for step in plan.steps]}}
+
+
+def _provider_test(roe_path: str, catalog_path: str, data: dict[str, object]) -> dict[str, object]:
+    """Send the single harmless planning request exposed by the CLI provider test."""
+    config = load_provider_config()
+    if config.name != "openai-compatible":
+        raise ValueError("Provider test requires an active openai-compatible profile.")
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    abilities = load_catalog(catalog_path)
+    request = CampaignRequest(_input(data, "actor"), _input(data, "target"), _input(data, "objective"))
+    try:
+        draft = OpenAICompatiblePlanner(config).draft(request, abilities)
+        validate_ai_draft(draft, _manager_roe(roe_path), abilities)
+    except (ProviderError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    return {"success": True, "stage": "draft-validated", "draft": draft.as_dict(), "notice": "This sent one planning request only. No campaign was saved, approved, or executed."}
+
+
+def _operator_readiness(roe_path: str, catalog_path: str) -> dict[str, object]:
+    """Combine read-only RoE, capability, and adapter information for the operator UI."""
+    context = _manager_context(roe_path, catalog_path)
+    active_catalog = catalog_path if Path(catalog_path).exists() or catalog_path != "content/abilities/catalog.json" else str(default_catalog_path())
+    capabilities = json.loads(Path("capabilities.json").read_text(encoding="utf-8"))
+    return {"roe": context["roe"], "capabilities": capabilities, "adapter": adapter_readiness(load_catalog(active_catalog))}
+
+
+def _reset_saved_campaign(campaign_root: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
+    if _input(data, "confirmation", 300) != f"RESET {campaign_id}":
+        raise PermissionError(f"Type 'RESET {campaign_id}' to permanently remove this saved campaign")
+    reset_campaign(campaign_root, campaign_id, True)
+    return {"success": True, "status": "reset", "campaign_id": campaign_id}
 
 
 def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
@@ -359,6 +399,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
             elif path == "/api/provider": self._send(200, _provider_status())
+            elif path == "/api/operator-readiness": self._send(200, _operator_readiness(roe_path, catalog_path))
             elif path == "/api/campaigns":
                 campaigns = list_campaigns(campaign_root)
                 for campaign in campaigns:
@@ -386,13 +427,17 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                 elif path == "/api/provider/profiles": self._send(201, _save_provider_profile(self._body()))
                 elif path == "/api/provider/use": self._send(200, _use_provider_profile(self._body()))
                 elif path == "/api/provider/allow": self._send(200, _allow_provider_profile(self._body()))
+                elif path == "/api/provider/test": self._send(200, _provider_test(roe_path, catalog_path, self._body()))
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path.startswith("/api/campaigns/"):
                     parts = path.split("/")
-                    if len(parts) != 5 or parts[4] not in {"approve", "reject", "cancel"}: self._send(404, {"error": "not found"}); return
+                    if len(parts) != 5 or parts[4] not in {"approve", "reject", "cancel", "reset"}: self._send(404, {"error": "not found"}); return
                     data = self._body(); campaign_id = parts[3]
                     if parts[4] == "approve":
                         self._send(200, _approve_and_run(campaign_root, roe_path, catalog_path, campaign_id, data))
+                        return
+                    elif parts[4] == "reset":
+                        self._send(200, _reset_saved_campaign(campaign_root, campaign_id, data))
                         return
                     elif parts[4] == "reject":
                         reason = _input(data, "reason")
