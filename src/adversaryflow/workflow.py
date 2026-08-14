@@ -101,7 +101,7 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
         "mode": adapter_name,
         "adapter": adapter_name,
         "status": "running",
-        "execution_boundary": "fixed-local-behavior" if adapter_name == "local-behavioral" else "simulation-only",
+        "execution_boundary": "pinned-idpt-local" if adapter_name == "idpt-local" else ("fixed-local-behavior" if adapter_name == "local-behavioral" else "simulation-only"),
         "allowed_network_scopes": ["none", "loopback"],
         "selected_ability_ids": [ability.id for ability in selected],
     }
@@ -109,7 +109,17 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     try:
         work_root = run_dir / "work"
-        request = AdapterRequest(draft=draft, abilities=tuple(selected), run_id=run_dir.name, work_root=str(work_root))
+        request = AdapterRequest(
+            draft=draft,
+            abilities=tuple(selected),
+            run_id=run_dir.name,
+            timeout_seconds=60 if adapter_name == "idpt-local" else 30,
+            work_root=str(work_root),
+            approval_id=approval.approval_id,
+            approver=approval.approver,
+            approved_at=approval.approved_at,
+            parent_plan_hash=approval.plan_hash,
+        )
         adapter, preflight = preflight_adapter(adapter_name, request)
         manifest["adapter_preflight"] = asdict(preflight)
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

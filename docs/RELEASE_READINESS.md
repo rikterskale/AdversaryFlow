@@ -4,7 +4,7 @@ This is a mandatory release gate, not a target. A release is ready only when CI 
 
 ## Proven installation
 
-Each wheel, source distribution, and source ZIP must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, execution-adapter readiness, loopback, and offline-mode checks. The adapter readiness result must identify only the built-in local-synthetic adapter and the simulation-only boundary.
+Each wheel, source distribution, and source ZIP must install into a new environment on Windows and Linux. The installed CLI must pass `adversaryflow doctor --json`, including its supported-platform, Python, dependency, RoE, ability-catalog, execution-adapter readiness, loopback, and offline-mode checks. Adapter readiness must identify the selected built-in adapter and its exact boundary. IDPT release validation additionally requires the reviewed commit, clean checkout, content version, Node version, and fixed scenario.
 
 ## Guided troubleshooting
 
@@ -16,7 +16,7 @@ The canonical clean wheel installation must execute every supported user-facing 
 
 ## Tested recovery paths
 
-The release journey must demonstrate `doctor --fix`, `--fallback-offline` when a provider is invalid, rejection, cancellation, reset with typed confirmation, an invalid provider configuration, missing credentials, and a missing MITRE technique. Each recovery must return an actionable error and must not bypass RoE approval or the simulation-only boundary.
+The release journey must demonstrate `doctor --fix`, `--fallback-offline` when a provider is invalid, rejection, cancellation, reset with typed confirmation, an invalid provider configuration, missing credentials, and a missing MITRE technique. Each recovery must return an actionable error and must not bypass RoE approval or the selected fixed execution boundary.
 
 ## Documentation
 

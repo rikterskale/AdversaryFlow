@@ -1,0 +1,45 @@
+{
+  "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "abilities": [
+    {
+      "id": "ability-idpt-powershell-marker", "version": "1.0.0", "name": "IDPT PowerShell execution marker",
+      "technique": {"id": "T1059.001", "name": "Command and Scripting Interpreter: PowerShell"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Delegate the reviewed PowerShell marker action to the pinned local IDPT scenario.",
+      "expected": {"telemetry": [{"category": "process", "description": "IDPT emits a correlated benign PowerShell execution marker.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "IDPT verifies that no cleanup is required.",
+      "execution": {"action": "windows-idpt-powershell-marker", "timeout_seconds": 60}, "source_refs": ["https://attack.mitre.org/techniques/T1059/001/"]
+    },
+    {
+      "id": "ability-idpt-file-discovery", "version": "1.0.0", "name": "IDPT scoped synthetic file discovery",
+      "technique": {"id": "T1083", "name": "File and Directory Discovery"}, "platform": "windows", "fidelity": "synthetic",
+      "simulation_action": "Delegate run-owned synthetic file discovery to the pinned local IDPT scenario.",
+      "expected": {"telemetry": [{"category": "file", "description": "IDPT enumerates only its run-owned synthetic victim tree.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "IDPT removes its run-owned synthetic work tree.",
+      "execution": {"action": "windows-idpt-file-discovery", "timeout_seconds": 60}, "source_refs": ["https://attack.mitre.org/techniques/T1083/"]
+    },
+    {
+      "id": "ability-idpt-local-data", "version": "1.0.0", "name": "IDPT synthetic local-data read",
+      "technique": {"id": "T1005", "name": "Data from Local System"}, "platform": "windows", "fidelity": "synthetic",
+      "simulation_action": "Delegate reads of IDPT-seeded synthetic documents to the pinned local scenario.",
+      "expected": {"telemetry": [{"category": "file", "description": "IDPT reads content only from run-owned synthetic documents.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "IDPT removes its run-owned synthetic work tree.",
+      "execution": {"action": "windows-idpt-local-data", "timeout_seconds": 60}, "source_refs": ["https://attack.mitre.org/techniques/T1005/"]
+    },
+    {
+      "id": "ability-idpt-local-staging", "version": "1.0.0", "name": "IDPT synthetic local data staging",
+      "technique": {"id": "T1074.001", "name": "Data Staged: Local Data Staging"}, "platform": "windows", "fidelity": "synthetic",
+      "simulation_action": "Delegate creation and cleanup of a run-owned synthetic archive to the pinned local IDPT scenario.",
+      "expected": {"telemetry": [{"category": "file", "description": "IDPT creates an archive containing only seeded synthetic documents.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "IDPT deletes the run-owned archive and verifies cleanup.",
+      "execution": {"action": "windows-idpt-local-staging", "timeout_seconds": 60}, "source_refs": ["https://attack.mitre.org/techniques/T1074/001/"]
+    },
+    {
+      "id": "ability-idpt-loopback-collection", "version": "1.0.0", "name": "IDPT loopback collection marker",
+      "technique": {"id": "T1041", "name": "Exfiltration Over C2 Channel"}, "platform": "windows", "fidelity": "synthetic",
+      "simulation_action": "Delegate a synthetic correlation-only POST to IDPT's engine-owned loopback sink.",
+      "expected": {"telemetry": [{"category": "network", "description": "IDPT sends only a synthetic run marker to its 127.0.0.1 sink.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "loopback"}, "cleanup_action": "IDPT closes its ephemeral loopback sink.",
+      "execution": {"action": "windows-idpt-loopback-collection", "timeout_seconds": 60}, "source_refs": ["https://attack.mitre.org/techniques/T1041/"]
+    }
+  ]
+}

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- A commit-pinned `idpt-local` adapter, fixed Windows collection mapping, derived plan-bound IDPT authorization, verified evidence ingestion, and independent telemetry-gap reporting.
+
 ## [0.2.3] - 2026-08-13
 
 ### Added

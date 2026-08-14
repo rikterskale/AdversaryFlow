@@ -23,6 +23,10 @@ def curated_windows_catalog_path() -> Path:
     return Path(str(files("adversaryflow.resources").joinpath("curated-windows.json")))
 
 
+def idpt_windows_collection_catalog_path() -> Path:
+    return Path(str(files("adversaryflow.resources").joinpath("idpt-windows-collection.json")))
+
+
 @dataclass(frozen=True)
 class TelemetryExpectation:
     category: str

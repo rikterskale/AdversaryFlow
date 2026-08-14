@@ -6,7 +6,7 @@ import yaml
 
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
-from .emulation import curated_windows_catalog_path, default_catalog_path, load_catalog
+from .emulation import curated_windows_catalog_path, default_catalog_path, idpt_windows_collection_catalog_path, load_catalog
 from .adapters import adapter_readiness
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
@@ -110,10 +110,11 @@ def main() -> None:
     demo.add_argument("--roe", default="examples/roe.yaml")
     demo.add_argument("--actor", default="APT29")
     demo.add_argument("--objective", default="validate endpoint process visibility")
+    demo.add_argument("--platform", default="linux")
     demo.add_argument("--approver", default=None)
     demo.add_argument("--catalog", default="content/abilities/catalog.json")
     demo.add_argument("--output", default="artifacts/runs")
-    demo.add_argument("--adapter", choices=("local-synthetic", "local-behavioral"), default="local-synthetic")
+    demo.add_argument("--adapter", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic")
     doctor = sub.add_parser("doctor", help="diagnose installation and local runtime")
     doctor.add_argument("--roe", default="examples/roe.yaml")
     doctor.add_argument("--catalog", default="content/abilities/catalog.json")
@@ -127,7 +128,7 @@ def main() -> None:
     adapter_sub = adapter.add_subparsers(dest="adapter_command", required=True)
     adapter_status = adapter_sub.add_parser("status", help="show read-only adapter readiness")
     adapter_status.add_argument("--catalog", default="content/abilities/catalog.json")
-    adapter_status.add_argument("--name", choices=("local-synthetic", "local-behavioral"), default="local-synthetic")
+    adapter_status.add_argument("--name", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic")
     guide = sub.add_parser("guide", help="walk through the safe campaign workflow and next steps")
     guide.add_argument("--actor", default="APT29")
     guide.add_argument("--target", default="local-lab")
@@ -178,7 +179,7 @@ def main() -> None:
     campaign.add_argument("--output", default="artifacts/runs")
     campaign.add_argument("--campaign-root", default="artifacts/campaigns")
     campaign.add_argument("--campaign-id", default=None, help="resume a saved campaign directory")
-    campaign.add_argument("--adapter", choices=("local-synthetic", "local-behavioral"), default="local-synthetic", help="fixed execution adapter used only after approval")
+    campaign.add_argument("--adapter", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic", help="fixed execution adapter used only after approval")
     campaign_sub = campaign.add_subparsers(dest="lifecycle_command")
     list_campaign = campaign_sub.add_parser("list", help="list saved campaigns")
     list_campaign.add_argument("--campaign-root", default="artifacts/campaigns")
@@ -214,6 +215,8 @@ def main() -> None:
         args.catalog = str(default_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "curated-windows":
         args.catalog = str(curated_windows_catalog_path())
+    if hasattr(args, "catalog") and args.catalog == "idpt-windows-collection":
+        args.catalog = str(idpt_windows_collection_catalog_path())
 
     if args.command == "validate":
         roe = load_roe(args.roe)
@@ -362,7 +365,7 @@ def main() -> None:
     if args.command == "demo":
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
-        request = CampaignRequest(args.actor, "local-lab", args.objective, "linux")
+        request = CampaignRequest(args.actor, "local-lab", args.objective, args.platform)
         draft_result = OfflinePlanner().draft(request, abilities)
         validate_ai_draft(draft_result, roe, abilities)
         plan_hash = campaign_integrity_hashes(draft_result, roe, abilities)["plan_hash"]

@@ -2,7 +2,7 @@
 
 Campaign drafts are stored under `artifacts/campaigns` by default. Each draft directory contains `draft.json` and `metadata.json`; approval, rejection, and cancellation records are added when those decisions occur.
 
-An approved local synthetic emulation writes a run directory under `artifacts/runs` by default. It includes `progress.json`, `events.jsonl`, `manifest.json`, `audit.jsonl`, a copy of the draft, and `telemetry-gap-report.json`.
+An approved local emulation writes a run directory under `artifacts/runs` by default. It includes `progress.json`, `events.jsonl`, `manifest.json`, `audit.jsonl`, a copy of the draft, and `telemetry-gap-report.json`. IDPT-backed runs also retain their plan, derived RoE, results, and verified evidence beneath `work/idpt/`.
 
 After a campaign completes, AdversaryFlow writes `campaign-report.md` and `campaign-report.html` in the campaign directory. The Markdown report includes campaign scope and status, plan hash, approval record, synthetic behavior result, expected and observed telemetry counts, detection gaps, and a safety note that production-log validation remains separate. The HTML report is a concise view containing campaign ID, actor, objective, behavior success, and detection gaps.
 

@@ -1,6 +1,6 @@
 # Campaign workflow
 
-The campaign workflow creates a reviewable draft, records lifecycle decisions, and can perform a RoE-approved local synthetic emulation.
+The campaign workflow creates a reviewable draft, records lifecycle decisions, and can perform a RoE-approved run through a selected fixed local adapter.
 
 ## Draft and inspect
 
@@ -16,6 +16,6 @@ Approval requires the approver named in the RoE. Add `--approve --approver NAME`
 
 ## Local synthetic result
 
-An approved campaign writes a run directory, progress, synthetic events, a manifest, an audit record, telemetry-gap report, and campaign reports. The synthetic loopback marker is sent only for catalog abilities whose network scope is `loopback`.
+An approved campaign writes a run directory, progress, normalized events, a manifest, an audit record, telemetry-gap report, and campaign reports. Synthetic loopback markers and IDPT loopback actions are limited to engine-owned `127.0.0.1` listeners.
 
 See [../CLI_REFERENCE.md](../CLI_REFERENCE.md) for exact arguments and [safety-and-emulation.md](safety-and-emulation.md) for enforcement boundaries.

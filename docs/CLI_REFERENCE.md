@@ -12,7 +12,7 @@
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective "validate endpoint process visibility"] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
 | `capabilities` | Print `capabilities.json`. |
-| `adapter status [--name local-synthetic|local-behavioral] [--catalog PATH|curated-windows]` | Read-only report of a fixed adapter, its contract version, allowed scopes, and catalog compatibility. |
+| `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT pin when selected. |
 
 ## Diagnostics and support
 
@@ -20,7 +20,7 @@
 |---|---|
 | `doctor [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--json] [--fix]` | Check platform, Python, PyYAML, RoE, catalog, execution-adapter readiness, loopback, and offline mode. `--fix` creates local artifact folders only. |
 | `support-bundle [--output artifacts/support] [--roe examples/roe.yaml]` | Create a redacted diagnostics ZIP. |
-| `demo [--roe examples/roe.yaml] [--actor APT29] [--objective TEXT] [--approver NAME] [--catalog PATH] [--output artifacts/runs]` | Run the complete local synthetic demo. |
+| `demo [--roe examples/roe.yaml] [--actor APT29] [--objective TEXT] [--platform linux] [--approver NAME] [--catalog PATH] [--output artifacts/runs] [--adapter NAME]` | Run the complete approved local workflow with the selected fixed adapter. |
 
 ## Provider commands
 
@@ -37,6 +37,8 @@ Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR
 Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; and `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`.
 
 Use `--adapter local-behavioral --catalog curated-windows` after approval to execute the packaged fixed, read-only Windows behaviors. Use `campaign assess --campaign-id ID --telemetry-file FILE [--campaign-root PATH]` after a completed run to correlate independent EDR/SIEM JSONL observations. Behavior success, telemetry observation, detection, and cleanup are reported separately. See [CURATED_ABILITIES.md](CURATED_ABILITIES.md).
+
+Use `--adapter idpt-local --catalog idpt-windows-collection` to delegate the fixed benign Windows collection scenario to the exact reviewed IDPT checkout configured by `ADVERSARYFLOW_IDPT_ROOT`. See [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md).
 
 `list` and `inspect` are read-only. `reject` and `cancel` record decisions. `reset` deletes the direct campaign directory beneath the configured root after explicit confirmation.
 

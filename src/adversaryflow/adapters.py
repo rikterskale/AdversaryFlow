@@ -17,6 +17,7 @@ from typing import Protocol
 
 from .ai import AICampaignDraft
 from .emulation import Ability, validate_ability
+from .idpt import IDPT_ABILITY_MAP, execute as execute_idpt, readiness as idpt_readiness
 from .loopback import LoopbackSink
 
 
@@ -33,6 +34,10 @@ class AdapterRequest:
     run_id: str
     timeout_seconds: int = 30
     work_root: str | None = None
+    approval_id: str | None = None
+    approver: str | None = None
+    approved_at: str | None = None
+    parent_plan_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,7 +175,43 @@ class LocalBehavioralAdapter:
         return AdapterResult(adapter=self.name, events=tuple(events))
 
 
-_REGISTERED_ADAPTERS: dict[str, ExecutionAdapter] = {"local-synthetic": LocalSyntheticAdapter(), "local-behavioral": LocalBehavioralAdapter()}
+class IdptLocalAdapter:
+    """Delegate one fixed scenario to an exact reviewed local IDPT checkout."""
+
+    name = "idpt-local"
+
+    def execute(self, request: AdapterRequest) -> AdapterResult:
+        validate_adapter_request(request)
+        if not request.work_root:
+            raise ValueError("idpt-local requires a run-owned work root")
+        required = {
+            "approval_id": request.approval_id,
+            "approver": request.approver,
+            "approved_at": request.approved_at,
+            "parent_plan_hash": request.parent_plan_hash,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"idpt-local requires approval context: {', '.join(missing)}")
+        events = execute_idpt(
+            draft=request.draft,
+            abilities=request.abilities,
+            run_id=request.run_id,
+            work_root=request.work_root,
+            timeout_seconds=request.timeout_seconds,
+            approval_id=request.approval_id or "",
+            approver=request.approver or "",
+            approved_at=request.approved_at or "",
+            parent_plan_hash=request.parent_plan_hash or "",
+        )
+        return AdapterResult(adapter=self.name, events=events)
+
+
+_REGISTERED_ADAPTERS: dict[str, ExecutionAdapter] = {
+    "local-synthetic": LocalSyntheticAdapter(),
+    "local-behavioral": LocalBehavioralAdapter(),
+    "idpt-local": IdptLocalAdapter(),
+}
 
 
 def resolve_adapter(name: str = "local-synthetic") -> ExecutionAdapter:
@@ -187,6 +228,8 @@ def preflight_adapter(name: str, request: AdapterRequest) -> tuple[ExecutionAdap
     validate_adapter_request(request)
     if name == "local-behavioral" and any(ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS for ability in request.abilities):
         raise ValueError("Behavioral plans may contain only registered fixed execution actions")
+    if name == "idpt-local" and set(ability.id for ability in request.abilities) != set(IDPT_ABILITY_MAP):
+        raise ValueError("idpt-local plans must exactly match the reviewed IDPT ability mapping")
     return adapter, AdapterPreflight(
         contract_version=ADAPTER_CONTRACT_VERSION,
         adapter=adapter.name,
@@ -205,16 +248,22 @@ def adapter_readiness(abilities: tuple[Ability, ...], name: str = "local-synthet
                 raise ValueError(f"Unsupported ability fidelity: {ability.fidelity}")
             if name == "local-behavioral" and ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS:
                 raise ValueError(f"No reviewed behavioral action is registered for {ability.id}")
+            if name == "idpt-local" and ability.id not in IDPT_ABILITY_MAP:
+                raise ValueError(f"No reviewed IDPT mapping is registered for {ability.id}")
+        if name == "idpt-local" and set(ability.id for ability in abilities) != set(IDPT_ABILITY_MAP):
+            raise ValueError("idpt-local requires the complete packaged idpt-windows-collection catalog")
         scopes = sorted({ability.network_scope for ability in abilities})
+        external = idpt_readiness(abilities) if name == "idpt-local" else {}
         return {
             "adapter": adapter.name,
             "contract_version": ADAPTER_CONTRACT_VERSION,
-            "execution_boundary": "fixed-local-behavior" if name == "local-behavioral" else "simulation-only",
+            "execution_boundary": "pinned-idpt-local" if name == "idpt-local" else ("fixed-local-behavior" if name == "local-behavioral" else "simulation-only"),
             "allowed_network_scopes": ["none", "loopback"],
             "catalog_network_scopes": scopes,
             "ability_count": len(abilities),
             "compatible": bool(abilities),
             "detail": f"{len(abilities)} reviewed abilities are compatible with {adapter.name}.",
+            **external,
         }
     except ValueError as error:
         return {

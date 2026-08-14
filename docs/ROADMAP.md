@@ -2,7 +2,7 @@
 
 ## Completed MVP: safe local campaign lifecycle
 
-The current release provides RoE validation, deterministic offline drafting, an optional OpenAI-compatible planning adapter, immutable reviewed drafts, explicit approval, local-synthetic-only emulation, telemetry-gap reporting, diagnostics, and a loopback-only review manager. No slice expands execution beyond the fixed local-synthetic adapter.
+The current release provides RoE validation, deterministic offline drafting, an optional OpenAI-compatible planning adapter, immutable reviewed drafts, explicit approval, fixed local synthetic and read-only behavioral execution, a commit-pinned local IDPT collection integration, telemetry-gap reporting, diagnostics, and a loopback-only review manager. No adapter accepts arbitrary commands or remote-target execution.
 
 ## Slice 1: provider-adapter operational verification
 
@@ -24,9 +24,10 @@ The current release provides RoE validation, deterministic offline drafting, an 
 
 ## Slice 3: detection-validation export
 
-**Status: planned.**
+**Status: partially implemented.**
 
 - Export normalized, synthetic-only telemetry expectations and gap findings as JSON/CSV for defensive tooling.
+- JSONL telemetry imports and independent outcome reporting are implemented. Direct vendor connectors and normalized CSV export remain planned.
 - Keep imports and validation offline; no connector may query or modify a production target.
 - Acceptance: exports reproduce the campaign report counts and contain no secrets or raw provider content.
 
@@ -36,7 +37,7 @@ The current release provides RoE validation, deterministic offline drafting, an 
 
 - Add signed/versioned catalog releases, deprecation metadata, and a guided retest draft derived from a recorded detection gap.
 - Preserve the existing integrity check: changed RoE, catalog, or draft requires a new approval.
-- Acceptance: a retest is traceable to a gap while execution remains local synthetic and explicitly approved.
+- Acceptance: a retest is traceable to a gap while execution remains fixed, local, and explicitly approved.
 
 ## Non-goals
 
