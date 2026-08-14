@@ -41,6 +41,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 adversaryflow validate examples\roe.yaml
 adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
+adversaryflow intel-sync --actor "Axiom" --platform windows --output artifacts\intel\axiom
 adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
 adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
 adversaryflow doctor

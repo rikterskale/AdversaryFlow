@@ -17,7 +17,9 @@ from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
 from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, remove_profile, save_profile, use_profile
 from .manager import serve as serve_manager
-from .intel import fetch_attack_bundle, find_technique
+from .intel import fetch_attack_bundle, fetch_ctid_technique_ids, find_technique
+from .enrichment import build_enriched_coverage, write_enriched_coverage
+from .benign_procedures import catalog as benign_procedure_catalog
 from .models import RulesOfEngagement
 from .planner import build_plan
 
@@ -90,6 +92,13 @@ def main() -> None:
     plan.add_argument("--target", default="local-lab")
     plan.add_argument("--technique", required=True)
     plan.add_argument("--audit", default="artifacts/audit.jsonl")
+    intel_sync = sub.add_parser("intel-sync", help="pull ATT&CK/CTID technique metadata and create synthetic-only coverage")
+    intel_sync.add_argument("--actor", required=True)
+    intel_sync.add_argument("--platform", default="windows")
+    intel_sync.add_argument("--target", default="local-lab")
+    intel_sync.add_argument("--catalog", default="content/abilities/catalog.json")
+    intel_sync.add_argument("--output", default="artifacts/intel/enriched")
+    intel_sync.add_argument("--mitre-only", action="store_true", help="skip the CTID library lookup")
     draft = sub.add_parser("draft")
     draft.add_argument("--roe", required=True)
     draft.add_argument("--actor", required=True)
@@ -204,6 +213,18 @@ def main() -> None:
 
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
+        return
+
+    if args.command == "intel-sync":
+        try:
+            bundle = fetch_attack_bundle()
+            ctid_ids = () if args.mitre_only else fetch_ctid_technique_ids(args.actor)
+            coverage = build_enriched_coverage(args.actor, args.platform, bundle, ctid_ids, args.catalog, benign_procedure_catalog())
+            result = write_enriched_coverage(coverage, args.output, args.target)
+            print(json.dumps({"success": True, **result}, indent=2))
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            print(json.dumps({"success": False, "error": str(exc), "boundary": "No commands or payloads are imported."}, indent=2))
+            raise SystemExit(1)
         return
 
     if args.command == "adapter":

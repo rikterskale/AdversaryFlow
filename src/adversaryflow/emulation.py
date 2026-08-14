@@ -39,6 +39,8 @@ class Ability:
     network_scope: str = "none"
     writes_only_run_root: bool = True
     cleanup_action: str | None = None
+    procedure_id: str | None = None
+    source_refs: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "Ability":
@@ -57,6 +59,8 @@ class Ability:
             network_scope=str(safety.get("network_scope", "none")),
             writes_only_run_root=bool(safety.get("writes_only_run_root", False)),
             cleanup_action=raw.get("cleanup_action"),
+            procedure_id=raw.get("procedure_id"),
+            source_refs=tuple(str(item) for item in raw.get("source_refs", [])),
         )
         validate_ability(ability)
         return ability
@@ -69,6 +73,8 @@ def validate_ability(ability: Ability) -> None:
         raise ValueError("ability must declare writes_only_run_root: true")
     if not ability.expected_telemetry:
         raise ValueError("ability must declare expected telemetry")
+    if ability.procedure_id is not None and not ability.procedure_id.startswith("procedure-"):
+        raise ValueError("ability procedure_id must reference a registered procedure")
 
 
 def load_catalog(path: str | Path) -> tuple[Ability, ...]:

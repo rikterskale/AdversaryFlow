@@ -8,6 +8,7 @@
 |---|---|
 | `validate ROE` | Validate and print RoE engagement metadata. |
 | `plan --roe ROE --actor ACTOR --technique ID [--target local-lab] [--audit artifacts/audit.jsonl]` | Fetch the MITRE ATT&CK Enterprise STIX bundle and produce a dry-run technique plan. This command requires network access; it never executes a campaign. |
+| `intel-sync --actor ACTOR [--platform windows] [--target local-lab] [--catalog PATH] [--output artifacts/intel/enriched] [--mitre-only]` | Fetch the actor's MITRE ATT&CK relationships and matching CTID plan metadata, fill catalog gaps with synthetic-only marker abilities and benign procedures, and write a reviewable emulation plan. Imported commands, payloads, and setup instructions are discarded. |
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective "validate endpoint process visibility"] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
 | `capabilities` | Print `capabilities.json`. |
