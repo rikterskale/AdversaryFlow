@@ -14,7 +14,7 @@ from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .doctor import run_doctor
 from .support import create_support_bundle
 from .provider import OpenAICompatiblePlanner, ProviderError, load_provider_config, provider_setup_instructions, validate_provider_config
-from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, save_profile, use_profile
+from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, remove_profile, save_profile, use_profile
 from .intel import fetch_attack_bundle, find_technique
 from .planner import build_plan
 from .audit import AuditLog
@@ -77,12 +77,16 @@ async function createMitrePlan(){let out=q('plan-result');out.textContent='Fetch
 async function createSupportBundle(){let out=q('support-result');out.textContent='Creating redacted local diagnostics bundle…';try{let d=await api('/api/support-bundle',{method:'POST'});out.textContent='Created: '+d.bundle}catch(e){out.textContent='Support bundle was not created: '+e.message}}
 document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Operator controls</h2><p class="muted">Read-only readiness data is shown below. A provider test sends exactly one harmless planning request only after you confirm it.</p><button onclick="operatorReadiness()">Refresh RoE, capabilities, and adapter status</button><pre id="operator-readiness">Loading operator readiness…</pre><h3>Test active hosted provider</h3><p class="muted">This sends one planning request to the active approved provider. It does not save, approve, or execute a campaign.</p><label>Actor<input id="provider-test-actor" value="APT29" maxlength="200"></label><label>Target<input id="provider-test-target" value="local-lab" maxlength="200"></label><label>Objective<input id="provider-test-objective" value="validate endpoint process visibility" maxlength="200"></label><button class="secondary" onclick="testProvider()">Test hosted provider once</button><pre id="provider-test-result">No provider test sent.</pre></section>');
 document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Draft with the active provider</h2><p class="muted">Creates one RoE-validated review draft using the active provider. This can send a planning request, but it never approves or runs a campaign.</p><label>Threat actor<input id="hosted-draft-actor" value="APT29" maxlength="200"></label><label>RoE-approved target<input id="hosted-draft-target" value="local-lab" maxlength="200"></label><label>Defensive objective<input id="hosted-draft-objective" value="validate endpoint process visibility" maxlength="200"></label><label>Platform<select id="hosted-draft-platform"><option value="linux">Linux</option><option value="windows">Windows</option><option value="macos">macOS</option></select></label><label><input id="hosted-draft-fallback" type="checkbox" style="width:auto"> Fall back to an offline draft if the provider fails</label><button onclick="createProviderDraft()">Create provider-backed review draft</button><pre id="hosted-draft-result">No provider-backed draft created.</pre></section>');
+document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Local synthetic demo</h2><p class="muted">Runs the fixed local-synthetic demo with the RoE approver recorded automatically, just like the CLI demo command. It never contacts an external target and does not save a campaign draft.</p><label>Threat actor<input id="demo-actor" value="APT29" maxlength="200"></label><label>Defensive objective<input id="demo-objective" value="validate endpoint process visibility" maxlength="200"></label><label>Type RUN LOCAL DEMO to confirm<input id="demo-confirmation" maxlength="100" placeholder="RUN LOCAL DEMO"></label><button onclick="runDemo()">Run local synthetic demo</button><pre id="demo-result">No demo run.</pre></section>');
 async function operatorReadiness(){try{let d=await api('/api/operator-readiness');q('operator-readiness').textContent=JSON.stringify(d,null,2)}catch(e){q('operator-readiness').textContent='Readiness could not be loaded: '+e.message}}
 async function testProvider(){let out=q('provider-test-result');if(!confirm('Send one harmless planning request to the active hosted provider?'))return;out.textContent='Sending one planning request…';try{let d=await api('/api/provider/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('provider-test-actor').value,target:q('provider-test-target').value,objective:q('provider-test-objective').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Provider test did not complete: '+e.message}}
 async function createProviderDraft(){let out=q('hosted-draft-result');if(!confirm('Create a review draft using the active provider? This may send a planning request but cannot approve or execute a campaign.'))return;out.textContent='Creating review draft…';try{let d=await api('/api/campaigns/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('hosted-draft-actor').value,target:q('hosted-draft-target').value,objective:q('hosted-draft-objective').value,platform:q('hosted-draft-platform').value,fallback_offline:q('hosted-draft-fallback').checked})});out.textContent=JSON.stringify(d,null,2);await loadCampaigns();await inspectCampaign(d.campaign_id)}catch(e){out.textContent='Draft was not created: '+e.message}}
+async function removeProviderProfile(){let name=q('profile-action-name').value.trim(),result=q('provider-result');if(!name)return;let confirmation=prompt('Type REMOVE '+name+' to remove this non-secret provider profile:')||'';if(!confirmation)return;try{let d=await api('/api/provider/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,confirmation})});result.textContent='Removed profile '+d.removed+'.';providerRefresh()}catch(e){result.textContent='Profile was not removed: '+e.message}}
+async function runDemo(){let out=q('demo-result');if(!confirm('Run the fixed local synthetic demo now?'))return;out.textContent='Running local synthetic demo…';try{let d=await api('/api/demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('demo-actor').value,objective:q('demo-objective').value,confirmation:q('demo-confirmation').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Demo did not complete: '+e.message}}
 async function resetCampaign(id){let confirmation=prompt('Type RESET '+id+' to permanently delete this saved campaign and its local records:')||'';if(!confirmation)return;try{await api('/api/campaigns/'+encodeURIComponent(id)+'/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})});q('campaign-detail').hidden=true;await loadCampaigns()}catch(e){alert('Campaign was not reset: '+e.message)}}
 function resetPanel(id){return '<section class="card"><h3>Remove saved campaign</h3><p class="muted">This permanently deletes this campaign directory and its review records. Type the campaign-specific reset confirmation when prompted.</p><button class="warn" onclick="resetCampaign(\''+esc(id)+'\')">Reset saved campaign</button></section>'}
 async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));complete('review');q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').insertAdjacentHTML('beforeend',approvalPanel(d)+resetPanel(id));q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
+q('profile-action-name').insertAdjacentHTML('afterend','<button class="warn" onclick="removeProviderProfile()">Remove profile</button>');
 operatorReadiness();
 providerRefresh();
 </script></body></html>"""
@@ -181,6 +185,14 @@ def _allow_provider_profile(data: dict[str, object]) -> dict[str, object]:
     return {"success": True, "allowed": name, "file": str(path), "policy": policy_summary()}
 
 
+def _remove_provider_profile(data: dict[str, object]) -> dict[str, object]:
+    name = _input(data, "name", 64)
+    if _input(data, "confirmation", 100) != f"REMOVE {name}":
+        raise PermissionError(f"Type 'REMOVE {name}' to remove this non-secret provider profile")
+    remove_profile(name)
+    return {"success": True, "removed": name, "profiles": list_profiles(), "activation": activation_summary()}
+
+
 def _mitre_plan(roe_path: str, data: dict[str, object]) -> dict[str, object]:
     """Fetch the official ATT&CK bundle and create a dry-run plan only."""
     actor, target, technique_id = _input(data, "actor"), _input(data, "target"), _input(data, "technique", 32).upper()
@@ -222,6 +234,22 @@ def _reset_saved_campaign(campaign_root: str, campaign_id: str, data: dict[str, 
         raise PermissionError(f"Type 'RESET {campaign_id}' to permanently remove this saved campaign")
     reset_campaign(campaign_root, campaign_id, True)
     return {"success": True, "status": "reset", "campaign_id": campaign_id}
+
+
+def _run_demo(roe_path: str, catalog_path: str, data: dict[str, object]) -> dict[str, object]:
+    """Run the same explicit, fixed local-synthetic demo available from the CLI."""
+    if _input(data, "confirmation", 100) != "RUN LOCAL DEMO":
+        raise PermissionError("Type 'RUN LOCAL DEMO' to start the local synthetic demonstration")
+    roe = _manager_roe(roe_path)
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    abilities = load_catalog(catalog_path)
+    draft = OfflinePlanner().draft(CampaignRequest(_input(data, "actor"), "local-lab", _input(data, "objective"), "linux"), abilities)
+    validate_ai_draft(draft, roe, abilities)
+    plan_hash = campaign_integrity_hashes(draft, roe, abilities)["plan_hash"]
+    approval = approve_draft(draft, roe, abilities, roe.approver_name, plan_hash)
+    run_dir = run_local_emulation(draft, abilities, approval, "artifacts/runs")
+    return {"success": True, "stage": "completed", "draft": draft.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": build_gap_report(run_dir), "notice": "Local synthetic demo complete. No campaign draft was saved."}
 
 
 def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
@@ -460,10 +488,12 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             try:
                 if path == "/api/doctor": self._send(200, run_doctor())
                 elif path == "/api/support-bundle": self._send(201, {"success": True, "bundle": str(create_support_bundle("artifacts/support", roe_path))})
+                elif path == "/api/demo": self._send(200, _run_demo(roe_path, catalog_path, self._body()))
                 elif path == "/api/plan": self._send(200, _mitre_plan(roe_path, self._body()))
                 elif path == "/api/provider/profiles": self._send(201, _save_provider_profile(self._body()))
                 elif path == "/api/provider/use": self._send(200, _use_provider_profile(self._body()))
                 elif path == "/api/provider/allow": self._send(200, _allow_provider_profile(self._body()))
+                elif path == "/api/provider/remove": self._send(200, _remove_provider_profile(self._body()))
                 elif path == "/api/provider/test": self._send(200, _provider_test(roe_path, catalog_path, self._body()))
                 elif path == "/api/campaigns/provider": self._send(201, _provider_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))

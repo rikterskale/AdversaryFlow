@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_draft, _provider_status, _report_summary, _reset_saved_campaign, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_draft, _provider_status, _remove_provider_profile, _report_summary, _reset_saved_campaign, _run_demo, _terminal_next_step, make_handler, serve
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -280,6 +280,15 @@ def test_manager_provider_draft_uses_active_offline_provider(monkeypatch):
     assert result["stage"] == "drafted"
     assert result["provider"] == "offline"
     assert (__import__("pathlib").Path(root) / result["campaign_id"] / "draft.json").is_file()
+
+
+def test_manager_demo_and_profile_removal_require_typed_confirmation():
+    with pytest.raises(PermissionError, match="RUN LOCAL DEMO"):
+        _run_demo("examples/roe.yaml", "content/abilities/catalog.json", {
+            "actor": "APT29", "objective": "verify demo guard", "confirmation": "no",
+        })
+    with pytest.raises(PermissionError, match="REMOVE example"):
+        _remove_provider_profile({"name": "example", "confirmation": "REMOVE another"})
 
 
 @pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])
