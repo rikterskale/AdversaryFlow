@@ -5,10 +5,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .benign_procedures import catalog as procedure_catalog, run as run_procedures
 from .ctid import create_fixture_bundle, fixtures
 
 
-PHASES = ("baseline", "fixture-replay", "detection-review", "control-improvement", "retest", "archive-and-training")
+PHASES = ("baseline", "benign-validation", "detection-review", "control-improvement", "retest", "archive-and-training")
 
 
 def _root(root: str | Path) -> Path:
@@ -43,11 +44,17 @@ def save_profile(data: dict[str, Any], root: str | Path = "artifacts/actor-profi
         raise ValueError("profile name must use lowercase letters, numbers, hyphens, or underscores")
     if not isinstance(actor, str) or not actor.strip() or len(actor.strip()) > 200:
         raise ValueError("actor must be a non-empty name of at most 200 characters")
-    fixture_ids = _list(data.get("fixture_ids"), "fixture_ids")
+    fixture_ids = _list(data.get("fixture_ids", []), "fixture_ids") if data.get("fixture_ids") else []
+    procedure_ids = _list(data.get("procedure_ids", []), "procedure_ids") if data.get("procedure_ids") else []
     allowed = {item["id"] for item in fixtures()["fixtures"]}
+    allowed_procedures = {item["id"] for item in procedure_catalog()["procedures"]}
+    if not fixture_ids and not procedure_ids:
+        raise ValueError("profile must select at least one benign fixture or procedure")
     if not set(fixture_ids).issubset(allowed):
         raise ValueError("profile may select only pre-registered benign fixtures")
-    profile = {"name": name, "actor": actor.strip(), "aliases": _list(data.get("aliases", [actor.strip()]), "aliases"), "sources": _list(data.get("sources"), "sources"), "technique_ids": _list(data.get("technique_ids"), "technique_ids"), "fixture_ids": fixture_ids, "phases": list(PHASES), "boundary": "fixture-only; no phishing, authentication, credential, endpoint, cloud, network, or target action"}
+    if not set(procedure_ids).issubset(allowed_procedures):
+        raise ValueError("profile may select only pre-registered benign procedures")
+    profile = {"name": name, "actor": actor.strip(), "aliases": _list(data.get("aliases", [actor.strip()]), "aliases"), "sources": _list(data.get("sources"), "sources"), "technique_ids": _list(data.get("technique_ids"), "technique_ids"), "fixture_ids": fixture_ids, "procedure_ids": procedure_ids, "phases": list(PHASES), "boundary": "fixed benign procedures and fixtures only; no arbitrary commands, credentials, remote execution, cloud changes, external network contact, or destructive action"}
     stored = _load(root); stored["profiles"][name] = profile; _profiles_path(root).write_text(json.dumps(stored, indent=2), encoding="utf-8")
     return profile
 
@@ -64,11 +71,15 @@ def get_profile(name: str, root: str | Path = "artifacts/actor-profiles") -> dic
 
 
 def plan_profile(name: str, root: str | Path = "artifacts/actor-profiles") -> dict[str, Any]:
-    profile = get_profile(name, root); catalog = {item["id"]: item for item in fixtures()["fixtures"]}
-    selected = [catalog[item] for item in profile["fixture_ids"]]
-    return {"profile": profile, "coverage": [{"fixture_id": item["id"], "technique_id": item["technique_id"], "source": item["source"], "expected_detection": item["expected_detection"], "rule_guidance": item["rule_guidance"]} for item in selected], "phases": list(PHASES), "next": "Create the fixture bundle, replay it only through an approved lab path, assess observed detections, then retest gaps."}
+    profile = get_profile(name, root); fixture_map = {item["id"]: item for item in fixtures()["fixtures"]}; procedure_map = {item["id"]: item for item in procedure_catalog()["procedures"]}
+    coverage = ([{"kind": "fixture", "id": item["id"], "technique_id": item["technique_id"], "source": item["source"], "expected_detection": item["expected_detection"], "rule_guidance": item["rule_guidance"]} for item in (fixture_map[key] for key in profile["fixture_ids"])] + [{"kind": "procedure", "id": item["id"], "technique_id": item["technique_id"], "source": item["source"], "expected_detection": item["expected_detection"], "rule_guidance": item["expected_detection"]} for item in (procedure_map[key] for key in profile["procedure_ids"])])
+    return {"profile": profile, "coverage": coverage, "phases": list(PHASES), "next": "Run fixed benign procedures and/or create fixtures, assess observed detections, clean run-owned artifacts, then retest gaps."}
 
 
 def run_profile(name: str, retest_of: str | None = None, root: str | Path = "artifacts/actor-profiles") -> dict[str, Any]:
     profile = get_profile(name, root)
-    return create_fixture_bundle(retest_of=retest_of, fixture_ids=profile["fixture_ids"], actor_profile={"name": profile["name"], "actor": profile["actor"], "sources": profile["sources"], "technique_ids": profile["technique_ids"]})
+    actor = {"name": profile["name"], "actor": profile["actor"], "sources": profile["sources"], "technique_ids": profile["technique_ids"]}
+    result: dict[str, Any] = {"profile": profile["name"], "retest_of": retest_of}
+    if profile["fixture_ids"]: result["fixtures"] = create_fixture_bundle(retest_of=retest_of, fixture_ids=profile["fixture_ids"], actor_profile=actor)
+    if profile["procedure_ids"]: result["procedures"] = run_procedures(profile["procedure_ids"], actor_profile=actor, retest_of=retest_of)
+    return result

@@ -28,6 +28,7 @@ from .campaign_service import complete_saved_campaign
 from .product_tools import export_executive_summary, read_roe_editor, save_roe_editor, search_campaign_archive, update_campaign_archive, update_campaign_tags
 from .ctid import assess_fixture_evidence, create_fixture_bundle, fixtures as ctid_fixtures
 from .actor_profiles import get_profile as get_actor_profile, list_profiles as list_actor_profiles, plan_profile as plan_actor_profile, run_profile as run_actor_profile, save_profile as save_actor_profile
+from .benign_procedures import assess as assess_benign_procedures, catalog as benign_procedure_catalog, cleanup as cleanup_benign_procedures, run as run_benign_procedures
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -492,6 +493,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/api/detection-mappings": self._send(200, _detection_mappings(catalog_path, query.get("technique", [""])[0]))
             elif path == "/api/ctid-fixtures": self._send(200, ctid_fixtures())
             elif path == "/api/actor-profiles": self._send(200, {"profiles": list_actor_profiles()})
+            elif path == "/api/benign-procedures": self._send(200, benign_procedure_catalog())
             elif path.startswith("/api/actor-profiles/"):
                 name = path.removeprefix("/api/actor-profiles/")
                 if path.endswith("/plan"): self._send(200, plan_actor_profile(name.removesuffix("/plan")))
@@ -551,6 +553,15 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                     if not isinstance(observed, list) or not all(isinstance(item, str) and len(item) <= 100 for item in observed): raise ValueError("observed_fixture_ids must be a list of fixture IDs")
                     self._send(200, assess_fixture_evidence(_input(data, "bundle", 1000), observed))
                 elif path == "/api/actor-profiles": self._send(201, save_actor_profile(self._body()))
+                elif path == "/api/benign-procedures/run":
+                    data = self._body(); procedure_ids = data.get("procedure_ids")
+                    if not isinstance(procedure_ids, list) or not all(isinstance(item, str) and len(item) <= 100 for item in procedure_ids): raise ValueError("procedure_ids must be a list of procedure IDs")
+                    self._send(201, run_benign_procedures(procedure_ids))
+                elif path == "/api/benign-procedures/assess":
+                    data = self._body(); observed = data.get("observed_procedure_ids", [])
+                    if not isinstance(observed, list) or not all(isinstance(item, str) and len(item) <= 100 for item in observed): raise ValueError("observed_procedure_ids must be a list of procedure IDs")
+                    self._send(200, assess_benign_procedures(_input(data, "run_dir", 1000), observed))
+                elif path == "/api/benign-procedures/cleanup": self._send(200, cleanup_benign_procedures(_input(self._body(), "run_dir", 1000)))
                 elif path.startswith("/api/actor-profiles/") and path.endswith("/run"):
                     data = self._body(); name = path.removeprefix("/api/actor-profiles/").removesuffix("/run").rstrip("/")
                     retest_of = data.get("retest_of")

@@ -101,6 +101,7 @@ def test_manager_health_and_campaign_listing():
         assert "function assessCtidFixtures()" in script
         assert "function saveActorProfile()" in script
         assert "function runActorProfile(name)" in script
+        assert "Approved local procedures" in script
         assert "function saveRoeEditor()" in script
         compatibility = json.loads(urllib.request.urlopen(base + "/api/provider/compatibility").read())
         assert "checks" in compatibility
@@ -110,13 +111,18 @@ def test_manager_health_and_campaign_listing():
         assert mappings["mappings"]
         fixture_catalog = json.loads(urllib.request.urlopen(base + "/api/ctid-fixtures").read())
         assert len(fixture_catalog["fixtures"]) == 4
-        assert json.loads(urllib.request.urlopen(base + "/api/actor-profiles").read())["profiles"] == []
+        assert len(json.loads(urllib.request.urlopen(base + "/api/benign-procedures").read())["procedures"]) >= 8
+        assert isinstance(json.loads(urllib.request.urlopen(base + "/api/actor-profiles").read())["profiles"], list)
         actor_profile = _manager_post(base, "/api/actor-profiles", {"name": "scattered-spider", "actor": "Scattered Spider", "aliases": ["UNC3944"], "sources": ["internal exercise brief"], "technique_ids": ["T1078.004"], "fixture_ids": ["fixture-suspicious-sign-in"]})
         assert actor_profile["name"] == "scattered-spider"
         actor_plan = json.loads(urllib.request.urlopen(base + "/api/actor-profiles/scattered-spider/plan").read())
         assert len(actor_plan["coverage"]) == 1
         actor_run = _manager_post(base, "/api/actor-profiles/scattered-spider/run", {})
-        assert len(actor_run["fixtures"]) == 1
+        assert len(actor_run["fixtures"]["fixtures"]) == 1
+        procedure_run = _manager_post(base, "/api/benign-procedures/run", {"procedure_ids": ["procedure-dummy-data-read"]})
+        procedure_assessment = _manager_post(base, "/api/benign-procedures/assess", {"run_dir": procedure_run["run_dir"], "observed_procedure_ids": []})
+        assert procedure_assessment["detection_gap_count"] == 1
+        assert _manager_post(base, "/api/benign-procedures/cleanup", {"run_dir": procedure_run["run_dir"]})["scope"] == "run-owned work directory only"
         fixture_run = _manager_post(base, "/api/ctid-fixtures", {})
         assert fixture_run["run_id"].startswith("ctid-fixture-")
         assessment = _manager_post(base, "/api/ctid-fixtures/assess", {"bundle": fixture_run["bundle"], "observed_fixture_ids": ["fixture-suspicious-sign-in"]})
