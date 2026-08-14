@@ -78,4 +78,4 @@ def test_reports_profiles_and_workflow_recovery_edges_are_local():
     empty = root / "empty-run"
     empty.mkdir(parents=True)
     (empty / "events.jsonl").write_text("", encoding="utf-8")
-    assert build_gap_report(empty)["behavior_success"] is True
+    assert build_gap_report(empty)["behavior_success"] is False

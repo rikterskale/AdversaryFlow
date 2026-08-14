@@ -95,6 +95,12 @@ def test_cli_adapter_status_reports_only_fixed_safe_capabilities(monkeypatch, ca
     status = json.loads(capsys.readouterr().out)
     assert status["adapter"] == "local-synthetic"
     assert status["execution_boundary"] == "simulation-only"
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "adapter", "status", "--name", "local-behavioral", "--catalog", "curated-windows"])
+    with pytest.raises(SystemExit) as behavioral_exit:
+        cli.main()
+    assert behavioral_exit.value.code == 0
+    behavioral = json.loads(capsys.readouterr().out)
+    assert behavioral["execution_boundary"] == "fixed-local-behavior"
 
 
 def test_cli_provider_validate_exits_successfully_for_offline_defaults(monkeypatch, capsys):
@@ -163,6 +169,33 @@ def test_cli_campaign_offline_draft_and_synthetic_completion(monkeypatch, capsys
     completed = json.loads(_run(monkeypatch, capsys, "campaign", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "validate process visibility", "--approve", "--approver", "manager@example.test", "--campaign-root", str(completed_root), "--output", str(completed_root / "runs")))
     assert completed["stage"] == "completed"
     assert completed["telemetry_gap_report"]["behavior_success"] is True
+
+
+def test_cli_campaign_assess_correlates_external_detection_records(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
+    root = Path("artifacts") / f"cli-assess-{uuid4()}"
+    completed = json.loads(_run(monkeypatch, capsys, "campaign", "--actor", "baseline", "--objective", "assess", "--approve", "--approver", "manager@example.test", "--campaign-root", str(root), "--output", str(root / "runs")))
+    run_id = Path(completed["run_dir"]).name
+    records = []
+    for ability_id in completed["draft"]["ability_ids"]:
+        records.append(json.dumps({"run_id": run_id, "host_id": "local-lab", "ability_id": ability_id, "observed": True, "detected": True, "detection_id": f"rule-{ability_id}"}))
+    telemetry = root / "telemetry.jsonl"
+    telemetry.write_text("\n".join(records) + "\n", encoding="utf-8")
+    assessed = json.loads(_run(monkeypatch, capsys, "campaign", "assess", "--campaign-id", completed["campaign_id"], "--campaign-root", str(root), "--telemetry-file", str(telemetry)))
+    assert assessed["assessment"]["detections_fired"] == len(records)
+    assert assessed["assessment"]["detection_gap_count"] == 0
+
+
+def test_cli_campaign_assess_rejects_incomplete_campaign(monkeypatch, capsys):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
+    root = Path("artifacts") / f"cli-assess-incomplete-{uuid4()}"
+    drafted = json.loads(_run(monkeypatch, capsys, "campaign", "--actor", "baseline", "--objective", "assess", "--campaign-root", str(root)))
+    telemetry = root / "telemetry.jsonl"; telemetry.write_text("", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "campaign", "assess", "--campaign-id", drafted["campaign_id"], "--campaign-root", str(root), "--telemetry-file", str(telemetry)])
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 1
+    assert "completed campaign" in json.loads(capsys.readouterr().out)["error"]
 
 
 def test_cli_provider_configure_and_invalid_validation_are_guided(monkeypatch, capsys):

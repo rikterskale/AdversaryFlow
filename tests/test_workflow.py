@@ -20,8 +20,10 @@ def test_complete_local_workflow():
     assert len(progress["completed_abilities"]) == progress["total_abilities"]
     report = build_gap_report(run_dir)
     assert report["behavior_success"] is True
-    assert report["telemetry_expected"] == report["telemetry_observed"]
-    assert report["detection_gap_count"] == 0
+    assert report["telemetry_expected"] == 2
+    assert report["telemetry_observed"] == 0
+    assert report["detection_gap_count"] == 2
+    assert {item["outcome"] for item in report["results"]} == {"behavior_succeeded_telemetry_missing"}
     manifest = __import__("json").loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["adapter"] == "local-synthetic"
     assert manifest["execution_boundary"] == "simulation-only"

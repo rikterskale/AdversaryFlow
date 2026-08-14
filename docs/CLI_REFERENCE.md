@@ -12,7 +12,7 @@
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective "validate endpoint process visibility"] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
 | `capabilities` | Print `capabilities.json`. |
-| `adapter status [--catalog content/abilities/catalog.json]` | Read-only report of the registered local-synthetic adapter, its contract version, allowed scopes, and catalog compatibility. |
+| `adapter status [--name local-synthetic|local-behavioral] [--catalog PATH|curated-windows]` | Read-only report of a fixed adapter, its contract version, allowed scopes, and catalog compatibility. |
 
 ## Diagnostics and support
 
@@ -35,6 +35,8 @@ Policy commands: `provider policy status` and `provider policy allow NAME`. A ho
 Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs]` only after review by the named RoE approver.
 
 Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; and `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`.
+
+Use `--adapter local-behavioral --catalog curated-windows` after approval to execute the packaged fixed, read-only Windows behaviors. Use `campaign assess --campaign-id ID --telemetry-file FILE [--campaign-root PATH]` after a completed run to correlate independent EDR/SIEM JSONL observations. Behavior success, telemetry observation, detection, and cleanup are reported separately. See [CURATED_ABILITIES.md](CURATED_ABILITIES.md).
 
 `list` and `inspect` are read-only. `reject` and `cancel` record decisions. `reset` deletes the direct campaign directory beneath the configured root after explicit confirmation.
 

@@ -19,6 +19,10 @@ def default_catalog_path() -> Path:
     return Path(str(files("adversaryflow.resources").joinpath("catalog.json")))
 
 
+def curated_windows_catalog_path() -> Path:
+    return Path(str(files("adversaryflow.resources").joinpath("curated-windows.json")))
+
+
 @dataclass(frozen=True)
 class TelemetryExpectation:
     category: str
@@ -41,6 +45,8 @@ class Ability:
     cleanup_action: str | None = None
     procedure_id: str | None = None
     source_refs: tuple[str, ...] = ()
+    execution_action: str | None = None
+    execution_timeout_seconds: int = 30
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "Ability":
@@ -61,6 +67,8 @@ class Ability:
             cleanup_action=raw.get("cleanup_action"),
             procedure_id=raw.get("procedure_id"),
             source_refs=tuple(str(item) for item in raw.get("source_refs", [])),
+            execution_action=raw.get("execution", {}).get("action"),
+            execution_timeout_seconds=int(raw.get("execution", {}).get("timeout_seconds", 30)),
         )
         validate_ability(ability)
         return ability
@@ -75,6 +83,10 @@ def validate_ability(ability: Ability) -> None:
         raise ValueError("ability must declare expected telemetry")
     if ability.procedure_id is not None and not ability.procedure_id.startswith("procedure-"):
         raise ValueError("ability procedure_id must reference a registered procedure")
+    if ability.execution_action is not None and not ability.execution_action.startswith(("windows-", "linux-")):
+        raise ValueError("ability execution action must reference a fixed platform action")
+    if not 1 <= ability.execution_timeout_seconds <= 60:
+        raise ValueError("ability execution timeout must be between 1 and 60 seconds")
 
 
 def load_catalog(path: str | Path) -> tuple[Ability, ...]:

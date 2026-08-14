@@ -21,7 +21,7 @@ def _safe_root(value: str | Path) -> Path:
 
 
 def _ability_mapping(ability: Ability) -> dict[str, Any]:
-    return {
+    mapping = {
         "id": ability.id, "version": ability.version, "name": ability.name,
         "technique": {"id": ability.technique_id, "name": ability.name},
         "platform": ability.platform, "fidelity": ability.fidelity,
@@ -31,6 +31,9 @@ def _ability_mapping(ability: Ability) -> dict[str, Any]:
         "cleanup_action": ability.cleanup_action, "procedure_id": ability.procedure_id,
         "source_refs": list(ability.source_refs),
     }
+    if ability.execution_action:
+        mapping["execution"] = {"action": ability.execution_action, "timeout_seconds": ability.execution_timeout_seconds}
+    return mapping
 
 
 def _generated_entries(technique_id: str, name: str, platform: str, sources: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:

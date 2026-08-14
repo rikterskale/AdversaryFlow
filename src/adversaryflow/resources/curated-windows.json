@@ -1,0 +1,45 @@
+{
+  "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "abilities": [
+    {
+      "id": "ability-windows-current-identity", "version": "1.0.0", "name": "Windows current identity and token discovery",
+      "technique": {"id": "T1033", "name": "System Owner/User Discovery"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Execute the fixed read-only whoami.exe /all action on the approved local Windows endpoint.",
+      "expected": {"telemetry": [{"category": "process", "description": "whoami.exe executes with the /all argument.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "No cleanup required; the action is read-only.",
+      "execution": {"action": "windows-current-identity", "timeout_seconds": 15}, "source_refs": ["https://attack.mitre.org/techniques/T1033/"]
+    },
+    {
+      "id": "ability-windows-system-information", "version": "1.0.0", "name": "Windows operating system discovery",
+      "technique": {"id": "T1082", "name": "System Information Discovery"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Execute a fixed read-only PowerShell/.NET operating-system query on the approved local Windows endpoint.",
+      "expected": {"telemetry": [{"category": "process", "description": "PowerShell queries local operating-system version information through fixed .NET APIs.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "No cleanup required; the action is read-only.",
+      "execution": {"action": "windows-system-information", "timeout_seconds": 30}, "source_refs": ["https://attack.mitre.org/techniques/T1082/"]
+    },
+    {
+      "id": "ability-windows-network-configuration", "version": "1.0.0", "name": "Windows network configuration discovery",
+      "technique": {"id": "T1016", "name": "System Network Configuration Discovery"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Execute the fixed read-only ipconfig.exe /all action on the approved local Windows endpoint.",
+      "expected": {"telemetry": [{"category": "process", "description": "ipconfig.exe executes with the /all argument.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "No cleanup required; the action is read-only.",
+      "execution": {"action": "windows-network-configuration", "timeout_seconds": 15}, "source_refs": ["https://attack.mitre.org/techniques/T1016/"]
+    },
+    {
+      "id": "ability-windows-process-discovery", "version": "1.0.0", "name": "Windows process discovery",
+      "technique": {"id": "T1057", "name": "Process Discovery"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Execute a fixed read-only PowerShell Get-Process action on the approved local Windows endpoint.",
+      "expected": {"telemetry": [{"category": "process", "description": "PowerShell Get-Process enumerates active local processes.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "No cleanup required; the action is read-only.",
+      "execution": {"action": "windows-process-discovery", "timeout_seconds": 15}, "source_refs": ["https://attack.mitre.org/techniques/T1057/"]
+    },
+    {
+      "id": "ability-windows-local-administrators", "version": "1.0.0", "name": "Windows local administrators discovery",
+      "technique": {"id": "T1069.001", "name": "Permission Groups Discovery: Local Groups"}, "platform": "windows", "fidelity": "behavioral",
+      "simulation_action": "Execute the fixed read-only net.exe localgroup administrators action on the approved local Windows endpoint.",
+      "expected": {"telemetry": [{"category": "process", "description": "net.exe enumerates the local Administrators group.", "required": true}]},
+      "safety": {"writes_only_run_root": true, "network_scope": "none"}, "cleanup_action": "No cleanup required; the action is read-only.",
+      "execution": {"action": "windows-local-administrators", "timeout_seconds": 15}, "source_refs": ["https://attack.mitre.org/techniques/T1069/001/"]
+    }
+  ]
+}

@@ -22,7 +22,7 @@ def write_campaign_reports(campaign_dir: str | Path, run_dir: str | Path | None 
     report = build_campaign_report(root, run_dir)
     run = report["run"] or {}
     gaps = run.get("gaps", [])
-    gap_lines = [f"- **{item['category']}**: {item['description']}" for item in gaps] or ["- None recorded."]
+    gap_lines = [f"- **{item.get('technique_id', item.get('category', 'unknown'))}** ({item.get('ability_id', 'unmapped')}): {item.get('status', item.get('description', 'missing'))}" for item in gaps] or ["- None recorded."]
     lines = [
         f"# AdversaryFlow Campaign Report: {report['campaign']['campaign_id']}",
         "", f"- Actor: {report['draft']['actor']}", f"- Target: {report['draft']['target']}",
@@ -31,13 +31,14 @@ def write_campaign_reports(campaign_dir: str | Path, run_dir: str | Path | None 
         "## Approval", "", json.dumps(report["approval"] or {"status": "pending"}, indent=2), "",
         "## Results", "", f"- Behavior success: `{run.get('behavior_success', 'not-run')}`",
         f"- Expected telemetry: `{run.get('telemetry_expected', 0)}`", f"- Observed telemetry: `{run.get('telemetry_observed', 0)}`",
+        f"- Detections fired: `{run.get('detections_fired', 0)}`",
         f"- Detection gaps: `{run.get('detection_gap_count', 0)}`", "",
         "## Detection gaps", "", *gap_lines,
         "", "## Safety note", "", "This report describes authorized, local synthetic validation. Behavior success does not prove production detection success.",
     ]
     markdown = root / "campaign-report.md"
     markdown.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    html_items = "".join(f"<li><strong>{html.escape(item['category'])}</strong>: {html.escape(item['description'])}</li>" for item in gaps) or "<li>None recorded.</li>"
+    html_items = "".join(f"<li><strong>{html.escape(str(item.get('technique_id', item.get('category', 'unknown'))))}</strong>: {html.escape(str(item.get('status', item.get('description', 'missing'))))}</li>" for item in gaps) or "<li>None recorded.</li>"
     html_report = root / "campaign-report.html"
-    html_report.write_text(f"<!doctype html><html><head><meta charset='utf-8'><title>AdversaryFlow Campaign Report</title></head><body><h1>AdversaryFlow Campaign Report</h1><p><b>Campaign:</b> {html.escape(report['campaign']['campaign_id'])}</p><p><b>Actor:</b> {html.escape(report['draft']['actor'])}</p><p><b>Objective:</b> {html.escape(report['draft']['objective'])}</p><h2>Results</h2><ul><li>Behavior success: {html.escape(str(run.get('behavior_success', 'not-run')))}</li><li>Detection gaps: {run.get('detection_gap_count', 0)}</li></ul><h2>Detection gaps</h2><ul>{html_items}</ul><p>This report describes authorized, local synthetic validation.</p></body></html>\n", encoding="utf-8")
+    html_report.write_text(f"<!doctype html><html><head><meta charset='utf-8'><title>AdversaryFlow Campaign Report</title></head><body><h1>AdversaryFlow Campaign Report</h1><p><b>Campaign:</b> {html.escape(report['campaign']['campaign_id'])}</p><p><b>Actor:</b> {html.escape(report['draft']['actor'])}</p><p><b>Objective:</b> {html.escape(report['draft']['objective'])}</p><h2>Results</h2><ul><li>Behavior success: {html.escape(str(run.get('behavior_success', 'not-run')))}</li><li>Telemetry observed: {run.get('telemetry_observed', 0)}</li><li>Detections fired: {run.get('detections_fired', 0)}</li><li>Detection gaps: {run.get('detection_gap_count', 0)}</li></ul><h2>Detection gaps</h2><ul>{html_items}</ul><p>Behavior, telemetry, detection, and cleanup are independent outcomes.</p></body></html>\n", encoding="utf-8")
     return markdown, html_report

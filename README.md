@@ -21,9 +21,9 @@ The first vertical slice provides:
 - Campaign plans that pair each technique with expected telemetry and validation questions.
 - A provider-neutral AI review prompt that keeps planning defensive and novice-friendly.
 - Versioned, safe emulation abilities with telemetry expectations, cleanup contracts, and deterministic plan hashes.
-- A fixed local-synthetic adapter boundary that accepts reviewed metadata only, never operator-supplied commands.
+- Fixed synthetic and behavioral adapter boundaries that never accept operator-supplied commands.
 
-The MVP deliberately does not generate exploit payloads, persistence, credential theft, evasion, lateral movement commands, or unrestricted network actions. The only registered execution adapter is local-synthetic: it remains simulation-only and is restricted to run artifacts and engine-owned loopback markers.
+The MVP deliberately does not generate exploit payloads, persistence, credential theft, evasion, lateral movement commands, or unrestricted network actions. The default `local-synthetic` adapter is restricted to run artifacts and engine-owned loopback markers. The opt-in `local-behavioral` adapter executes only code-owned, fixed, read-only actions from the packaged `curated-windows` catalog; catalog files and operators cannot supply commands.
 
 AI provider integration is intentionally left behind a small adapter boundary so an organization can choose its approved model, data-handling policy, and retention settings.
 
@@ -48,11 +48,12 @@ adversaryflow doctor
 adversaryflow support-bundle
 adversaryflow capabilities
 adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"
+adversaryflow adapter status --name local-behavioral --catalog curated-windows
 adversaryflow manager --open
 adversaryflow guide --interactive
 ```
 
-The current release supports only scoped, local synthetic simulation; it has no `--live` option.
+The current release supports scoped local synthetic simulation plus opt-in fixed, read-only Windows behaviors; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option.
 
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
 

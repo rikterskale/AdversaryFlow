@@ -1,11 +1,18 @@
-"""Fixed, simulation-only execution adapters.
+"""Fixed synthetic and benign local-behavior execution adapters.
 
 Adapters receive reviewed ability metadata, never operator-provided commands. The
-only registered adapter is local synthetic emulation; it may use an engine-owned
-loopback sink, but cannot contact a campaign target.
+synthetic adapter may use an engine-owned loopback sink. The behavioral adapter
+can invoke only code-owned, read-only commands and cannot contact a campaign
+target.
 """
 
+import hashlib
+import shutil
+import subprocess  # nosec B404 - fixed registry only; shell execution is never used
+import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol
 
 from .ai import AICampaignDraft
@@ -25,6 +32,7 @@ class AdapterRequest:
     abilities: tuple[Ability, ...]
     run_id: str
     timeout_seconds: int = 30
+    work_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,8 @@ class LocalSyntheticAdapter:
                     observed = sink.received
                 events.append({
                     "event": "simulation_completed",
+                    "run_id": request.run_id,
+                    "host_id": request.draft.target,
                     "ability_id": ability.id,
                     "technique_id": ability.technique_id,
                     "target": request.draft.target,
@@ -91,11 +101,76 @@ class LocalSyntheticAdapter:
                     "network_scope": ability.network_scope,
                     "execution": "synthetic-harness-only",
                     "adapter": self.name,
+                    "executed_at": datetime.now(timezone.utc).isoformat(),
+                    "cleanup_status": "not-required",
                 })
         return AdapterResult(adapter=self.name, events=tuple(events))
 
 
-_REGISTERED_ADAPTERS: dict[str, ExecutionAdapter] = {"local-synthetic": LocalSyntheticAdapter()}
+_FIXED_BEHAVIOR_ACTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "windows-current-identity": ("whoami.exe", ("/all",)),
+    "windows-system-information": ("powershell.exe", ("-NoProfile", "-NonInteractive", "-Command", "[System.Environment]::OSVersion.VersionString; [System.Runtime.InteropServices.RuntimeInformation]::OSDescription")),
+    "windows-network-configuration": ("ipconfig.exe", ("/all",)),
+    "windows-process-discovery": ("powershell.exe", ("-NoProfile", "-NonInteractive", "-Command", "Get-Process | Select-Object -First 200 -Property Id,ProcessName,Path | ConvertTo-Csv -NoTypeInformation")),
+    "windows-local-administrators": ("net.exe", ("localgroup", "administrators")),
+}
+
+
+class LocalBehavioralAdapter:
+    """Execute only fixed, code-reviewed, read-only local behavior actions."""
+
+    name = "local-behavioral"
+
+    def execute(self, request: AdapterRequest) -> AdapterResult:
+        validate_adapter_request(request)
+        if not request.work_root:
+            raise ValueError("behavioral adapter requires a run-owned work root")
+        work_root = Path(request.work_root).resolve()
+        work_root.mkdir(parents=True, exist_ok=True)
+        events: list[dict] = []
+        for ability in request.abilities:
+            action = ability.execution_action
+            if action not in _FIXED_BEHAVIOR_ACTIONS:
+                raise ValueError(f"No reviewed behavioral action is registered for {ability.id}")
+            command, args = _FIXED_BEHAVIOR_ACTIONS[action]
+            executable = shutil.which(command)
+            started = time.monotonic()
+            event = {
+                "event": "behavior_completed", "run_id": request.run_id, "host_id": request.draft.target,
+                "ability_id": ability.id, "technique_id": ability.technique_id, "target": request.draft.target,
+                "telemetry": [asdict(item) for item in ability.expected_telemetry], "network_scope": ability.network_scope,
+                "execution": "fixed-local-behavior", "execution_action": action, "adapter": self.name,
+                "executed_at": datetime.now(timezone.utc).isoformat(), "cleanup_status": "not-required",
+            }
+            if executable is None:
+                event.update({"behavior_success": False, "failure": f"Required executable is unavailable: {command}", "exit_code": None})
+            else:
+                try:
+                    # The executable is resolved locally and every argument comes
+                    # from the code-owned registry above, never campaign input.
+                    completed = subprocess.run(  # nosec B603
+                        [executable, *args],
+                        cwd=work_root,
+                        capture_output=True,
+                        timeout=min(ability.execution_timeout_seconds, request.timeout_seconds),
+                        check=False,
+                    )
+                    stdout = completed.stdout[:65536]; stderr = completed.stderr[:65536]
+                    event.update({
+                        "behavior_success": completed.returncode == 0, "exit_code": completed.returncode,
+                        "stdout_sha256": hashlib.sha256(stdout).hexdigest(), "stderr_sha256": hashlib.sha256(stderr).hexdigest(),
+                        "stdout_bytes": len(stdout), "stderr_bytes": len(stderr), "output_truncated": len(completed.stdout) > len(stdout) or len(completed.stderr) > len(stderr),
+                    })
+                    if completed.returncode != 0:
+                        event["failure"] = f"Fixed behavioral action exited with code {completed.returncode}"
+                except subprocess.TimeoutExpired:
+                    event.update({"behavior_success": False, "failure": "Fixed behavioral action timed out", "exit_code": None})
+            event["duration_ms"] = round((time.monotonic() - started) * 1000)
+            events.append(event)
+        return AdapterResult(adapter=self.name, events=tuple(events))
+
+
+_REGISTERED_ADAPTERS: dict[str, ExecutionAdapter] = {"local-synthetic": LocalSyntheticAdapter(), "local-behavioral": LocalBehavioralAdapter()}
 
 
 def resolve_adapter(name: str = "local-synthetic") -> ExecutionAdapter:
@@ -110,6 +185,8 @@ def preflight_adapter(name: str, request: AdapterRequest) -> tuple[ExecutionAdap
     """Resolve and validate a built-in adapter before it receives any execution work."""
     adapter = resolve_adapter(name)
     validate_adapter_request(request)
+    if name == "local-behavioral" and any(ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS for ability in request.abilities):
+        raise ValueError("Behavioral plans may contain only registered fixed execution actions")
     return adapter, AdapterPreflight(
         contract_version=ADAPTER_CONTRACT_VERSION,
         adapter=adapter.name,
@@ -126,11 +203,13 @@ def adapter_readiness(abilities: tuple[Ability, ...], name: str = "local-synthet
             validate_ability(ability)
             if ability.fidelity not in {"synthetic", "behavioral"}:
                 raise ValueError(f"Unsupported ability fidelity: {ability.fidelity}")
+            if name == "local-behavioral" and ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS:
+                raise ValueError(f"No reviewed behavioral action is registered for {ability.id}")
         scopes = sorted({ability.network_scope for ability in abilities})
         return {
             "adapter": adapter.name,
             "contract_version": ADAPTER_CONTRACT_VERSION,
-            "execution_boundary": "simulation-only",
+            "execution_boundary": "fixed-local-behavior" if name == "local-behavioral" else "simulation-only",
             "allowed_network_scopes": ["none", "loopback"],
             "catalog_network_scopes": scopes,
             "ability_count": len(abilities),

@@ -6,7 +6,7 @@ import yaml
 
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
-from .emulation import default_catalog_path, load_catalog
+from .emulation import curated_windows_catalog_path, default_catalog_path, load_catalog
 from .adapters import adapter_readiness
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
@@ -113,6 +113,7 @@ def main() -> None:
     demo.add_argument("--approver", default=None)
     demo.add_argument("--catalog", default="content/abilities/catalog.json")
     demo.add_argument("--output", default="artifacts/runs")
+    demo.add_argument("--adapter", choices=("local-synthetic", "local-behavioral"), default="local-synthetic")
     doctor = sub.add_parser("doctor", help="diagnose installation and local runtime")
     doctor.add_argument("--roe", default="examples/roe.yaml")
     doctor.add_argument("--catalog", default="content/abilities/catalog.json")
@@ -126,6 +127,7 @@ def main() -> None:
     adapter_sub = adapter.add_subparsers(dest="adapter_command", required=True)
     adapter_status = adapter_sub.add_parser("status", help="show read-only adapter readiness")
     adapter_status.add_argument("--catalog", default="content/abilities/catalog.json")
+    adapter_status.add_argument("--name", choices=("local-synthetic", "local-behavioral"), default="local-synthetic")
     guide = sub.add_parser("guide", help="walk through the safe campaign workflow and next steps")
     guide.add_argument("--actor", default="APT29")
     guide.add_argument("--target", default="local-lab")
@@ -176,6 +178,7 @@ def main() -> None:
     campaign.add_argument("--output", default="artifacts/runs")
     campaign.add_argument("--campaign-root", default="artifacts/campaigns")
     campaign.add_argument("--campaign-id", default=None, help="resume a saved campaign directory")
+    campaign.add_argument("--adapter", choices=("local-synthetic", "local-behavioral"), default="local-synthetic", help="fixed execution adapter used only after approval")
     campaign_sub = campaign.add_subparsers(dest="lifecycle_command")
     list_campaign = campaign_sub.add_parser("list", help="list saved campaigns")
     list_campaign.add_argument("--campaign-root", default="artifacts/campaigns")
@@ -195,6 +198,10 @@ def main() -> None:
     reset.add_argument("--campaign-id", required=True)
     reset.add_argument("--confirm", action="store_true")
     reset.add_argument("--campaign-root", default="artifacts/campaigns")
+    assess = campaign_sub.add_parser("assess", help="correlate completed behavior with EDR/SIEM telemetry JSONL")
+    assess.add_argument("--campaign-id", required=True)
+    assess.add_argument("--telemetry-file", required=True)
+    assess.add_argument("--campaign-root", default="artifacts/campaigns")
     manager = sub.add_parser("manager", help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
@@ -205,6 +212,8 @@ def main() -> None:
     args = parser.parse_args()
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
         args.catalog = str(default_catalog_path())
+    if hasattr(args, "catalog") and args.catalog == "curated-windows":
+        args.catalog = str(curated_windows_catalog_path())
 
     if args.command == "validate":
         roe = load_roe(args.roe)
@@ -229,7 +238,7 @@ def main() -> None:
 
     if args.command == "adapter":
         abilities = load_catalog(args.catalog)
-        readiness = adapter_readiness(abilities)
+        readiness = adapter_readiness(abilities, args.name)
         print(json.dumps(readiness, indent=2))
         raise SystemExit(0 if readiness["compatible"] else 1)
 
@@ -269,6 +278,19 @@ def main() -> None:
                 reset_campaign(args.campaign_root, args.campaign_id, args.confirm)
                 print(json.dumps({"success": True, "status": "reset", "campaign_id": args.campaign_id}, indent=2))
             except (OSError, ValueError, PermissionError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+                raise SystemExit(1)
+            return
+        if args.lifecycle_command == "assess":
+            try:
+                campaign_record = inspect_campaign(args.campaign_root, args.campaign_id)
+                metadata = campaign_record.get("metadata", {})
+                if metadata.get("status") != "completed" or not metadata.get("run_dir"):
+                    raise ValueError("Only a completed campaign with a run directory can be assessed")
+                report = build_gap_report(metadata["run_dir"], args.telemetry_file)
+                write_campaign_reports(campaign_record["campaign_dir"], metadata["run_dir"])
+                print(json.dumps({"success": True, "campaign_id": args.campaign_id, "assessment": report}, indent=2))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 print(json.dumps({"success": False, "error": str(exc)}, indent=2))
                 raise SystemExit(1)
             return
@@ -319,7 +341,7 @@ def main() -> None:
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
-                result.update(complete_saved_campaign(args.campaign_root, campaign_dir.name, roe, abilities, args.approver or "", args.output))
+                result.update(complete_saved_campaign(args.campaign_root, campaign_dir.name, roe, abilities, args.approver or "", args.output, args.adapter))
             except (PermissionError, ValueError) as exc:
                 print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))
                 raise SystemExit(1)
@@ -345,7 +367,7 @@ def main() -> None:
         validate_ai_draft(draft_result, roe, abilities)
         plan_hash = campaign_integrity_hashes(draft_result, roe, abilities)["plan_hash"]
         approval = approve_draft(draft_result, roe, abilities, args.approver or roe.approver_name, plan_hash)
-        run_dir = run_local_emulation(draft_result, abilities, approval, args.output)
+        run_dir = run_local_emulation(draft_result, abilities, approval, args.output, args.adapter)
         report = build_gap_report(run_dir)
         print(json.dumps({"draft": draft_result.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": report}, indent=2))
         return
