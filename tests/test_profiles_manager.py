@@ -88,6 +88,8 @@ def test_manager_health_and_campaign_listing():
         assert "Provider setup and diagnostics" in page
         assert "MITRE ATT&CK dry-run planner" in page
         assert "Create redacted support bundle" in page
+        assert 'onclick="inspectCampaign(&quot;' in page
+        assert "Approve and run local synthetic emulation" in page
         assert "Current local scope" in page
         assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
         assert "active local RoE" in page
