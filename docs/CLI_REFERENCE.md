@@ -12,7 +12,13 @@
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective "validate endpoint process visibility"] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
 | `capabilities` | Print `capabilities.json`. |
-| `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT pin when selected. |
+| `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|curated-linux|curated-macos|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT registry selection when applicable. |
+| `coverage [--campaign-root artifacts/campaigns]` | Return the read-only actor → technique → behavior → telemetry → detection → retest dashboard data. |
+| `detection export [--catalog PATH] [--output artifacts/detection-mappings]` | Export Sigma, Sentinel KQL, Splunk SPL, and Elastic EQL validation templates. No rule is deployed. |
+
+## Telemetry commands
+
+`telemetry normalize --source generic|sentinel|defender|splunk|elastic|crowdstrike --input EXPORT --output NORMALIZED.jsonl` converts an offline vendor export to the `ADVERSARYFLOW-TELEMETRY-1` schema. `telemetry preflight --sensor-manifest HEALTH.json [--catalog PATH] [--target local-lab]` validates declared source coverage, clock sync, and agent health before execution. The post-run form, `telemetry preflight --run-dir RUN --telemetry-file NORMALIZED.jsonl`, checks correlation identifiers and timestamps. Neither form queries a sensor. `telemetry export --run-dir RUN --format json|csv --output FILE` exports the current assessment.
 
 ## Diagnostics and support
 
@@ -32,11 +38,11 @@ Policy commands: `provider policy status` and `provider policy allow NAME`. A ho
 
 ## Campaign commands
 
-Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs]` only after review by the named RoE approver.
+Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs] [--sensor-manifest HEALTH.json]` only after review by the named RoE approver. When supplied, the sensor manifest must pass before execution starts.
 
-Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; and `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`.
+Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`; and `campaign retest --campaign-id ID [--campaign-root PATH]`, which creates a new immutable review draft from unresolved gaps.
 
-Use `--adapter local-behavioral --catalog curated-windows` after approval to execute the packaged fixed, read-only Windows behaviors. Use `campaign assess --campaign-id ID --telemetry-file FILE [--campaign-root PATH]` after a completed run to correlate independent EDR/SIEM JSONL observations. Behavior success, telemetry observation, detection, and cleanup are reported separately. See [CURATED_ABILITIES.md](CURATED_ABILITIES.md).
+Use `--adapter local-behavioral` with `--catalog curated-windows`, `curated-linux`, or `curated-macos` after approval to execute the corresponding packaged fixed, read-only local behaviors. Use `campaign assess --campaign-id ID --telemetry-file FILE [--window-seconds 300] [--campaign-root PATH]` after a completed run to correlate independent EDR/SIEM JSONL observations. Behavior success, telemetry observation, detection, ambiguity, and cleanup are reported separately. See [CURATED_ABILITIES.md](CURATED_ABILITIES.md).
 
 Use `--adapter idpt-local --catalog idpt-windows-collection` to delegate the fixed benign Windows collection scenario to the exact reviewed IDPT checkout configured by `ADVERSARYFLOW_IDPT_ROOT`. See [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md).
 

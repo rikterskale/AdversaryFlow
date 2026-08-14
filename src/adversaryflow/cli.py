@@ -6,7 +6,7 @@ import yaml
 
 from .audit import AuditLog
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
-from .emulation import curated_windows_catalog_path, default_catalog_path, idpt_windows_collection_catalog_path, load_catalog
+from .emulation import curated_linux_catalog_path, curated_macos_catalog_path, curated_windows_catalog_path, default_catalog_path, idpt_windows_collection_catalog_path, load_catalog
 from .adapters import adapter_readiness
 from .workflow import approve_draft, build_gap_report, campaign_integrity_hashes, load_campaign_draft, run_local_emulation, save_campaign_draft, verify_campaign_integrity
 from .reports import write_campaign_reports
@@ -22,6 +22,10 @@ from .enrichment import build_enriched_coverage, write_enriched_coverage
 from .benign_procedures import catalog as benign_procedure_catalog
 from .models import RulesOfEngagement
 from .planner import build_plan
+from .coverage import coverage_dashboard
+from .detection_mappings import write_bundle as write_detection_bundle
+from .retest import create_gap_retest
+from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
 
 
 def load_roe(path: str) -> RulesOfEngagement:
@@ -180,6 +184,7 @@ def main() -> None:
     campaign.add_argument("--campaign-root", default="artifacts/campaigns")
     campaign.add_argument("--campaign-id", default=None, help="resume a saved campaign directory")
     campaign.add_argument("--adapter", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic", help="fixed execution adapter used only after approval")
+    campaign.add_argument("--sensor-manifest", default=None, help="optional read-only sensor-health snapshot required to pass before execution")
     campaign_sub = campaign.add_subparsers(dest="lifecycle_command")
     list_campaign = campaign_sub.add_parser("list", help="list saved campaigns")
     list_campaign.add_argument("--campaign-root", default="artifacts/campaigns")
@@ -202,7 +207,34 @@ def main() -> None:
     assess = campaign_sub.add_parser("assess", help="correlate completed behavior with EDR/SIEM telemetry JSONL")
     assess.add_argument("--campaign-id", required=True)
     assess.add_argument("--telemetry-file", required=True)
+    assess.add_argument("--window-seconds", type=int, default=300)
     assess.add_argument("--campaign-root", default="artifacts/campaigns")
+    retest = campaign_sub.add_parser("retest", help="create an immutable review draft from recorded detection gaps")
+    retest.add_argument("--campaign-id", required=True)
+    retest.add_argument("--campaign-root", default="artifacts/campaigns")
+    telemetry = sub.add_parser("telemetry", help="normalize and validate offline EDR/SIEM exports")
+    telemetry_sub = telemetry.add_subparsers(dest="telemetry_command", required=True)
+    telemetry_normalize = telemetry_sub.add_parser("normalize")
+    telemetry_normalize.add_argument("--source", choices=tuple(sorted(SUPPORTED_SOURCES)), required=True)
+    telemetry_normalize.add_argument("--input", required=True)
+    telemetry_normalize.add_argument("--output", required=True)
+    telemetry_preflight = telemetry_sub.add_parser("preflight")
+    telemetry_preflight.add_argument("--run-dir")
+    telemetry_preflight.add_argument("--telemetry-file")
+    telemetry_preflight.add_argument("--sensor-manifest")
+    telemetry_preflight.add_argument("--catalog", default="content/abilities/catalog.json")
+    telemetry_preflight.add_argument("--target", default="local-lab")
+    telemetry_export = telemetry_sub.add_parser("export")
+    telemetry_export.add_argument("--run-dir", required=True)
+    telemetry_export.add_argument("--format", choices=("json", "csv"), required=True)
+    telemetry_export.add_argument("--output", required=True)
+    detection = sub.add_parser("detection", help="export defensive detection-as-code validation mappings")
+    detection_sub = detection.add_subparsers(dest="detection_command", required=True)
+    detection_export = detection_sub.add_parser("export")
+    detection_export.add_argument("--catalog", default="content/abilities/catalog.json")
+    detection_export.add_argument("--output", default="artifacts/detection-mappings")
+    coverage = sub.add_parser("coverage", help="show actor-to-detection campaign coverage")
+    coverage.add_argument("--campaign-root", default="artifacts/campaigns")
     manager = sub.add_parser("manager", help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
@@ -215,6 +247,10 @@ def main() -> None:
         args.catalog = str(default_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "curated-windows":
         args.catalog = str(curated_windows_catalog_path())
+    if hasattr(args, "catalog") and args.catalog == "curated-linux":
+        args.catalog = str(curated_linux_catalog_path())
+    if hasattr(args, "catalog") and args.catalog == "curated-macos":
+        args.catalog = str(curated_macos_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "idpt-windows-collection":
         args.catalog = str(idpt_windows_collection_catalog_path())
 
@@ -244,6 +280,42 @@ def main() -> None:
         readiness = adapter_readiness(abilities, args.name)
         print(json.dumps(readiness, indent=2))
         raise SystemExit(0 if readiness["compatible"] else 1)
+
+    if args.command == "telemetry":
+        try:
+            if args.telemetry_command == "normalize":
+                records = normalize_export(args.source, args.input)
+                output = write_normalized(records, args.output)
+                result = {"success": True, "source": args.source, "record_count": len(records), "output": str(output), "boundary": "Offline export only; no vendor API was queried."}
+            else:
+                if args.telemetry_command == "preflight" and args.sensor_manifest:
+                    abilities = load_catalog(args.catalog)
+                    categories = {item.category for ability in abilities for item in ability.expected_telemetry}
+                    result = planned_sensor_preflight(categories, args.target, args.sensor_manifest)
+                else:
+                    if not args.run_dir:
+                        raise ValueError("telemetry command requires --run-dir")
+                    root = Path(args.run_dir)
+                    events = [json.loads(line) for line in (root / "events.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+                    if args.telemetry_command == "preflight" and args.telemetry_file:
+                        result = sensor_preflight(events, root.name, load_telemetry_records(args.telemetry_file))
+                    elif args.telemetry_command == "preflight":
+                        raise ValueError("telemetry preflight requires --sensor-manifest or both --run-dir and --telemetry-file")
+                    else:
+                        report = json.loads((root / "telemetry-gap-report.json").read_text(encoding="utf-8"))
+                        result = {"success": True, "output": str(export_assessment(report, args.output, args.format))}
+            print(json.dumps(result, indent=2))
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            print(json.dumps({"success": False, "error": str(exc)}, indent=2)); raise SystemExit(1)
+        return
+
+    if args.command == "detection":
+        print(json.dumps(write_detection_bundle(load_catalog(args.catalog), args.output), indent=2))
+        return
+
+    if args.command == "coverage":
+        print(json.dumps(coverage_dashboard(args.campaign_root), indent=2))
+        return
 
     if args.command == "manager":
         serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
@@ -290,12 +362,19 @@ def main() -> None:
                 metadata = campaign_record.get("metadata", {})
                 if metadata.get("status") != "completed" or not metadata.get("run_dir"):
                     raise ValueError("Only a completed campaign with a run directory can be assessed")
-                report = build_gap_report(metadata["run_dir"], args.telemetry_file)
+                report = build_gap_report(metadata["run_dir"], args.telemetry_file, args.window_seconds)
                 write_campaign_reports(campaign_record["campaign_dir"], metadata["run_dir"])
                 print(json.dumps({"success": True, "campaign_id": args.campaign_id, "assessment": report}, indent=2))
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 print(json.dumps({"success": False, "error": str(exc)}, indent=2))
                 raise SystemExit(1)
+            return
+        if args.lifecycle_command == "retest":
+            try:
+                result = create_gap_retest(args.campaign_root, args.campaign_id, load_roe(args.roe), load_catalog(args.catalog))
+                print(json.dumps({"success": True, **result}, indent=2))
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                print(json.dumps({"success": False, "error": str(exc)}, indent=2)); raise SystemExit(1)
             return
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
@@ -344,6 +423,14 @@ def main() -> None:
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
+                if args.sensor_manifest:
+                    selected = tuple(ability for ability in abilities if ability.id in draft_result.ability_ids)
+                    categories = {item.category for ability in selected for item in ability.expected_telemetry}
+                    preflight = planned_sensor_preflight(categories, draft_result.target, args.sensor_manifest)
+                    if not preflight["ready"]:
+                        raise ValueError("Sensor preflight failed; no execution was started")
+                    (campaign_dir / "sensor-preflight.json").write_text(json.dumps(preflight, indent=2), encoding="utf-8")
+                    result["sensor_preflight"] = preflight
                 result.update(complete_saved_campaign(args.campaign_root, campaign_dir.name, roe, abilities, args.approver or "", args.output, args.adapter))
             except (PermissionError, ValueError) as exc:
                 print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))

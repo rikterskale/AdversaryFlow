@@ -1,0 +1,20 @@
+{
+  "format": "ADVERSARYFLOW-IDPT-SCENARIOS-1",
+  "scenarios": [
+    {
+      "registry_id": "idpt-windows-collection",
+      "reviewed": true,
+      "scenario_id": "scenario--windows-safe-collection-flow",
+      "commit": "dcdac0f3e82469a95975a170bc201b06e164b7b6",
+      "content_version": "2.0.0",
+      "platform": "windows",
+      "ability_mapping": {
+        "ability-idpt-powershell-marker": "ability--10000000-0000-4000-8000-000000000013",
+        "ability-idpt-file-discovery": "ability--10000000-0000-4000-8000-000000000006",
+        "ability-idpt-local-data": "ability--10000000-0000-4000-8000-000000000007",
+        "ability-idpt-local-staging": "ability--10000000-0000-4000-8000-000000000008",
+        "ability-idpt-loopback-collection": "ability--10000000-0000-4000-8000-000000000012"
+      }
+    }
+  ]
+}

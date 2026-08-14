@@ -23,6 +23,8 @@ The first vertical slice provides:
 - Versioned, safe emulation abilities with telemetry expectations, cleanup contracts, and deterministic plan hashes.
 - Fixed synthetic and behavioral adapter boundaries that never accept operator-supplied commands.
 - A commit-pinned local IDPT adapter for one reviewed benign collection scenario and verified evidence ingestion.
+- Offline Sentinel, Defender, Splunk, Elastic, and CrowdStrike export normalization with time-bounded correlation and sensor preflight.
+- Gap-derived immutable retest drafts, detection-as-code validation templates, a coverage dashboard, and fixed Linux/macOS behavioral catalogs.
 
 The MVP deliberately does not generate exploit payloads, persistence, credential theft, evasion, lateral movement commands, or unrestricted network actions. The default `local-synthetic` adapter is restricted to run artifacts and engine-owned loopback markers. The opt-in `local-behavioral` adapter executes only code-owned, fixed, read-only actions from the packaged `curated-windows` catalog. The opt-in `idpt-local` adapter runs one fixed scenario from an exact clean IDPT commit and imports verified evidence; catalog files and operators cannot supply commands.
 
@@ -55,7 +57,7 @@ adversaryflow manager --open
 adversaryflow guide --interactive
 ```
 
-The current release supports scoped local synthetic simulation, opt-in fixed read-only Windows behaviors, and one pinned local IDPT collection scenario; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option. See [IDPT local integration](docs/IDPT_INTEGRATION.md).
+The current release supports scoped local synthetic simulation, opt-in fixed read-only Windows/Linux/macOS behaviors, and a reviewed registry-selected pinned IDPT scenario; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option. See [IDPT local integration](docs/IDPT_INTEGRATION.md) and [detection validation](docs/DETECTION_VALIDATION.md).
 
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
 

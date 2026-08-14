@@ -23,6 +23,14 @@ def curated_windows_catalog_path() -> Path:
     return Path(str(files("adversaryflow.resources").joinpath("curated-windows.json")))
 
 
+def curated_linux_catalog_path() -> Path:
+    return Path(str(files("adversaryflow.resources").joinpath("curated-linux.json")))
+
+
+def curated_macos_catalog_path() -> Path:
+    return Path(str(files("adversaryflow.resources").joinpath("curated-macos.json")))
+
+
 def idpt_windows_collection_catalog_path() -> Path:
     return Path(str(files("adversaryflow.resources").joinpath("idpt-windows-collection.json")))
 
@@ -87,7 +95,7 @@ def validate_ability(ability: Ability) -> None:
         raise ValueError("ability must declare expected telemetry")
     if ability.procedure_id is not None and not ability.procedure_id.startswith("procedure-"):
         raise ValueError("ability procedure_id must reference a registered procedure")
-    if ability.execution_action is not None and not ability.execution_action.startswith(("windows-", "linux-")):
+    if ability.execution_action is not None and not ability.execution_action.startswith(("windows-", "linux-", "macos-")):
         raise ValueError("ability execution action must reference a fixed platform action")
     if not 1 <= ability.execution_timeout_seconds <= 60:
         raise ValueError("ability execution timeout must be between 1 and 60 seconds")

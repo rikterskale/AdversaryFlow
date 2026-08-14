@@ -17,7 +17,8 @@ from typing import Protocol
 
 from .ai import AICampaignDraft
 from .emulation import Ability, validate_ability
-from .idpt import IDPT_ABILITY_MAP, execute as execute_idpt, readiness as idpt_readiness
+from .idpt import execute as execute_idpt, readiness as idpt_readiness
+from .idpt_registry import resolve_scenario
 from .loopback import LoopbackSink
 
 
@@ -118,6 +119,12 @@ _FIXED_BEHAVIOR_ACTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "windows-network-configuration": ("ipconfig.exe", ("/all",)),
     "windows-process-discovery": ("powershell.exe", ("-NoProfile", "-NonInteractive", "-Command", "Get-Process | Select-Object -First 200 -Property Id,ProcessName,Path | ConvertTo-Csv -NoTypeInformation")),
     "windows-local-administrators": ("net.exe", ("localgroup", "administrators")),
+    "linux-current-identity": ("id", ()),
+    "linux-system-information": ("uname", ("-a",)),
+    "linux-process-discovery": ("ps", ("-eo", "pid,comm")),
+    "macos-current-identity": ("id", ()),
+    "macos-system-information": ("sw_vers", ()),
+    "macos-process-discovery": ("ps", ("-axo", "pid,comm")),
 }
 
 
@@ -228,8 +235,8 @@ def preflight_adapter(name: str, request: AdapterRequest) -> tuple[ExecutionAdap
     validate_adapter_request(request)
     if name == "local-behavioral" and any(ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS for ability in request.abilities):
         raise ValueError("Behavioral plans may contain only registered fixed execution actions")
-    if name == "idpt-local" and set(ability.id for ability in request.abilities) != set(IDPT_ABILITY_MAP):
-        raise ValueError("idpt-local plans must exactly match the reviewed IDPT ability mapping")
+    if name == "idpt-local":
+        resolve_scenario({ability.id for ability in request.abilities})
     return adapter, AdapterPreflight(
         contract_version=ADAPTER_CONTRACT_VERSION,
         adapter=adapter.name,
@@ -248,10 +255,8 @@ def adapter_readiness(abilities: tuple[Ability, ...], name: str = "local-synthet
                 raise ValueError(f"Unsupported ability fidelity: {ability.fidelity}")
             if name == "local-behavioral" and ability.execution_action not in _FIXED_BEHAVIOR_ACTIONS:
                 raise ValueError(f"No reviewed behavioral action is registered for {ability.id}")
-            if name == "idpt-local" and ability.id not in IDPT_ABILITY_MAP:
-                raise ValueError(f"No reviewed IDPT mapping is registered for {ability.id}")
-        if name == "idpt-local" and set(ability.id for ability in abilities) != set(IDPT_ABILITY_MAP):
-            raise ValueError("idpt-local requires the complete packaged idpt-windows-collection catalog")
+        if name == "idpt-local":
+            resolve_scenario({ability.id for ability in abilities})
         scopes = sorted({ability.network_scope for ability in abilities})
         external = idpt_readiness(abilities) if name == "idpt-local" else {}
         return {

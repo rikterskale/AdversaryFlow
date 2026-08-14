@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - A commit-pinned `idpt-local` adapter, fixed Windows collection mapping, derived plan-bound IDPT authorization, verified evidence ingestion, and independent telemetry-gap reporting.
+- Offline Sentinel, Defender, Splunk, Elastic, CrowdStrike, and generic telemetry normalization; time-bounded correlation; sensor preflight; JSON/CSV assessment export; immutable gap-derived retests; detection-as-code validation mappings; a campaign coverage dashboard; a reviewed IDPT scenario registry; and fixed read-only Linux/macOS catalogs.
 
 ## [0.2.3] - 2026-08-13
 

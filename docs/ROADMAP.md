@@ -24,18 +24,19 @@ The current release provides RoE validation, deterministic offline drafting, an 
 
 ## Slice 3: detection-validation export
 
-**Status: partially implemented.**
+**Status: implemented for offline exports.**
 
-- Export normalized, synthetic-only telemetry expectations and gap findings as JSON/CSV for defensive tooling.
-- JSONL telemetry imports and independent outcome reporting are implemented. Direct vendor connectors and normalized CSV export remain planned.
+- Normalize generic, Sentinel, Defender, Splunk, Elastic, and CrowdStrike offline exports and export gap findings as JSON/CSV.
+- Correlate by run, host, ability, time window, user, and process context, with an explicit ambiguous state and read-only sensor preflight.
 - Keep imports and validation offline; no connector may query or modify a production target.
 - Acceptance: exports reproduce the campaign report counts and contain no secrets or raw provider content.
 
 ## Slice 4: catalog governance and retest workflow
 
-**Status: planned.**
+**Status: retest implemented; catalog signing and deprecation governance remain planned.**
 
-- Add signed/versioned catalog releases, deprecation metadata, and a guided retest draft derived from a recorded detection gap.
+- Guided immutable retest drafts are derived from recorded detection gaps and retain source campaign/run provenance.
+- Signed/versioned catalog releases and deprecation metadata remain planned.
 - Preserve the existing integrity check: changed RoE, catalog, or draft requires a new approval.
 - Acceptance: a retest is traceable to a gap while execution remains fixed, local, and explicitly approved.
 

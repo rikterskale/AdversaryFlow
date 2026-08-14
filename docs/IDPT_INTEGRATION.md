@@ -4,7 +4,7 @@ The `idpt-local` adapter delegates one reviewed Windows collection scenario to I
 
 ## Trust boundary
 
-The adapter accepts no command, script, scenario, ability ID, commit, or network destination from a campaign. It supports only IDPT scenario `scenario--windows-safe-collection-flow` at reviewed commit `dcdac0f3e82469a95975a170bc201b06e164b7b6` and content version `2.0.0`.
+The adapter accepts no command, script, scenario, ability ID, commit, or network destination from a campaign. A packaged reviewed-scenario registry selects a scenario only when the approved ability set exactly matches one registry entry. The currently shipped entry is IDPT scenario `scenario--windows-safe-collection-flow` at reviewed commit `dcdac0f3e82469a95975a170bc201b06e164b7b6` and content version `2.0.0`; additional scenarios require an explicit reviewed registry entry.
 
 Before Node.js is invoked, AdversaryFlow verifies:
 

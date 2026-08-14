@@ -29,6 +29,8 @@ from .product_tools import export_executive_summary, read_roe_editor, save_roe_e
 from .ctid import assess_fixture_evidence, create_fixture_bundle, fixtures as ctid_fixtures
 from .actor_profiles import get_profile as get_actor_profile, list_profiles as list_actor_profiles, plan_profile as plan_actor_profile, run_profile as run_actor_profile, save_profile as save_actor_profile
 from .benign_procedures import assess as assess_benign_procedures, catalog as benign_procedure_catalog, cleanup as cleanup_benign_procedures, run as run_benign_procedures
+from .coverage import coverage_dashboard
+from .detection_mappings import mappings as detection_rule_mappings
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
@@ -197,9 +199,13 @@ def _learning_context(catalog_path: str, technique_id: str = "") -> dict[str, ob
 
 
 def _detection_mappings(catalog_path: str, technique_id: str = "") -> dict[str, object]:
-    learning = _learning_context(catalog_path, technique_id)
-    mappings = [{"technique_id": ability["technique_id"], "ability": ability["name"], "telemetry": ability["expected_telemetry"], "recommendation": "Create or tune a detection rule for the listed synthetic telemetry, then rerun this local simulation and compare the report.", "rule_formats": ["Sigma concept", "SIEM correlation", "EDR analytic"]} for ability in learning["abilities"]]
-    return {"mappings": mappings, "notice": "Recommendations are defensive validation guidance. Review platform-specific fields before implementing a detection rule."}
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    mapped = detection_rule_mappings(load_catalog(catalog_path), technique_id)
+    for item in mapped:
+        item["recommendation"] = "Map organization-owned fields and rule IDs, then rerun the local validation and compare evidence."
+        item["rule_formats"] = ["Sigma", "Sentinel KQL", "Splunk SPL", "Elastic EQL"]
+    return {"mappings": mapped, "notice": "Templates are defensive validation guidance and are never deployed automatically."}
 
 
 def _save_provider_profile(data: dict[str, object]) -> dict[str, object]:
@@ -494,6 +500,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/api/ctid-fixtures": self._send(200, ctid_fixtures())
             elif path == "/api/actor-profiles": self._send(200, {"profiles": list_actor_profiles()})
             elif path == "/api/benign-procedures": self._send(200, benign_procedure_catalog())
+            elif path == "/api/coverage": self._send(200, coverage_dashboard(campaign_root))
             elif path.startswith("/api/actor-profiles/"):
                 name = path.removeprefix("/api/actor-profiles/")
                 if path.endswith("/plan"): self._send(200, plan_actor_profile(name.removesuffix("/plan")))

@@ -1,0 +1,16 @@
+{
+  "format": "ADVERSARYFLOW-DETECTION-RULE-REGISTRY-1",
+  "description": "Organization-owned vendor rule identifiers may be registered here after review.",
+  "techniques": {
+    "T1033": {"vendor_rule_ids": {}},
+    "T1082": {"vendor_rule_ids": {}},
+    "T1057": {"vendor_rule_ids": {}},
+    "T1016": {"vendor_rule_ids": {}},
+    "T1069.001": {"vendor_rule_ids": {}},
+    "T1059.001": {"vendor_rule_ids": {}},
+    "T1083": {"vendor_rule_ids": {}},
+    "T1005": {"vendor_rule_ids": {}},
+    "T1074.001": {"vendor_rule_ids": {}},
+    "T1041": {"vendor_rule_ids": {}}
+  }
+}

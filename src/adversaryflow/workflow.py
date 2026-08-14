@@ -13,7 +13,7 @@ from .audit import AuditLog, sha256_bytes
 from .emulation import Ability
 from .models import RulesOfEngagement
 from .reports import write_campaign_reports
-from .telemetry import correlate_events, load_telemetry_records
+from .telemetry import correlate_events, load_telemetry_records, sensor_preflight
 
 
 @dataclass(frozen=True)
@@ -146,12 +146,15 @@ def run_local_emulation(draft: AICampaignDraft, abilities: tuple[Ability, ...], 
     return run_dir
 
 
-def build_gap_report(run_dir: str | Path, telemetry_file: str | Path | None = None) -> dict[str, Any]:
+def build_gap_report(run_dir: str | Path, telemetry_file: str | Path | None = None, window_seconds: int = 300) -> dict[str, Any]:
     root = Path(run_dir)
     events = [json.loads(line) for line in (root / "events.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     records = load_telemetry_records(telemetry_file) if telemetry_file is not None else None
-    report = correlate_events(events, root.name, records)
+    report = correlate_events(events, root.name, records, window_seconds)
     if telemetry_file is not None:
         report["telemetry_source"] = str(Path(telemetry_file))
+        preflight = sensor_preflight(events, root.name, records or ())
+        report["sensor_preflight"] = preflight
+        (root / "sensor-preflight.json").write_text(json.dumps(preflight, indent=2), encoding="utf-8")
     (root / "telemetry-gap-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report

@@ -18,6 +18,7 @@ from typing import Any
 
 from .ai import AICampaignDraft
 from .emulation import Ability
+from .idpt_registry import resolve_scenario
 
 
 SUPPORTED_IDPT_COMMIT = "dcdac0f3e82469a95975a170bc201b06e164b7b6"
@@ -81,15 +82,19 @@ def _json_output(completed: subprocess.CompletedProcess[str], operation: str) ->
     return value
 
 
-def _compatible_abilities(abilities: tuple[Ability, ...]) -> None:
+def _compatible_abilities(abilities: tuple[Ability, ...]) -> dict[str, Any]:
     ids = [ability.id for ability in abilities]
-    if len(ids) != len(IDPT_ABILITY_MAP) or set(ids) != set(IDPT_ABILITY_MAP):
-        raise ValueError("idpt-local requires the complete packaged idpt-windows-collection catalog")
-    if any(ability.platform != "windows" for ability in abilities):
-        raise ValueError("idpt-local currently supports only the reviewed Windows collection scenario")
+    scenario = resolve_scenario(set(ids))
+    if len(ids) != len(set(ids)):
+        raise ValueError("idpt-local scenario catalogs may not contain duplicate abilities")
+    if any(ability.platform != scenario["platform"] for ability in abilities):
+        if scenario["platform"] == "windows":
+            raise ValueError("idpt-local currently supports only the reviewed Windows collection scenario")
+        raise ValueError(f"idpt-local scenario requires the reviewed {scenario['platform']} platform")
+    return scenario
 
 
-def validate_checkout(root_value: str | None = None, timeout: int = 30) -> dict[str, Any]:
+def validate_checkout(root_value: str | None = None, timeout: int = 30, expected_commit: str = SUPPORTED_IDPT_COMMIT, expected_content_version: str = SUPPORTED_IDPT_CONTENT_VERSION) -> dict[str, Any]:
     """Verify an exact clean checkout before any IDPT JavaScript is executed."""
     configured = root_value or os.environ.get("ADVERSARYFLOW_IDPT_ROOT")
     if not configured:
@@ -107,24 +112,25 @@ def validate_checkout(root_value: str | None = None, timeout: int = 30) -> dict[
     if not match or int(match.group(1)) < 20:
         raise ValueError("idpt-local requires Node.js 20 or newer")
     head = _run([git, "-C", str(root), "rev-parse", "HEAD"], root, timeout).stdout.strip().lower()
-    if head != SUPPORTED_IDPT_COMMIT:
-        raise ValueError(f"IDPT checkout must be pinned to reviewed commit {SUPPORTED_IDPT_COMMIT}")
+    if head != expected_commit:
+        raise ValueError(f"IDPT checkout must be pinned to reviewed commit {expected_commit}")
     dirty = _run([git, "-C", str(root), "status", "--porcelain", "--untracked-files=no"], root, timeout).stdout.strip()
     if dirty:
         raise ValueError("IDPT checkout has modified tracked files; restore the reviewed commit before execution")
     validation = _json_output(_run([node, str(cli), "validate"], root, timeout), "validation")
-    if validation.get("status") != "valid" or validation.get("content_version") != SUPPORTED_IDPT_CONTENT_VERSION:
-        raise ValueError(f"IDPT must report valid content version {SUPPORTED_IDPT_CONTENT_VERSION}")
+    if validation.get("status") != "valid" or validation.get("content_version") != expected_content_version:
+        raise ValueError(f"IDPT must report valid content version {expected_content_version}")
     return {"root": root, "cli": cli, "node": node, "node_version": node_version, "commit": head, "validation": validation}
 
 
 def readiness(abilities: tuple[Ability, ...]) -> dict[str, Any]:
-    _compatible_abilities(abilities)
-    checkout = validate_checkout()
+    scenario = _compatible_abilities(abilities)
+    checkout = validate_checkout(expected_commit=scenario["commit"], expected_content_version=scenario["content_version"])
     return {
         "idpt_commit": checkout["commit"],
         "idpt_content_version": checkout["validation"]["content_version"],
-        "idpt_scenario": IDPT_SCENARIO_ID,
+        "idpt_scenario": scenario["scenario_id"],
+        "idpt_registry_id": scenario["registry_id"],
         "idpt_root": str(checkout["root"]),
         "node_version": checkout["node_version"],
     }
@@ -143,8 +149,10 @@ def execute(
     parent_plan_hash: str,
 ) -> tuple[dict[str, Any], ...]:
     """Run one exact local IDPT scenario and import verified result evidence."""
-    _compatible_abilities(abilities)
-    checkout = validate_checkout(timeout=timeout_seconds)
+    scenario = _compatible_abilities(abilities)
+    ability_map = scenario["ability_mapping"]
+    scenario_id = scenario["scenario_id"]
+    checkout = validate_checkout(timeout=timeout_seconds, expected_commit=scenario["commit"], expected_content_version=scenario["content_version"])
     root = Path(work_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     integration_root = root / "idpt"
@@ -165,7 +173,7 @@ def execute(
 
     plan_response = _json_output(_run([
         checkout["node"], str(checkout["cli"]), "plan",
-        "--scenario", IDPT_SCENARIO_ID,
+        "--scenario", scenario_id,
         "--hosts", str(hosts_path),
         "--allow-generic-baseline",
         "--output", str(output_root),
@@ -179,12 +187,12 @@ def execute(
     plan_sha256 = str(plan_response.get("plan_sha256", ""))
     if not _PLAN_ID.fullmatch(plan_id) or plan_sha256 != _canonical_hash(plan):
         raise ValueError("IDPT plan identity or canonical hash is invalid")
-    if plan.get("scenario", {}).get("id") != IDPT_SCENARIO_ID:
+    if plan.get("scenario", {}).get("id") != scenario_id:
         raise ValueError("IDPT returned an unexpected scenario")
     actions = plan.get("actions", [])
-    if not isinstance(actions, list) or {item.get("ability_id") for item in actions} != set(IDPT_ABILITY_MAP.values()):
+    if not isinstance(actions, list) or {item.get("ability_id") for item in actions} != set(ability_map.values()):
         raise ValueError("IDPT plan actions do not exactly match the reviewed integration mapping")
-    by_external_id = {external: ability for ability in abilities for external in [IDPT_ABILITY_MAP[ability.id]]}
+    by_external_id = {external: ability for ability in abilities for external in [ability_map[ability.id]]}
     for action in actions:
         ability = by_external_id[action["ability_id"]]
         if action.get("technique", {}).get("id") != ability.technique_id or action.get("host_id") != draft.target:
@@ -203,7 +211,7 @@ def execute(
         "allowed_host_ids": [draft.target],
         "allowed_plan_ids": [plan_id],
         "allowed_plan_sha256": [plan_sha256],
-        "allowed_scenarios": [IDPT_SCENARIO_ID],
+        "allowed_scenarios": [scenario_id],
         "allowed_techniques": [ability.technique_id for ability in abilities],
         "environment_labels": {"lab-approved": "true"},
         "notes": f"Derived from AdversaryFlow approval {approval_id} at {approved_at}; parent plan {parent_plan_hash}.",
@@ -225,7 +233,7 @@ def execute(
     if run_data.get("run_id") != external_run_id or run_data.get("status") != run_response.get("status"):
         raise ValueError("IDPT run summary does not match the returned run identity or status")
     results = run_data.get("results", [])
-    if not isinstance(results, list) or {item.get("ability_id") for item in results} != set(IDPT_ABILITY_MAP.values()):
+    if not isinstance(results, list) or {item.get("ability_id") for item in results} != set(ability_map.values()):
         raise ValueError("IDPT run results do not exactly match the reviewed integration mapping")
     verification = _json_output(_run([
         checkout["node"], str(checkout["cli"]), "verify", "--run-dir", str(run_directory),
@@ -247,14 +255,16 @@ def execute(
         "idpt_run_directory": str(run_directory),
         "evidence_manifest_sha256": evidence_sha256,
         "evidence_verification": verification,
-        "ability_mapping": IDPT_ABILITY_MAP,
+        "idpt_registry_id": scenario["registry_id"],
+        "idpt_scenario_id": scenario_id,
+        "ability_mapping": ability_map,
     }
     (integration_root / "integration.json").write_text(json.dumps(integration_record, indent=2), encoding="utf-8")
 
     result_by_id = {item["ability_id"]: item for item in results}
     events = []
     for ability in abilities:
-        external_id = IDPT_ABILITY_MAP[ability.id]
+        external_id = ability_map[ability.id]
         result = result_by_id[external_id]
         behavior_success = result.get("status") == "behavior-passed"
         event = {
