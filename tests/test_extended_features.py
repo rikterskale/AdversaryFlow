@@ -29,6 +29,11 @@ from adversaryflow.telemetry import (
 from adversaryflow.workflow import campaign_integrity_hashes, save_campaign_draft
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+CATALOG_PATH = REPOSITORY_ROOT / "content" / "abilities" / "catalog.json"
+ROE_PATH = REPOSITORY_ROOT / "examples" / "roe.yaml"
+
+
 @pytest.mark.parametrize(
     ("source", "record"),
     [
@@ -113,8 +118,8 @@ def test_telemetry_formats_fail_closed_and_export_assessments(tmp_path):
 
 
 def _completed_campaign(root: Path):
-    roe = load_roe("examples/roe.yaml")
-    abilities = load_catalog("content/abilities/catalog.json")
+    roe = load_roe(ROE_PATH)
+    abilities = load_catalog(CATALOG_PATH)
     draft = OfflinePlanner().draft(CampaignRequest("APT41", "local-lab", "validate telemetry", "linux"), abilities)
     integrity = campaign_integrity_hashes(draft, roe, abilities)
     directory = save_campaign_draft(draft, integrity["plan_hash"], "offline", root, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"])
@@ -130,7 +135,8 @@ def _completed_campaign(root: Path):
     return roe, abilities, directory
 
 
-def test_gap_retest_is_immutable_and_coverage_is_traceable(tmp_path):
+def test_gap_retest_is_immutable_and_coverage_is_traceable(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     root = tmp_path / "campaigns"
     roe, abilities, source = _completed_campaign(root)
     retest = create_gap_retest(root, source.name, roe, abilities)
@@ -143,7 +149,8 @@ def test_gap_retest_is_immutable_and_coverage_is_traceable(tmp_path):
     assert dashboard["flow"][-1] == "retest"
 
 
-def test_gap_retest_rejects_resolved_source(tmp_path):
+def test_gap_retest_rejects_resolved_source(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     root = tmp_path / "campaigns"
     roe, abilities, source = _completed_campaign(root)
     metadata = json.loads((source / "metadata.json").read_text(encoding="utf-8"))
@@ -189,6 +196,7 @@ def _cli(monkeypatch, capsys, *arguments):
 
 
 def test_cli_exposes_normalization_preflight_export_detection_and_coverage(monkeypatch, capsys, tmp_path):
+    monkeypatch.chdir(tmp_path)
     export = tmp_path / "export.json"
     export.write_text(json.dumps([{"run_id": "run-one", "host_id": "host", "ability_id": "ability", "timestamp": "2026-08-14T12:00:00Z"}]), encoding="utf-8")
     normalized = tmp_path / "normalized.jsonl"
@@ -201,19 +209,33 @@ def test_cli_exposes_normalization_preflight_export_detection_and_coverage(monke
     assert _cli(monkeypatch, capsys, "telemetry", "preflight", "--run-dir", str(run), "--telemetry-file", str(normalized))["ready"] is True
     output = tmp_path / "assessment.csv"
     assert _cli(monkeypatch, capsys, "telemetry", "export", "--run-dir", str(run), "--format", "csv", "--output", str(output))["success"] is True
-    assert _cli(monkeypatch, capsys, "detection", "export", "--output", str(tmp_path / "rules"))["mapping_count"] > 0
+    assert _cli(monkeypatch, capsys, "detection", "export", "--catalog", str(CATALOG_PATH), "--output", str(tmp_path / "rules"))["mapping_count"] > 0
     assert _cli(monkeypatch, capsys, "coverage", "--campaign-root", str(tmp_path / "empty"))["summary"]["campaigns"] == 0
-    abilities = load_catalog("content/abilities/catalog.json")
+    abilities = load_catalog(CATALOG_PATH)
     categories = sorted({item.category for ability in abilities for item in ability.expected_telemetry})
     snapshot = tmp_path / "sensors.json"
     snapshot.write_text(json.dumps({"host_id": "local-lab", "clock_synchronized": True, "available_sources": categories, "agents": [{"name": "lab-sensor", "health": "healthy"}]}), encoding="utf-8")
-    assert _cli(monkeypatch, capsys, "telemetry", "preflight", "--sensor-manifest", str(snapshot))["ready"] is True
+    assert _cli(monkeypatch, capsys, "telemetry", "preflight", "--sensor-manifest", str(snapshot), "--catalog", str(CATALOG_PATH))["ready"] is True
 
 
 def test_cli_creates_gap_derived_retest(monkeypatch, capsys, tmp_path):
+    monkeypatch.chdir(tmp_path)
     root = tmp_path / "campaigns"
     _, _, source = _completed_campaign(root)
-    result = _cli(monkeypatch, capsys, "campaign", "retest", "--campaign-id", source.name, "--campaign-root", str(root))
+    result = _cli(
+        monkeypatch,
+        capsys,
+        "campaign",
+        "--roe",
+        str(ROE_PATH),
+        "--catalog",
+        str(CATALOG_PATH),
+        "retest",
+        "--campaign-id",
+        source.name,
+        "--campaign-root",
+        str(root),
+    )
     assert result["success"] is True
     assert result["retest_of"] == source.name
 
