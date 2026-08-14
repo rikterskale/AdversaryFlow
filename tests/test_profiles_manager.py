@@ -6,7 +6,8 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_draft, _provider_status, _remove_provider_profile, _report_summary, _reset_saved_campaign, _run_demo, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _allow_provider_profile, _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_draft, _provider_status, _provider_test, _remove_provider_profile, _report_summary, _reset_saved_campaign, _run_demo, _save_provider_profile, _terminal_next_step, _use_provider_profile, make_handler, serve
+from adversaryflow.provider import ProviderConfig
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -289,6 +290,38 @@ def test_manager_demo_and_profile_removal_require_typed_confirmation():
         })
     with pytest.raises(PermissionError, match="REMOVE example"):
         _remove_provider_profile({"name": "example", "confirmation": "REMOVE another"})
+
+
+def test_manager_profile_helpers_return_only_non_secret_summaries(monkeypatch):
+    monkeypatch.setattr(manager_module, "save_profile", lambda *_args: __import__("pathlib").Path("profiles.json"))
+    monkeypatch.setattr(manager_module, "use_profile", lambda *_args: __import__("pathlib").Path("profiles.json"))
+    monkeypatch.setattr(manager_module, "allow_profile", lambda *_args: __import__("pathlib").Path("policy.json"))
+    monkeypatch.setattr(manager_module, "remove_profile", lambda *_args: None)
+    monkeypatch.setattr(manager_module, "list_profiles", lambda: {"active": "offline", "profiles": {}})
+    monkeypatch.setattr(manager_module, "activation_summary", lambda: {"active": "offline", "ready": True})
+    monkeypatch.setattr(manager_module, "policy_summary", lambda: {"configured": False})
+    payload = {"name": "team", "endpoint": "https://example.test/v1", "model": "model", "credential_env": "TEAM_KEY"}
+    assert _save_provider_profile(payload)["saved"] == "team"
+    assert _use_provider_profile({"name": "team"})["active"] == "team"
+    assert _allow_provider_profile({"name": "team"})["allowed"] == "team"
+    assert _remove_provider_profile({"name": "team", "confirmation": "REMOVE team"})["removed"] == "team"
+
+
+def test_manager_provider_fallback_and_demo_execution(monkeypatch):
+    monkeypatch.setattr(manager_module, "load_provider_config", lambda: ProviderConfig("unsupported", None, None, False))
+    root = f"artifacts/test-manager-provider-fallback-{uuid4()}"
+    fallback = _provider_draft(root, "examples/roe.yaml", "content/abilities/catalog.json", {
+        "actor": "APT29", "target": "local-lab", "objective": "verify fallback", "platform": "linux", "fallback_offline": True,
+    })
+    assert fallback["provider"] == "offline-fallback"
+
+    with pytest.raises(ValueError, match="openai-compatible"):
+        _provider_test("examples/roe.yaml", "content/abilities/catalog.json", {"actor": "APT29", "target": "local-lab", "objective": "test"})
+    monkeypatch.undo()
+    demo = _run_demo("examples/roe.yaml", "content/abilities/catalog.json", {
+        "actor": "APT29", "objective": "verify GUI demo", "confirmation": "RUN LOCAL DEMO",
+    })
+    assert demo["stage"] == "completed"
 
 
 @pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])
