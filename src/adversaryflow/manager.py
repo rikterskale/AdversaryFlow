@@ -76,8 +76,10 @@ async function allowProviderProfile(){let result=q('provider-result');try{let d=
 async function createMitrePlan(){let out=q('plan-result');out.textContent='Fetching official ATT&CK data and creating a dry-run plan…';try{let d=await api('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('plan-actor').value,target:q('plan-target').value,technique:q('plan-technique').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Plan was not created: '+e.message}}
 async function createSupportBundle(){let out=q('support-result');out.textContent='Creating redacted local diagnostics bundle…';try{let d=await api('/api/support-bundle',{method:'POST'});out.textContent='Created: '+d.bundle}catch(e){out.textContent='Support bundle was not created: '+e.message}}
 document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Operator controls</h2><p class="muted">Read-only readiness data is shown below. A provider test sends exactly one harmless planning request only after you confirm it.</p><button onclick="operatorReadiness()">Refresh RoE, capabilities, and adapter status</button><pre id="operator-readiness">Loading operator readiness…</pre><h3>Test active hosted provider</h3><p class="muted">This sends one planning request to the active approved provider. It does not save, approve, or execute a campaign.</p><label>Actor<input id="provider-test-actor" value="APT29" maxlength="200"></label><label>Target<input id="provider-test-target" value="local-lab" maxlength="200"></label><label>Objective<input id="provider-test-objective" value="validate endpoint process visibility" maxlength="200"></label><button class="secondary" onclick="testProvider()">Test hosted provider once</button><pre id="provider-test-result">No provider test sent.</pre></section>');
+document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Draft with the active provider</h2><p class="muted">Creates one RoE-validated review draft using the active provider. This can send a planning request, but it never approves or runs a campaign.</p><label>Threat actor<input id="hosted-draft-actor" value="APT29" maxlength="200"></label><label>RoE-approved target<input id="hosted-draft-target" value="local-lab" maxlength="200"></label><label>Defensive objective<input id="hosted-draft-objective" value="validate endpoint process visibility" maxlength="200"></label><label>Platform<select id="hosted-draft-platform"><option value="linux">Linux</option><option value="windows">Windows</option><option value="macos">macOS</option></select></label><label><input id="hosted-draft-fallback" type="checkbox" style="width:auto"> Fall back to an offline draft if the provider fails</label><button onclick="createProviderDraft()">Create provider-backed review draft</button><pre id="hosted-draft-result">No provider-backed draft created.</pre></section>');
 async function operatorReadiness(){try{let d=await api('/api/operator-readiness');q('operator-readiness').textContent=JSON.stringify(d,null,2)}catch(e){q('operator-readiness').textContent='Readiness could not be loaded: '+e.message}}
 async function testProvider(){let out=q('provider-test-result');if(!confirm('Send one harmless planning request to the active hosted provider?'))return;out.textContent='Sending one planning request…';try{let d=await api('/api/provider/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('provider-test-actor').value,target:q('provider-test-target').value,objective:q('provider-test-objective').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Provider test did not complete: '+e.message}}
+async function createProviderDraft(){let out=q('hosted-draft-result');if(!confirm('Create a review draft using the active provider? This may send a planning request but cannot approve or execute a campaign.'))return;out.textContent='Creating review draft…';try{let d=await api('/api/campaigns/provider',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('hosted-draft-actor').value,target:q('hosted-draft-target').value,objective:q('hosted-draft-objective').value,platform:q('hosted-draft-platform').value,fallback_offline:q('hosted-draft-fallback').checked})});out.textContent=JSON.stringify(d,null,2);await loadCampaigns();await inspectCampaign(d.campaign_id)}catch(e){out.textContent='Draft was not created: '+e.message}}
 async function resetCampaign(id){let confirmation=prompt('Type RESET '+id+' to permanently delete this saved campaign and its local records:')||'';if(!confirmation)return;try{await api('/api/campaigns/'+encodeURIComponent(id)+'/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation})});q('campaign-detail').hidden=true;await loadCampaigns()}catch(e){alert('Campaign was not reset: '+e.message)}}
 function resetPanel(id){return '<section class="card"><h3>Remove saved campaign</h3><p class="muted">This permanently deletes this campaign directory and its review records. Type the campaign-specific reset confirmation when prompted.</p><button class="warn" onclick="resetCampaign(\''+esc(id)+'\')">Reset saved campaign</button></section>'}
 async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));complete('review');q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').insertAdjacentHTML('beforeend',approvalPanel(d)+resetPanel(id));q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
@@ -118,6 +120,41 @@ def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: d
         roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"],
     )
     return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": "offline", "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft, then obtain explicit RoE approval before local synthetic emulation."}
+
+
+def _provider_draft(campaign_root: str, roe_path: str, catalog_path: str, data: dict[str, object]) -> dict[str, object]:
+    """Create a reviewable draft with the active provider, optionally falling back offline."""
+    roe = _manager_roe(roe_path)
+    if not Path(catalog_path).exists() and catalog_path == "content/abilities/catalog.json":
+        catalog_path = str(default_catalog_path())
+    abilities = load_catalog(catalog_path)
+    request = CampaignRequest(_input(data, "actor"), _input(data, "target"), _input(data, "objective"), _input(data, "platform", 32))
+    fallback_offline = data.get("fallback_offline") is True
+    config = load_provider_config()
+    provider_name = config.name
+    try:
+        if config.name == "offline":
+            draft = OfflinePlanner().draft(request, abilities)
+            provider_metadata = {"provider": "offline", "status": "offline"}
+        elif config.name == "openai-compatible":
+            planner = OpenAICompatiblePlanner(config)
+            draft = planner.draft(request, abilities)
+            provider_metadata = planner.last_request_metadata
+            if config.profile_name:
+                provider_metadata = {**provider_metadata, "profile": config.profile_name, "policy_version": policy_summary().get("version")}
+        else:
+            raise ProviderError(f"Unsupported provider '{config.name}'.")
+        validate_ai_draft(draft, roe, abilities)
+    except (ProviderError, ValueError) as exc:
+        if not fallback_offline or config.name == "offline":
+            raise ValueError(f"Provider draft could not be created: {exc}") from exc
+        draft = OfflinePlanner().draft(request, abilities)
+        validate_ai_draft(draft, roe, abilities)
+        provider_name = "offline-fallback"
+        provider_metadata = {"provider": config.name, "status": "fallback-offline", "error": str(exc)}
+    integrity = campaign_integrity_hashes(draft, roe, abilities)
+    campaign_dir = save_campaign_draft(draft, integrity["plan_hash"], provider_name, campaign_root, provider_metadata=provider_metadata, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"])
+    return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": provider_name, "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft before any approval decision."}
 
 
 def _provider_status() -> dict[str, object]:
@@ -428,6 +465,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
                 elif path == "/api/provider/use": self._send(200, _use_provider_profile(self._body()))
                 elif path == "/api/provider/allow": self._send(200, _allow_provider_profile(self._body()))
                 elif path == "/api/provider/test": self._send(200, _provider_test(roe_path, catalog_path, self._body()))
+                elif path == "/api/campaigns/provider": self._send(201, _provider_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path.startswith("/api/campaigns/"):
                     parts = path.split("/")

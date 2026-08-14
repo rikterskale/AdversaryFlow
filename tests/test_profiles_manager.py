@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_status, _report_summary, _reset_saved_campaign, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _operator_readiness, _portfolio_summary, _provider_draft, _provider_status, _report_summary, _reset_saved_campaign, _terminal_next_step, make_handler, serve
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -269,6 +269,17 @@ def test_manager_operator_readiness_and_campaign_reset_confirmation():
         _reset_saved_campaign(root, campaign_id, {"confirmation": "RESET another-campaign"})
     assert _reset_saved_campaign(root, campaign_id, {"confirmation": f"RESET {campaign_id}"})["status"] == "reset"
     assert not (__import__("pathlib").Path(root) / campaign_id).exists()
+
+
+def test_manager_provider_draft_uses_active_offline_provider(monkeypatch):
+    monkeypatch.setenv("ADVERSARYFLOW_PROVIDER", "offline")
+    root = f"artifacts/test-manager-provider-draft-{uuid4()}"
+    result = _provider_draft(root, "examples/roe.yaml", "content/abilities/catalog.json", {
+        "actor": "APT29", "target": "local-lab", "objective": "verify provider GUI draft", "platform": "linux",
+    })
+    assert result["stage"] == "drafted"
+    assert result["provider"] == "offline"
+    assert (__import__("pathlib").Path(root) / result["campaign_id"] / "draft.json").is_file()
 
 
 @pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])
