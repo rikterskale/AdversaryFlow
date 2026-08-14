@@ -6,4 +6,6 @@ The manager loads the active RoE and safe catalog, presents the approved targets
 
 The manager can approve and run a reviewed campaign only when the RoE-named approver enters their exact name, types the campaign-specific confirmation, and the saved draft, RoE, and catalog integrity checks all pass. It uses the same fixed local-synthetic adapter and report flow as the CLI. It cannot use a hosted provider, bind to a non-loopback interface, or provide an arbitrary command runner.
 
+The workspace also exposes non-secret provider profile setup, active-profile and policy readiness, a MITRE ATT&CK dry-run planner, and redacted support-bundle creation. Provider credentials are never entered into or stored by the browser: configure the selected profile's credential environment variable through a shell or secret manager. The ATT&CK planner fetches the official HTTPS bundle and produces a plan only; it does not create or execute a campaign.
+
 See [../USAGE.md](../USAGE.md) for the walkthrough and [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for local-manager recovery.

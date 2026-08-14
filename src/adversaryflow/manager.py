@@ -12,6 +12,12 @@ import yaml
 
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .doctor import run_doctor
+from .support import create_support_bundle
+from .provider import load_provider_config, provider_setup_instructions, validate_provider_config
+from .profiles import activation_summary, allow_profile, list_profiles, policy_summary, save_profile, use_profile
+from .intel import fetch_attack_bundle, find_technique
+from .planner import build_plan
+from .audit import AuditLog
 from .emulation import default_catalog_path, load_catalog
 from .lifecycle import cancel_campaign, inspect_campaign, list_campaigns, reject_campaign
 from .models import RulesOfEngagement
@@ -61,6 +67,14 @@ steps[3]=['Obtain explicit approval','The RoE-named approver can authorize the r
 function approvalPanel(d){let x=d.detail;if(d.metadata.status!=='awaiting-approval')return '';let disabled=x.approval_readiness.ready?'':' disabled';return '<section class="card"><h3>Approve and run local synthetic emulation</h3><p class="muted">This is available only to the RoE-named approver after every readiness check passes. It runs the fixed local-synthetic adapter; it cannot execute operator-supplied commands or contact an external target.</p><label>RoE approver<input id="gui-approver" value="'+esc(x.roe.approver_name)+'" maxlength="200"></label><label>Type APPROVE '+esc(d.metadata.campaign_id)+' to confirm<input id="gui-confirmation" autocomplete="off" maxlength="300" placeholder="APPROVE '+esc(d.metadata.campaign_id)+'"></label><button id="approve-run"'+disabled+' onclick="approveCampaign(\''+esc(d.metadata.campaign_id)+'\')">Approve and run local simulation</button><p id="approval-result" class="muted"></p></section>'}
 async function approveCampaign(id){let button=q('approve-run'),result=q('approval-result');if(!confirm('Approve '+id+' and start its reviewed local synthetic emulation?'))return;button.disabled=true;result.textContent='Validating reviewed inputs and starting local synthetic emulation…';try{let response=await api('/api/campaigns/'+encodeURIComponent(id)+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approver:q('gui-approver').value,confirmation:q('gui-confirmation').value})});result.textContent='Completed. Local run: '+response.run_dir;showStep(4);await loadCampaigns();await inspectCampaign(id)}catch(e){result.textContent='Approval or emulation did not complete: '+e.message;button.disabled=false}}
 async function inspectCampaign(id){try{let d=await api('/api/campaigns/'+encodeURIComponent(id));complete('review');q('campaign-detail').hidden=false;renderDetail(d);q('campaign-detail').insertAdjacentHTML('beforeend',approvalPanel(d));q('campaign-detail').scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){alert('Could not inspect campaign: '+e.message)}}
+document.querySelector('main').insertAdjacentHTML('beforeend','<section class="card"><h2>Provider setup and diagnostics</h2><p class="muted">Profiles contain only endpoint, model, and credential-variable names. Set the credential in your shell or secret manager; the browser never receives or saves it.</p><button onclick="providerRefresh()">Refresh provider readiness</button><pre id="provider-status">Loading provider readiness…</pre><details><summary>Create or update an approved provider profile</summary><label>Profile name<input id="profile-name" maxlength="64" placeholder="team-provider"></label><label>HTTPS endpoint<input id="profile-endpoint" maxlength="500" placeholder="https://provider.example/v1"></label><label>Model<input id="profile-model" maxlength="200" placeholder="model-name"></label><label>Credential environment variable<input id="profile-credential" maxlength="100" value="ADVERSARYFLOW_API_KEY"></label><button onclick="saveProviderProfile()">Save non-secret profile</button></details><label>Profile name to activate or allow<input id="profile-action-name" maxlength="64" placeholder="team-provider"></label><button class="secondary" onclick="useProviderProfile()">Activate profile</button><button class="secondary" onclick="allowProviderProfile()">Allow exact endpoint and model</button><p id="provider-result" class="muted"></p></section><section class="card"><h2>MITRE ATT&CK dry-run planner</h2><p class="muted">Fetches the official HTTPS ATT&CK bundle and produces a simulation-only plan. It does not create a campaign or execute anything.</p><label>Threat actor<input id="plan-actor" value="APT29" maxlength="200"></label><label>RoE-approved target<input id="plan-target" value="local-lab" maxlength="200"></label><label>ATT&CK technique ID<input id="plan-technique" value="T1059" maxlength="32"></label><button onclick="createMitrePlan()">Create dry-run plan</button><pre id="plan-result">No plan requested.</pre></section><section class="card"><h2>Support bundle</h2><p class="muted">Creates a redacted local diagnostics ZIP under artifacts/support for troubleshooting.</p><button class="secondary" onclick="createSupportBundle()">Create redacted support bundle</button><p id="support-result" class="muted"></p></section>');
+async function providerRefresh(){try{let d=await api('/api/provider');q('provider-status').textContent=JSON.stringify(d,null,2)}catch(e){q('provider-status').textContent='Provider status could not be loaded: '+e.message}}
+async function saveProviderProfile(){let result=q('provider-result');try{let d=await api('/api/provider/profiles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:q('profile-name').value,endpoint:q('profile-endpoint').value,model:q('profile-model').value,credential_env:q('profile-credential').value})});result.textContent='Saved profile '+d.saved+'. Set its credential outside the browser, then activate and allow it.';providerRefresh()}catch(e){result.textContent='Profile was not saved: '+e.message}}
+async function useProviderProfile(){let result=q('provider-result');try{let d=await api('/api/provider/use',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:q('profile-action-name').value})});result.textContent='Active profile: '+d.active+'. '+d.activation.next;providerRefresh()}catch(e){result.textContent='Profile was not activated: '+e.message}}
+async function allowProviderProfile(){let result=q('provider-result');try{let d=await api('/api/provider/allow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:q('profile-action-name').value})});result.textContent='Allowed exact settings for '+d.allowed+'.';providerRefresh()}catch(e){result.textContent='Profile was not allowed: '+e.message}}
+async function createMitrePlan(){let out=q('plan-result');out.textContent='Fetching official ATT&CK data and creating a dry-run plan…';try{let d=await api('/api/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actor:q('plan-actor').value,target:q('plan-target').value,technique:q('plan-technique').value})});out.textContent=JSON.stringify(d,null,2)}catch(e){out.textContent='Plan was not created: '+e.message}}
+async function createSupportBundle(){let out=q('support-result');out.textContent='Creating redacted local diagnostics bundle…';try{let d=await api('/api/support-bundle',{method:'POST'});out.textContent='Created: '+d.bundle}catch(e){out.textContent='Support bundle was not created: '+e.message}}
+providerRefresh();
 </script></body></html>"""
 
 
@@ -96,6 +110,41 @@ def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: d
         roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"],
     )
     return {"success": True, "stage": "drafted", "campaign_id": campaign_dir.name, "provider": "offline", "plan_hash": integrity["plan_hash"], "approval_required": True, "next": "Inspect the draft, then obtain explicit RoE approval before local synthetic emulation."}
+
+
+def _provider_status() -> dict[str, object]:
+    """Return only non-secret provider readiness data for the local UI."""
+    config = load_provider_config()
+    return {"configuration": config.as_dict(), "valid": not validate_provider_config(config), "errors": validate_provider_config(config), "profiles": list_profiles(), "activation": activation_summary(), "policy": policy_summary(), "setup": provider_setup_instructions()}
+
+
+def _save_provider_profile(data: dict[str, object]) -> dict[str, object]:
+    name = _input(data, "name", 64)
+    path = save_profile(name, "openai-compatible", _input(data, "endpoint", 500), _input(data, "model", 200), _input(data, "credential_env", 100))
+    return {"success": True, "saved": name, "file": str(path), "profiles": list_profiles(), "activation": activation_summary()}
+
+
+def _use_provider_profile(data: dict[str, object]) -> dict[str, object]:
+    name = _input(data, "name", 64)
+    path = use_profile(name)
+    return {"success": True, "active": name, "file": str(path), "activation": activation_summary(), "policy": policy_summary()}
+
+
+def _allow_provider_profile(data: dict[str, object]) -> dict[str, object]:
+    name = _input(data, "name", 64)
+    path = allow_profile(name)
+    return {"success": True, "allowed": name, "file": str(path), "policy": policy_summary()}
+
+
+def _mitre_plan(roe_path: str, data: dict[str, object]) -> dict[str, object]:
+    """Fetch the official ATT&CK bundle and create a dry-run plan only."""
+    actor, target, technique_id = _input(data, "actor"), _input(data, "target"), _input(data, "technique", 32).upper()
+    AuditLog("artifacts/audit.jsonl").record("plan_requested", actor=actor, target=target, technique=technique_id)
+    technique = find_technique(fetch_attack_bundle(), technique_id)
+    if not technique:
+        raise ValueError(f"Technique not found in MITRE ATT&CK source: {technique_id}")
+    plan = build_plan(_manager_roe(roe_path), actor, target, technique, "MITRE ATT&CK Enterprise STIX")
+    return {"notice": "DRY RUN ONLY", "plan": {"actor": plan.actor, "target": plan.target, "source": plan.source, "steps": [step.__dict__ for step in plan.steps]}}
 
 
 def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
@@ -309,6 +358,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             if path == "/": self._send(200, PAGE, "text/html; charset=utf-8")
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
+            elif path == "/api/provider": self._send(200, _provider_status())
             elif path == "/api/campaigns":
                 campaigns = list_campaigns(campaign_root)
                 for campaign in campaigns:
@@ -331,6 +381,11 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             path = urlparse(self.path).path
             try:
                 if path == "/api/doctor": self._send(200, run_doctor())
+                elif path == "/api/support-bundle": self._send(201, {"success": True, "bundle": str(create_support_bundle("artifacts/support", roe_path))})
+                elif path == "/api/plan": self._send(200, _mitre_plan(roe_path, self._body()))
+                elif path == "/api/provider/profiles": self._send(201, _save_provider_profile(self._body()))
+                elif path == "/api/provider/use": self._send(200, _use_provider_profile(self._body()))
+                elif path == "/api/provider/allow": self._send(200, _allow_provider_profile(self._body()))
                 elif path == "/api/campaigns": self._send(201, _offline_draft(campaign_root, roe_path, catalog_path, self._body()))
                 elif path.startswith("/api/campaigns/"):
                     parts = path.split("/")

@@ -41,4 +41,6 @@ Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspec
 
 `manager [--host 127.0.0.1] [--port 8787] [--campaign-root artifacts/campaigns] [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--open]` starts the loopback-only guided workspace. The named RoE approver can approve and run a reviewed campaign through the fixed local-synthetic adapter after typed confirmation and integrity revalidation.
 
+The workspace includes local provider-profile and policy setup (without credentials), provider readiness, MITRE ATT&CK dry-run planning, and redacted support-bundle generation.
+
 See [USAGE.md](USAGE.md) for a safe end-to-end flow.

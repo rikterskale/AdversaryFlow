@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from uuid import uuid4
 
-from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _offline_draft, _portfolio_summary, _report_summary, _terminal_next_step, make_handler, serve
+from adversaryflow.manager import _approval_readiness, _campaign_detail, _decision_timeline, _input, _manager_context, _mitre_plan, _offline_draft, _portfolio_summary, _provider_status, _report_summary, _terminal_next_step, make_handler, serve
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.profiles import list_profiles, remove_profile, save_profile, use_profile
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
@@ -57,6 +57,7 @@ def test_manager_health_and_campaign_listing():
         base = f"http://127.0.0.1:{server.server_port}"
         health = json.loads(urllib.request.urlopen(base + "/api/health").read())
         context = json.loads(urllib.request.urlopen(base + "/api/context").read())
+        provider = json.loads(urllib.request.urlopen(base + "/api/provider").read())
         campaigns = json.loads(urllib.request.urlopen(base + "/api/campaigns").read())
         assert health["ok"] is True
         assert health["mode"] == "local-guided-manager"
@@ -64,6 +65,8 @@ def test_manager_health_and_campaign_listing():
         assert context["roe"]["approved_targets"] == ["local-lab"]
         assert context["roe"]["excluded_targets"] == ["production"]
         assert context["catalog"] == {"ability_count": 2, "technique_count": 2}
+        assert "configuration" in provider
+        assert "api_key" not in json.dumps(provider)
         assert campaigns["campaigns"] == []
         assert campaigns["summary"] == {"total": 0, "statuses": {"awaiting-approval": 0, "completed": 0, "rejected": 0, "cancelled": 0, "other": 0}}
         page = urllib.request.urlopen(base + "/").read().decode()
@@ -81,6 +84,9 @@ def test_manager_health_and_campaign_listing():
         assert "function createSafeExample()" in page
         assert "Your form entries are unchanged" in page
         assert "q('create-example').disabled=!targetReady" in page
+        assert "Provider setup and diagnostics" in page
+        assert "MITRE ATT&CK dry-run planner" in page
+        assert "Create redacted support bundle" in page
         assert "Current local scope" in page
         assert '<select id="target" disabled onchange="updateDraftPreview()">' in page
         assert "active local RoE" in page
@@ -232,6 +238,21 @@ def test_manager_creates_offline_drafts_and_records_non_execution_decisions():
 def test_manager_next_step_quotes_roE_approver_as_one_cli_argument():
     result = _terminal_next_step("campaign-safe", "awaiting-approval", {"ready": True}, 'manager "blue team"')
     assert result["command"] == 'adversaryflow campaign --campaign-id campaign-safe --approve --approver "manager blue team"'
+
+
+def test_manager_mitre_plan_is_dry_run_and_records_no_execution(monkeypatch):
+    class Audit:
+        def __init__(self, *_args): pass
+        def record(self, *_args, **_kwargs): pass
+
+    monkeypatch.setattr(manager_module, "AuditLog", Audit)
+    monkeypatch.setattr(manager_module, "fetch_attack_bundle", lambda: {"objects": [{
+        "name": "Command and Scripting Interpreter",
+        "external_references": [{"external_id": "T1059"}],
+    }]})
+    result = _mitre_plan("examples/roe.yaml", {"actor": "APT29", "target": "local-lab", "technique": "t1059"})
+    assert result["notice"] == "DRY RUN ONLY"
+    assert result["plan"]["steps"][0]["technique_id"] == "T1059"
 
 
 @pytest.mark.parametrize("payload", [{}, {"actor": "   "}, {"actor": 7}, {"actor": "x" * 201}])
