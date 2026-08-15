@@ -25,6 +25,7 @@ jobs:
       - run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=95
       - run: python scripts/validate_documentation.py
       - run: python scripts/documentation_gap_analysis.py
+      - run: python scripts/source_documentation_contract.py
       - run: python -m adversaryflow doctor --json
       - run: python -m adversaryflow demo
 

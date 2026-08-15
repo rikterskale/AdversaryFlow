@@ -32,4 +32,6 @@ Support bundles are ZIP files containing exactly `diagnostics.json` and `README.
 
 Manager-only workflows additionally write actor-profile `profiles.json`, benign-procedure `events.jsonl` and `manifest.json`, CTID-fixture `fixtures.jsonl`, `manifest.json`, `ctid-detection-gap-report.json`, and `training-timeline.md`, and executive-summary Markdown/PDF files beneath `artifacts/exports`.
 
+Additional generated files are `sensor-preflight.json` for a campaign's supplied sensor-health snapshot, `benign-procedure-gap-report.json` and `cleanup.json` for benign-procedure assessment and cleanup, and `integration.json` for the IDPT integration record. Release output additionally includes `adversaryflow-source.zip` and `sbom.cdx.json` alongside the release manifest.
+
 See [CLI_REFERENCE.md](CLI_REFERENCE.md), [DETECTION_VALIDATION.md](DETECTION_VALIDATION.md), [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md), and [modules/local-manager.md](modules/local-manager.md) for operation-specific use.
