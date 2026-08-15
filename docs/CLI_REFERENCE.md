@@ -40,7 +40,7 @@ Policy commands: `provider policy status` and `provider policy allow NAME`. A ho
 
 ## Campaign commands
 
-Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs] [--sensor-manifest HEALTH.json]` only after review by the named RoE approver. When supplied, the sensor manifest must pass before execution starts.
+Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline] [--adapter local-synthetic|local-behavioral|idpt-local]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs] [--sensor-manifest HEALTH.json]` only after review by the named RoE approver. When supplied, the sensor manifest must pass before execution starts.
 
 Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`; and `campaign retest --campaign-id ID [--campaign-root PATH]`, which creates a new immutable review draft from unresolved gaps.
 
@@ -69,3 +69,5 @@ The first command is read-only. The second creates a draft only. The third is th
 The workspace includes local provider-profile and policy setup (without credentials), provider readiness, MITRE ATT&CK dry-run planning, and redacted support-bundle generation.
 
 See [USAGE.md](USAGE.md) for a safe end-to-end flow.
+
+Versioned output and input schemas are listed in [SCHEMAS.md](SCHEMAS.md).

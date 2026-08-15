@@ -83,4 +83,6 @@ Download release artifacts from the [releases page](https://github.com/rikterska
 | Ubuntu | `scripts/install.sh` | Ubuntu runner |
 | Kali | `scripts/install.sh` | Kali container |
 
+The supported-platform check covers Windows, Debian, Ubuntu, and Kali. The packaged `curated-macos` catalog has fixed read-only actions, but macOS is not accepted by `doctor`; treat that catalog as a separate experimental path until the platform check changes.
+
 Continue with [USAGE.md](USAGE.md), [CLI_REFERENCE.md](CLI_REFERENCE.md), and [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

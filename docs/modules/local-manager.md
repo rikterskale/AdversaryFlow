@@ -71,6 +71,8 @@ The POST actions are:
 
 Request bodies are JSON. Campaign approval requires the RoE approver name and `APPROVE {campaign_id}` confirmation. Campaign reset requires `RESET {campaign_id}`. Provider-profile removal requires `REMOVE {name}`. The manager keeps all writes inside the configured local workspace.
 
+The query parameters are `technique` on `/api/learning` and `/api/detection-mappings`, and `q` plus `tag` on `/api/archive`. They filter the read-only responses; omitted parameters return the unfiltered local result.
+
 ## Data formats
 
 The packaged ability catalog uses `ADVERSARYFLOW-ABILITY-CATALOG-1`. Each ability declares an ID, version, ATT&CK technique, platform, fidelity, expected telemetry, run-root safety, network scope, cleanup action, and (for executable catalogs) a fixed execution action. The operator cannot provide commands through the catalog.
@@ -78,5 +80,7 @@ The packaged ability catalog uses `ADVERSARYFLOW-ABILITY-CATALOG-1`. Each abilit
 Fixed benign procedures use `ADVERSARYFLOW-BENIGN-PROCEDURES-1`. Each procedure declares an ID, technique, name, local action, source, expected detection, and cleanup. Procedure runs write only run-owned evidence.
 
 Offline telemetry uses `ADVERSARYFLOW-TELEMETRY-1`; its correlation fields and vendor aliases are documented in [DETECTION_VALIDATION.md](../DETECTION_VALIDATION.md). CTID-fixture bundles are synthetic local evidence and are not production event sources.
+
+All versioned schemas and artifact filenames are listed in [../SCHEMAS.md](../SCHEMAS.md).
 
 See [../USAGE.md](../USAGE.md) for the walkthrough and [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for local-manager recovery.

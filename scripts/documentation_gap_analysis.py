@@ -40,11 +40,21 @@ def _manager_endpoints() -> set[str]:
     return set(re.findall(r'path\s*==\s*"(/api/[^"?]+)"', source))
 
 
+def _schema_identifiers() -> set[str]:
+    identifiers: set[str] = set()
+    for directory in (ROOT / "src", ROOT / "scripts"):
+        for path in directory.rglob("*"):
+            if path.is_file() and path.suffix in {".py", ".json"}:
+                identifiers.update(re.findall(r"ADVERSARYFLOW-[A-Z0-9-]+-\d+", path.read_text(encoding="utf-8")))
+    return identifiers
+
+
 def find_gaps() -> list[str]:
     cli_reference = _read("docs/CLI_REFERENCE.md")
     examples = _read("docs/EXAMPLES.md")
     architecture = _read("docs/ARCHITECTURE.md")
     manager_docs = _read("docs/modules/local-manager.md")
+    schemas_docs = _read("docs/SCHEMAS.md")
     source_manager = _read("src/adversaryflow/manager.py")
     gaps: list[str] = []
 
@@ -97,6 +107,20 @@ def find_gaps() -> list[str]:
         "ADVERSARYFLOW-ABILITY-CATALOG-1": "DOC-GAP-014",
         "ADVERSARYFLOW-BENIGN-PROCEDURES-1": "DOC-GAP-015",
         "ADVERSARYFLOW-TELEMETRY-1": "DOC-GAP-016",
+        "ADVERSARYFLOW-ACTOR-PROFILES-1": "DOC-GAP-019",
+        "ADVERSARYFLOW-ADAPTER-1": "DOC-GAP-020",
+        "ADVERSARYFLOW-CAPABILITIES-1": "DOC-GAP-021",
+        "ADVERSARYFLOW-COVERAGE-DASHBOARD-1": "DOC-GAP-022",
+        "ADVERSARYFLOW-CTID-FIXTURES-1": "DOC-GAP-023",
+        "ADVERSARYFLOW-DETECTION-MAPPINGS-1": "DOC-GAP-024",
+        "ADVERSARYFLOW-DETECTION-RULE-REGISTRY-1": "DOC-GAP-025",
+        "ADVERSARYFLOW-EMULATION-1": "DOC-GAP-026",
+        "ADVERSARYFLOW-IDPT-1": "DOC-GAP-027",
+        "ADVERSARYFLOW-IDPT-SCENARIOS-1": "DOC-GAP-028",
+        "ADVERSARYFLOW-PLANNED-SENSOR-PREFLIGHT-1": "DOC-GAP-029",
+        "ADVERSARYFLOW-RETEST-1": "DOC-GAP-030",
+        "ADVERSARYFLOW-SENSOR-PREFLIGHT-1": "DOC-GAP-031",
+        "ADVERSARYFLOW-RELEASE-MANIFEST-1": "DOC-GAP-032",
     }
     schema_docs = "\n".join(
         _read(path)
@@ -106,21 +130,40 @@ def find_gaps() -> list[str]:
             "docs/modules/local-manager.md",
             "docs/modules/providers.md",
             "docs/DETECTION_VALIDATION.md",
+            "docs/SCHEMAS.md",
         )
     )
     for schema, gap_id in schema_markers.items():
         if schema not in schema_docs:
             gaps.append(f"{gap_id}: no user documentation identifies schema `{schema}`.")
+    for schema in sorted(_schema_identifiers() - set(schema_markers)):
+        if schema not in schema_docs:
+            gaps.append(f"DOC-GAP-SCHEMA: no user documentation identifies schema `{schema}`.")
 
     # The bundled page contains contradictory approval instructions.  Keep
     # this check until the stale copy is removed or explicitly reconciled.
-    cli_only = "approval is deliberately CLI-only" in source_manager or "Use CLI" in source_manager
-    browser_approval = "approve and run local synthetic emulation" in source_manager
-    if cli_only and browser_approval:
+    stale_cli_copy = "Use CLI." in source_manager or "deliberately CLI-only" in source_manager
+    browser_approval = "Approve and run local synthetic emulation" in source_manager or "approve and run a reviewed campaign" in source_manager
+    if stale_cli_copy and browser_approval:
         gaps.append(
             "DOC-GAP-017: src/adversaryflow/manager.py contains contradictory "
             "browser approval instructions; reconcile the stale page copy."
         )
+
+    api_query_markers = ("technique", "q", "tag")
+    if not all(marker in manager_docs for marker in api_query_markers):
+        gaps.append("DOC-GAP-033: local-manager documentation omits manager API query parameters.")
+
+    if "[--adapter local-synthetic|local-behavioral|idpt-local]" not in cli_reference:
+        gaps.append("DOC-GAP-034: CLI reference campaign synopsis omits the --adapter option.")
+
+    install_docs = _read("docs/INSTALL.md")
+    if "curated-macos" not in install_docs or "not accepted by `doctor`" not in install_docs:
+        gaps.append("DOC-GAP-035: installation documentation does not distinguish macOS catalog support from doctor platform support.")
+
+    support_docs = _read("docs/modules/diagnostics-and-support.md")
+    if "diagnostics.json" not in support_docs or "README.txt" not in support_docs:
+        gaps.append("DOC-GAP-036: support-bundle documentation does not identify its exact ZIP members.")
 
     # Keep the command extraction live so a future parser change cannot make
     # this script silently stop checking the CLI reference.

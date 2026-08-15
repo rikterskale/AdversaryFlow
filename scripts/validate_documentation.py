@@ -11,7 +11,7 @@ REQUIRED = {
     "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md",
     "docs/INSTALL.md", "docs/CLI_REFERENCE.md", "docs/USAGE.md", "docs/ARCHITECTURE.md",
     "docs/TROUBLESHOOTING.md", "docs/FAQ.md", "docs/EXAMPLES.md", "docs/DEVELOPMENT.md",
-    "docs/RELEASE_CHECKLIST.md",
+    "docs/RELEASE_CHECKLIST.md", "docs/SCHEMAS.md",
 }
 CLI_MARKERS = ("validate", "plan", "draft", "demo", "doctor", "support-bundle", "capabilities", "guide", "provider", "campaign", "manager")
 DOCTOR_CHECK_DOCUMENTS = (
