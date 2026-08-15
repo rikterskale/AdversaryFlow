@@ -2,7 +2,9 @@
 
 ## Audit method
 
-This audit was performed against the repository contents on 2026-08-15. All 128 tracked text files were read line by line (9,651 lines); the tracked PNG was inspected as a binary visual asset. The comparison uses source literals, parser construction, route dispatch, artifact writes, environment-variable reads, and test assertions. A statement is treated as verified only when the cited source or test supplies the evidence.
+This audit was performed against the repository contents on 2026-08-15. The checkout contains 131 tracked files: 130 UTF-8 text files (9,983 lines) and one tracked PNG binary asset, `docs/assets/campaign-guide.png`. The text files were read line by line and the PNG was inspected as a binary visual asset. The comparison uses source literals, parser construction, route dispatch, artifact writes, environment-variable reads, package metadata, workflow configuration, and test assertions. A statement is treated as verified only when the cited source or test supplies the evidence.
+
+The audited implementation surface is 38 Python modules under `src/adversaryflow/`, the packaged HTML/CSS/JavaScript manager assets, 16 JSON resource/data files, the two installer scripts, `Dockerfile`, `pyproject.toml`, the workflow and release scripts, 27 Markdown documents, the example RoE, and 32 test modules. The source-derived inventory is: 37 parser identifiers (including nested parser names), 31 long options, 19 non-null parser defaults, 43 manager route forms, 8 environment-variable names, and 18 concrete serialized artifact filenames. These are extracted by `scripts/source_documentation_contract.py`; the check compares the literal inventories against the designated user documentation.
 
 The existing ground-truth rule is explicit in `documentation_prompt.txt:5-13`: document only verified behavior, inspect parsers before documenting CLI behavior, and use a `[VERIFY: ...]` tag for unconfirmed details. Existing checks are `scripts/validate_documentation.py:24-69` and `scripts/documentation_gap_analysis.py:23-177`.
 
@@ -47,7 +49,7 @@ The existing schema identifiers and primary artifact families are documented in 
 
 ### Tested behavior
 
-The full test run passed when directed to a repository-local pytest base directory: `209 passed in 13.17s`. The default run was not treated as a product failure: it produced 178 passes and 31 setup errors because the host denied access to `C:\Users\tsaxon\AppData\Local\Temp\pytest-of-tsaxon` while pytest was creating `tmp_path` directories. The successful local-base run is the authoritative result for this checkout.
+The full behavior test run passed with a repository-local pytest base directory: `210 passed in 14.34s`. The coverage-enabled run also passed all 210 tests on this host's Python 3.14: `95.05%` total coverage with the exact `--cov-fail-under=95` gate. The added regression covers the fail-closed guard that rejects re-approval of a campaign whose status is not `awaiting-approval`. The CI workflow tests Python 3.11 and 3.12; the latest remote CI run for commit `3d277f7` passed all jobs. The repository-local-base run is the authoritative result for this checkout.
 
 The test suite has direct coverage for campaign persistence and lifecycle decisions (`tests/test_campaign_persistence.py`, `tests/test_lifecycle.py`), manager approval and routes (`tests/test_manager_approval.py`, `tests/test_profiles_manager.py`), artifacts (`tests/test_artifact_journey.py`, `tests/test_reports.py`, `tests/test_product_tools.py`), provider/environment behavior (`tests/test_provider.py`, `tests/test_provider_client.py`), telemetry and detection (`tests/test_telemetry.py`, `tests/test_extended_features.py`), IDPT boundaries (`tests/test_idpt.py`), and documentation validators (`tests/test_validation_coverage.py`).
 
@@ -58,6 +60,8 @@ python scripts/validate_documentation.py       documentation validation passed
 python scripts/documentation_gap_analysis.py   Documentation gap analysis passed
 python scripts/source_documentation_contract.py Source/documentation contract passed
 ```
+
+The local checks emitted only the existing doctor warning that it could not read the unmanaged WindowsApps installation directory; the three documentation commands still returned success.
 
 ## Enforcement added
 
