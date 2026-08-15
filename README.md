@@ -59,6 +59,8 @@ adversaryflow guide --interactive
 
 The current release supports scoped local synthetic simulation, opt-in fixed read-only Windows/Linux/macOS behaviors, and a reviewed registry-selected pinned IDPT scenario; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option. See [IDPT local integration](docs/IDPT_INTEGRATION.md) and [detection validation](docs/DETECTION_VALIDATION.md).
 
+The IDPT integration is a narrowly bounded local adapter: AdversaryFlow owns the RoE, draft, approval, plan provenance, and reporting; the exact reviewed IDPT checkout runs one packaged Windows scenario and returns verified evidence. It does not accept campaign commands, arbitrary scenarios, remote destinations, dirty checkouts, or unreviewed commits. See the [IDPT integration guide](docs/IDPT_INTEGRATION.md) for the full lifecycle and artifact map.
+
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for Windows, Linux/Kali, and Docker setup. `doctor` is the first troubleshooting command, and `support-bundle` creates a redacted diagnostics archive.

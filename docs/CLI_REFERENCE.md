@@ -48,6 +48,18 @@ Use `--adapter local-behavioral` with `--catalog curated-windows`, `curated-linu
 
 Use `--adapter idpt-local --catalog idpt-windows-collection` to delegate the fixed benign Windows collection scenario to the exact reviewed IDPT checkout configured by `ADVERSARYFLOW_IDPT_ROOT`. See [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md).
 
+The safe IDPT command sequence is:
+
+```powershell
+$env:ADVERSARYFLOW_IDPT_ROOT = "C:\Tools\IDPT-Emulation"
+adversaryflow adapter status --name idpt-local --catalog idpt-windows-collection
+adversaryflow campaign --actor "IDPT Windows Collection Baseline" --platform windows --catalog idpt-windows-collection --objective "validate benign collection telemetry"
+adversaryflow campaign --campaign-id campaign-... --catalog idpt-windows-collection --approve --approver manager@example.test --adapter idpt-local
+adversaryflow campaign assess --campaign-id campaign-... --telemetry-file normalized.jsonl
+```
+
+The first command is read-only. The second creates a draft only. The third is the only command in this sequence that starts the approved IDPT-backed local run. The last command assesses separately supplied offline telemetry; it does not query IDPT or a production sensor.
+
 `list` and `inspect` are read-only. `reject` and `cancel` record decisions. `reset` deletes the direct campaign directory beneath the configured root after explicit confirmation.
 
 ## Local manager
