@@ -23,9 +23,12 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e '.[dev]'
       - run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=95
-      - run: python scripts/validate_documentation.py
-      - run: python scripts/documentation_gap_analysis.py
-      - run: python scripts/source_documentation_contract.py
+      - name: Validate documentation links and required guides
+        run: python scripts/validate_documentation.py
+      - name: Run documented-gap regression checks
+        run: python scripts/documentation_gap_analysis.py
+      - name: Enforce source-to-documentation implementation contract
+        run: python scripts/source_documentation_contract.py
       - run: python -m adversaryflow doctor --json
       - run: python -m adversaryflow demo
 

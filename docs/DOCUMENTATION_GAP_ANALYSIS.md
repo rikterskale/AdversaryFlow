@@ -2,9 +2,9 @@
 
 ## Audit method
 
-This audit was performed against the repository contents on 2026-08-15. The checkout contains 131 tracked files: 130 UTF-8 text files (9,983 lines) and one tracked PNG binary asset, `docs/assets/campaign-guide.png`. The text files were read line by line and the PNG was inspected as a binary visual asset. The comparison uses source literals, parser construction, route dispatch, artifact writes, environment-variable reads, package metadata, workflow configuration, and test assertions. A statement is treated as verified only when the cited source or test supplies the evidence.
+This audit was performed against the repository contents on 2026-08-15. The checkout contains 131 tracked files: 130 UTF-8 text files (9,876 lines) and one tracked PNG binary asset, `docs/assets/campaign-guide.png`. The text files were read line by line and the PNG was inspected as a binary visual asset. The comparison uses source literals, parser construction, route dispatch, artifact writes, environment-variable reads, package metadata, workflow configuration, and test assertions. A statement is treated as verified only when the cited source or test supplies the evidence.
 
-The audited implementation surface is 38 Python modules under `src/adversaryflow/`, the packaged HTML/CSS/JavaScript manager assets, 16 JSON resource/data files, the two installer scripts, `Dockerfile`, `pyproject.toml`, the workflow and release scripts, 27 Markdown documents, the example RoE, and 32 test modules. The source-derived inventory is: 37 parser identifiers (including nested parser names), 31 long options, 19 non-null parser defaults, 43 manager route forms, 8 environment-variable names, and 18 concrete serialized artifact filenames. These are extracted by `scripts/source_documentation_contract.py`; the check compares the literal inventories against the designated user documentation.
+The audited implementation surface is 38 Python modules under `src/adversaryflow/`, the packaged HTML/CSS/JavaScript manager assets, 16 JSON resource/data files, the two installer scripts, `Dockerfile`, `pyproject.toml`, the workflow and release scripts, 27 Markdown documents, the example RoE, and 32 test modules. The source-derived inventory is: 36 parser identifiers, 36 long options, 2 positional argument names, 19 non-null parser defaults, 5 static choice values, 41 manager route forms, 8 environment-variable names, and 47 fixed serialized/path names. These are extracted by `scripts/source_documentation_contract.py`; the check compares the literal inventories against the designated user documentation.
 
 The existing ground-truth rule is explicit in `documentation_prompt.txt:5-13`: document only verified behavior, inspect parsers before documenting CLI behavior, and use a `[VERIFY: ...]` tag for unconfirmed details. Existing checks are `scripts/validate_documentation.py:24-69` and `scripts/documentation_gap_analysis.py:23-177`.
 
@@ -14,13 +14,13 @@ The existing ground-truth rule is explicit in `documentation_prompt.txt:5-13`: d
 
 The parser is built with `argparse` in `src/adversaryflow/cli.py:88-245`. It defines these top-level commands: `validate`, `plan`, `intel-sync`, `draft`, `demo`, `doctor`, `support-bundle`, `capabilities`, `adapter`, `guide`, `provider`, `campaign`, `telemetry`, `detection`, `coverage`, and `manager`. Nested parser construction defines `adapter status`, provider status/validate/configure/diagnose/profile/policy/test, campaign lifecycle operations, telemetry normalize/preflight/export, and detection export (`cli.py:131-244`).
 
-`docs/CLI_REFERENCE.md:7-73` documents the complete parser command and option surface. The source-derived contract now compares every `add_parser`, long `add_argument`, and non-null literal default against that reference. It passed after the artifact documentation correction.
+`docs/CLI_REFERENCE.md:7-73` documents the complete parser command and option surface. The source-derived contract compares every `add_parser`, long and positional `add_argument`, non-null literal default, and statically declared choice value against that reference. It passed after the fixed serialized-path inventory was added.
 
 The parser-to-behavior comparison is also direct: `cli.py:257-555` contains the dispatch and exit behavior. Tests cover CLI behavior in `tests/test_campaign_cli.py`, `tests/test_cli_coverage.py`, `tests/test_guide_cli.py`, `tests/test_doctor_support.py`, `tests/test_provider.py`, `tests/test_provider_client.py`, `tests/test_lifecycle.py`, and `tests/test_extended_features.py`.
 
 ### Manager routes
 
-The HTTP dispatch is implemented in `src/adversaryflow/manager.py:488-600`; loopback binding is enforced at `manager.py:606-611`. The documented route tables at `docs/modules/local-manager.md:26-74` cover the GET resources, POST actions, dynamic campaign routes, actor-profile routes, query parameters, request confirmation strings, and write boundary. The source-derived contract checks the literal routes plus the dynamic route forms.
+The HTTP dispatch is implemented in `src/adversaryflow/manager.py:488-600`; loopback binding is enforced at `manager.py:606-611`. The documented route tables at `docs/modules/local-manager.md:26-74` cover the GET resources, POST actions, dynamic campaign routes, actor-profile routes, query parameters, request confirmation strings, and write boundary. The source-derived contract walks the `do_GET` and `do_POST` dispatch functions for literal routes and checks the dynamic route forms explicitly.
 
 The browser asset is a packaged resource loaded by `manager.py:103`; the separate packaged HTML, CSS, and JavaScript are under `src/adversaryflow/resources/`. The checked-in walkthrough image was inspected and agrees with the documented review-before-approval flow; it is not executable behavior evidence.
 
@@ -49,7 +49,7 @@ The existing schema identifiers and primary artifact families are documented in 
 
 ### Tested behavior
 
-The full behavior test run passed with a repository-local pytest base directory: `210 passed in 14.34s`. The coverage-enabled run also passed all 210 tests on this host's Python 3.14: `95.05%` total coverage with the exact `--cov-fail-under=95` gate. The added regression covers the fail-closed guard that rejects re-approval of a campaign whose status is not `awaiting-approval`. The CI workflow tests Python 3.11 and 3.12; the latest remote CI run for commit `3d277f7` passed all jobs. The repository-local-base run is the authoritative result for this checkout.
+The documentation validators and source contract pass on this checkout. A full local pytest invocation collected the suite and reached 179 passes before 31 setup errors; every error was pytest's `tmp_path` fixture failing while scanning the host-managed `%TEMP%\pytest-of-tsaxon` directory with `WinError 5: Access is denied`. This is an execution-environment limitation on this Windows host, not evidence of a product behavior result, so no passing test claim is made here. CI remains the authoritative cross-platform behavior gate through the existing Python 3.11/3.12 matrix and coverage threshold.
 
 The test suite has direct coverage for campaign persistence and lifecycle decisions (`tests/test_campaign_persistence.py`, `tests/test_lifecycle.py`), manager approval and routes (`tests/test_manager_approval.py`, `tests/test_profiles_manager.py`), artifacts (`tests/test_artifact_journey.py`, `tests/test_reports.py`, `tests/test_product_tools.py`), provider/environment behavior (`tests/test_provider.py`, `tests/test_provider_client.py`), telemetry and detection (`tests/test_telemetry.py`, `tests/test_extended_features.py`), IDPT boundaries (`tests/test_idpt.py`), and documentation validators (`tests/test_validation_coverage.py`).
 
@@ -65,7 +65,7 @@ The local checks emitted only the existing doctor warning that it could not read
 
 ## Enforcement added
 
-`scripts/source_documentation_contract.py` now performs source-derived parity checks for parser commands/options/defaults, manager routes, `ADVERSARYFLOW_*` environment names, and concrete serialized artifact names. `.github/workflows/ci.yml:24-30` runs it on the existing test job, so a future source change that is not reflected in the relevant documentation fails CI.
+`scripts/source_documentation_contract.py` now performs source-derived parity checks for parser commands/options/positionals/defaults/choices, manager dispatch routes, `ADVERSARYFLOW_*` environment names, and fixed serialized/path names resolved from source. `.github/workflows/ci.yml:24-30` runs it on the existing test job, so a future source change that is not reflected in the relevant documentation fails CI.
 
 This check is deliberately literal and fail-closed. It does not infer undocumented behavior, generate prose, or certify runtime behavior that is not covered by tests.
 

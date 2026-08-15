@@ -25,11 +25,22 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def cli_surface() -> tuple[set[str], set[str], set[str]]:
+def _literal_strings(node: ast.AST) -> set[str]:
+    """Return literal strings from a static AST expression."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return {value for item in node.elts for value in _literal_strings(item)}
+    return set()
+
+
+def cli_surface() -> tuple[set[str], set[str], set[str], set[str], set[str]]:
     tree = ast.parse(read(ROOT / "src/adversaryflow/cli.py"))
     commands: set[str] = set()
     options: set[str] = set()
+    positionals: set[str] = set()
     defaults: set[str] = set()
+    choices: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
@@ -40,15 +51,27 @@ def cli_surface() -> tuple[set[str], set[str], set[str]]:
         argument = str(node.args[0].value)
         if argument.startswith("--"):
             options.add(argument)
+        else:
+            positionals.add(argument)
         for keyword in node.keywords:
             if keyword.arg == "default" and isinstance(keyword.value, ast.Constant) and keyword.value.value is not None:
                 defaults.add(str(keyword.value.value))
-    return commands, options, defaults
+            if keyword.arg == "choices":
+                choices.update(_literal_strings(keyword.value))
+    return commands, options, positionals, defaults, choices
 
 
 def manager_routes() -> set[str]:
-    source = read(ROOT / "src/adversaryflow/manager.py")
-    routes = set(re.findall(r'path\s*==\s*["\'](/api/[^"\']+)', source))
+    tree = ast.parse(read(ROOT / "src/adversaryflow/manager.py"))
+    routes: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name not in {"do_GET", "do_POST"}:
+            continue
+        for child in ast.walk(node):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str) and child.value.startswith("/api/"):
+                routes.add(child.value.split("?", 1)[0])
+    routes.discard("/api/actor-profiles/")
+    routes.discard("/api/campaigns/")
     routes.update({
         "/api/actor-profiles/{name}",
         "/api/actor-profiles/{name}/plan",
@@ -74,12 +97,14 @@ def source_environment_names() -> set[str]:
 
 def source_artifact_names() -> set[str]:
     names: set[str] = set()
-    pattern = re.compile(r'(?:/|writestr\()\s*["\']([A-Za-z0-9_.-]+\.(?:json|jsonl|yaml|md|html|pdf|zip|csv))["\']')
+    # Include fixed path components whether they are written directly, passed
+    # to ZipFile.writestr, or resolved from a packaged resource. This keeps
+    # the contract fail-closed for both emitted artifacts and serialized
+    # inputs that are part of the public implementation surface.
+    pattern = re.compile(r'(?:/|joinpath\(|writestr\(|Path\()\s*["\']([A-Za-z0-9_.-]+\.(?:json|jsonl|yaml|md|html|pdf|zip|csv))["\']')
     for path in (ROOT / "src", ROOT / "scripts"):
         for file in path.rglob("*.py"):
-            for line in read(file).splitlines():
-                if any(marker in line for marker in ("write_text", "write_bytes", "writestr", "source_zip")):
-                    names.update(pattern.findall(line))
+            names.update(pattern.findall(read(file)))
     return names
 
 
@@ -91,16 +116,22 @@ def find_gaps() -> list[str]:
     all_docs = "\n".join(read(path) for path in ALL_USER_DOCS)
     gaps: list[str] = []
 
-    commands, options, defaults = cli_surface()
+    commands, options, positionals, defaults, choices = cli_surface()
     for command in sorted(commands):
         if command not in cli:
             gaps.append(f"CLI command missing from docs/CLI_REFERENCE.md: {command}")
     for option in sorted(options):
         if option not in cli:
             gaps.append(f"CLI option missing from docs/CLI_REFERENCE.md: {option}")
+    for positional in sorted(positionals):
+        if positional not in cli:
+            gaps.append(f"CLI positional argument missing from docs/CLI_REFERENCE.md: {positional}")
     for default in sorted(defaults):
         if default not in cli:
             gaps.append(f"CLI default missing from docs/CLI_REFERENCE.md: {default}")
+    for choice in sorted(choices):
+        if choice not in cli:
+            gaps.append(f"CLI choice missing from docs/CLI_REFERENCE.md: {choice}")
 
     for route in sorted(manager_routes()):
         if route not in manager:

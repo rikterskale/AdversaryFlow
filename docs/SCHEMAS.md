@@ -34,4 +34,18 @@ Manager-only workflows additionally write actor-profile `profiles.json`, benign-
 
 Additional generated files are `sensor-preflight.json` for a campaign's supplied sensor-health snapshot, `benign-procedure-gap-report.json` and `cleanup.json` for benign-procedure assessment and cleanup, and `integration.json` for the IDPT integration record. Release output additionally includes `adversaryflow-source.zip` and `sbom.cdx.json` alongside the release manifest.
 
+## Fixed serialized path names
+
+The source also resolves these fixed serialized inputs and workflow files. The
+names are listed exactly so changes to packaged resources or integration
+boundaries cannot become undocumented:
+
+| Area | Exact names |
+|---|---|
+| Packaged resources | `catalog.json`, `benign_procedures.json`, `capabilities.json`, `ctid_apt29_identity_fixtures.json`, `curated-linux.json`, `curated-macos.json`, `curated-windows.json`, `detection_mappings.json`, `idpt-windows-collection.json`, `idpt_scenarios.json`, `roe.yaml` |
+| Enrichment outputs | `catalog.json`, `benign_procedures.json`, `coverage.json`, `emulation-plan.json` |
+| Provider and manager state | `history.json`, `policy.json`, `profiles.json`, `detection-mappings.json` |
+| IDPT integration boundary | `hosts.json`, `plan.json`, `roe.json`, `run.json`, `evidence-manifest.json` |
+| Packaged manager asset | `manager.html` |
+
 See [CLI_REFERENCE.md](CLI_REFERENCE.md), [DETECTION_VALIDATION.md](DETECTION_VALIDATION.md), [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md), and [modules/local-manager.md](modules/local-manager.md) for operation-specific use.
