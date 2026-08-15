@@ -14,6 +14,10 @@ flowchart LR
 
 `manager.py` exposes a loopback-only HTTP workspace. `provider.py` validates offline and OpenAI-compatible configuration; `profiles.py` persists non-secret profile metadata. `workflow.py` persists drafts, verifies integrity, enforces approval, and runs the synthetic harness. `emulation.py` permits only `none` and `loopback` network scope. `reports.py` writes Markdown and HTML campaign reports.
 
+The extended local workflows remain behind the manager boundary. `actor_profiles.py` stores and runs profiles that reference only registered benign fixtures or procedures. `benign_procedures.py` creates run-owned evidence and bounded cleanup. `ctid.py` creates and assesses synthetic CTID-fixture bundles. `telemetry.py` normalizes offline vendor exports, performs sensor preflight, and correlates observations. `detection_mappings.py` exports validation templates; `coverage.py` builds the actor-to-detection dashboard; `retest.py` creates immutable gap-derived drafts. `product_tools.py` provides archive search, tags, owner/retention metadata, executive summaries, and validated RoE history.
+
+These components do not add a new execution boundary: they remain local, use fixed or synthetic inputs, and do not provide arbitrary commands, remote execution, external network contact, or production-service changes.
+
 ## IDPT adapter boundary
 
 The optional `idpt-local` path adds a second local executor behind the same reviewed campaign boundary:
