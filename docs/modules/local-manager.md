@@ -10,4 +10,17 @@ The workspace also exposes non-secret provider profile setup, active-profile and
 
 Additional workspace tools provide actor-profile planning and runs, benign-procedure runs and assessment, CTID fixture creation and assessment, detection-mapping guidance, the actor-to-detection coverage dashboard, archive search, campaign tags, owner and retention controls, executive-summary Markdown/PDF export, and a validated RoE editor with version history. These operations remain local; their individual confirmation and scope boundaries are shown in the workspace before the action is submitted.
 
+## Additional workspace workflows
+
+The additional tools are available from the manager interface rather than as top-level CLI subcommands:
+
+- Actor validation profiles select only pre-registered benign fixtures and/or fixed benign procedures. A profile can be planned and run locally; its run records a retest relationship when one is supplied.
+- Benign procedures create run-owned evidence, support offline assessment of observed procedure IDs, and provide cleanup limited to the run-owned `work` directory.
+- CTID fixture workflows create synthetic JSONL fixtures, record observed fixture IDs, and write a local detection-gap report plus training timeline. The fixture bundle is not a production event source.
+- Archive search matches campaign ID, actor, objective, and tags. Tags are normalized to lowercase; ownership and retention controls are stored in campaign metadata.
+- Executive-summary export writes Markdown and PDF files beneath `artifacts/exports` by default.
+- The RoE editor validates the replacement RoE before saving and records the previous YAML snapshot beneath `artifacts/roe-history`.
+
+These workflows do not add arbitrary commands, remote execution, credential access, cloud changes, external network contact, or destructive target actions.
+
 See [../USAGE.md](../USAGE.md) for the walkthrough and [../TROUBLESHOOTING.md](../TROUBLESHOOTING.md) for local-manager recovery.

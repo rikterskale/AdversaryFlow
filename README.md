@@ -118,7 +118,7 @@ Completed campaigns also produce `campaign-report.md` and `campaign-report.html`
 
 ## Guided local campaign workspace
 
-Run `adversaryflow manager --open` to launch a loopback-only browser workspace. Start with the five-step walkthrough at the top; select any step to see one clear command, explanation, and next action at a time. The workspace provides health checks, provider and non-secret profile management, policy readiness, MITRE ATT&CK dry-run planning, local support bundles, campaign drafting and review, RoE-gated approval and fixed local-synthetic emulation, reports, lifecycle decisions, and a typed-confirmation demo. It does not provide an arbitrary command runner or expose any non-loopback service. Provider credentials remain in the shell or secret manager, never in the browser.
+Run `adversaryflow manager --open` to launch a loopback-only browser workspace. Start with the three-step walkthrough at the top; select any step to see one clear command, explanation, and next action at a time. The workspace provides health checks, provider and non-secret profile management, policy readiness, MITRE ATT&CK dry-run planning, local support bundles, campaign drafting and review, RoE-gated approval and fixed local-synthetic emulation, reports, lifecycle decisions, and a typed-confirmation demo. It does not provide an arbitrary command runner or expose any non-loopback service. Provider credentials remain in the shell or secret manager, never in the browser.
 
 ![Campaign Guide quick start](docs/assets/campaign-guide.png)
 

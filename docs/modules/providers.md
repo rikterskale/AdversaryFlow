@@ -6,6 +6,10 @@ Offline mode is the default provider. The only hosted mode is `openai-compatible
 
 Provider configuration reads these environment variables: `ADVERSARYFLOW_PROVIDER`, `ADVERSARYFLOW_MODEL`, `ADVERSARYFLOW_ENDPOINT`, `ADVERSARYFLOW_API_KEY`, `ADVERSARYFLOW_PROFILE`, and `ADVERSARYFLOW_PROFILE_FILE`. An OpenAI-compatible endpoint must use HTTPS and requires a model and API key.
 
+### Configuration precedence
+
+The default provider is `offline`. When direct provider settings are supplied through `ADVERSARYFLOW_PROVIDER`, `ADVERSARYFLOW_ENDPOINT`, or `ADVERSARYFLOW_MODEL`, those settings are used instead of an automatically selected profile. Set `ADVERSARYFLOW_PROFILE` to select a named profile explicitly; set `ADVERSARYFLOW_PROFILE_FILE` to change the profile-file location. Profile values fill settings that were not supplied directly, and the profile's configured credential-environment-variable name is used to locate its credential. Hosted profiles are still rejected unless their exact provider, endpoint, and model are present in the policy allowlist.
+
 Profile data is stored by default in `artifacts/providers/profiles.json`. Profiles retain non-secret provider, endpoint, model, and credential-environment-variable metadata; they do not store an API key.
 
 Hosted profile settings must also be explicitly allowlisted in `artifacts/providers/policy.json`. After saving a reviewed profile, run `adversaryflow provider policy allow PROFILE_NAME`. The policy records the exact profile name, provider, endpoint, and model; a changed endpoint or model requires another explicit allow operation.
