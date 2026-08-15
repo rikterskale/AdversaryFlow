@@ -13,7 +13,7 @@ python -m adversaryflow doctor --json
 
 ## Change expectations
 
-- Keep browser operations loopback-only; approval and emulation remain CLI-only.
+- Keep browser operations loopback-only. The browser may approve and run only the fixed `local-synthetic` adapter after exact RoE-approver identity, campaign-specific typed confirmation, and integrity checks. `local-behavioral` and `idpt-local` execution remain outside the browser approval path.
 - Do not add exploitation, arbitrary command execution, credential access, persistence, evasion, lateral movement, or unrestricted networking.
 - Add tests for new behavior and retain the coverage gate.
 - Update source-confirmed documentation when commands, defaults, safety boundaries, or recovery paths change.

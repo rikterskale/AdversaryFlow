@@ -45,6 +45,6 @@ If resume reports an integrity mismatch, do not approve the record; create a new
 
 ## Local manager
 
-The manager must bind to loopback (`127.0.0.1`, `localhost`, or `::1`). It cannot bind to external interfaces. The browser workspace creates offline drafts and records rejection/cancellation only; approval and local emulation remain CLI actions.
+The manager must bind to loopback (`127.0.0.1`, `localhost`, or `::1`). It cannot bind to external interfaces. The browser workspace creates drafts and records rejection/cancellation. It can also approve and run a reviewed campaign through the fixed `local-synthetic` adapter after exact RoE-approver identity, campaign-specific typed confirmation, and integrity checks. `local-behavioral` and `idpt-local` execution remain CLI actions.
 
 See [CLI_REFERENCE.md](CLI_REFERENCE.md) for exact command options.

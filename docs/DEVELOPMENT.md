@@ -21,7 +21,7 @@ python -m pytest -q --cov=adversaryflow --cov-branch --cov-fail-under=95
 python -m adversaryflow doctor --json
 ```
 
-The CI workflow runs tests on Windows and Ubuntu with Python 3.11 and 3.12, plus release-readiness and security jobs. The current suite measures full line and branch coverage; the configured CI threshold remains 95%.
+The CI workflow runs tests on Windows and Ubuntu with Python 3.11 and 3.12, plus release-readiness and security jobs. The current suite meets the configured 95% combined line-and-branch coverage threshold.
 
 ## Release artifacts
 

@@ -85,7 +85,7 @@ def run_doctor(
     try:
         product_version = package_version("adversaryflow")
     except PackageNotFoundError:
-        product_version = "0.2.0"
+        product_version = "0.2.3"
     return {
         "product": "AdversaryFlow",
         "version": product_version,

@@ -2,6 +2,8 @@
 
 `adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise.
 
+Parser usage errors, including missing required arguments or an unknown command, use argparse's standard non-zero usage-error exit. Read-only and preparation commands do not approve or execute a campaign unless their command description explicitly says otherwise. The browser manager has a separate HTTP action surface described in [the local-manager guide](modules/local-manager.md).
+
 ## Read-only and preparation commands
 
 | Command | Purpose |

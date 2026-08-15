@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Guided local manager workflows, provider profiles and policy allowlists, campaign lifecycle recovery, provider recovery coverage, manager approval readiness, and release-readiness enforcement.
+- The 95% combined line-and-branch coverage gate and expanded campaign, provider, lifecycle, manager, and resilience test coverage.
 - Apache-2.0 licensing, contributor guidance, security policy, code of conduct, CLI reference, operator guides, and module documentation.
 
 ## [0.2.2] - 2026-08-13

@@ -12,7 +12,7 @@ The installed CLI must run `doctor --fix --json`, `provider validate`, `provider
 
 ## Full-feature validation
 
-The canonical clean wheel installation must execute every supported user-facing operation: RoE validation, capability and adapter inspection, offline and provider-configured drafting, campaign lifecycle decisions, approval and fixed local-synthetic emulation, reports, provider profiles and policy, provider diagnostics, MITRE dry-run planning, support bundles, the local demo, and static manager assets. Every parser option must be represented by an executable test or an explicit expected-failure recovery test; documentation coverage alone is insufficient.
+The release-readiness standard requires the canonical clean wheel installation to exercise every supported user-facing operation: RoE validation, capability and adapter inspection, offline and provider-configured drafting, campaign lifecycle decisions, approval and fixed local-synthetic emulation, reports, provider profiles and policy, provider diagnostics, MITRE dry-run planning, support bundles, the local demo, and static manager assets. The clean artifact journey in `scripts/artifact_journey.py` exercises its explicitly listed subset; any operation not included there must be covered by an executable release-artifact test or an explicit expected-failure recovery test. Documentation coverage alone is insufficient.
 
 ## Tested recovery paths
 

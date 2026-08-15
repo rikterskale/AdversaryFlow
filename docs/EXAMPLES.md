@@ -52,4 +52,4 @@ adversaryflow guide --interactive
 adversaryflow manager --open
 ```
 
-The manager is loopback-only. It does not approve or execute a campaign.
+The manager is loopback-only. It can approve and run a reviewed campaign only through the fixed `local-synthetic` adapter after the named RoE approver enters the exact confirmation; `local-behavioral` and `idpt-local` execution remain CLI-only.

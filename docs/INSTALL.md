@@ -66,7 +66,7 @@ adversaryflow campaign --actor APT29 --objective "validate endpoint process visi
 adversaryflow campaign --actor APT29 --objective "validate endpoint process visibility" --approve --approver manager@example.test
 ```
 
-If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve a safe local rehearsal. Use `campaign cancel --campaign-id campaign-... --reason "operator requested stop"` for an incomplete saved campaign; completed campaigns remain immutable.
+If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve a safe local rehearsal. Use `adversaryflow campaign cancel --campaign-id campaign-... --reason "operator requested stop"` for an incomplete saved campaign; completed campaigns remain immutable.
 
 ## Release signatures
 
