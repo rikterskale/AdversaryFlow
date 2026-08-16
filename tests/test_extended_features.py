@@ -165,6 +165,23 @@ def test_gap_retest_rejects_resolved_source(monkeypatch, tmp_path):
         create_gap_retest(root, source.name, roe, abilities)
 
 
+def test_gap_retest_requires_completed_source_and_gap_report(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "campaigns"
+    roe, abilities, source = _completed_campaign(root)
+    metadata_path = source / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "awaiting-approval"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="completed source"):
+        create_gap_retest(root, source.name, roe, abilities)
+    metadata["status"] = "completed"
+    metadata["run_dir"] = str(tmp_path / "missing-run")
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="no telemetry gap report"):
+        create_gap_retest(root, source.name, roe, abilities)
+
+
 def test_detection_templates_and_cross_platform_catalogs(tmp_path):
     linux = load_catalog(curated_linux_catalog_path())
     macos = load_catalog(curated_macos_catalog_path())
