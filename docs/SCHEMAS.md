@@ -28,6 +28,7 @@ This page names the versioned formats emitted or consumed by the repository. The
 | `ADVERSARYFLOW-TELEMETRY-1` | Normalized telemetry JSONL | Offline vendor-export normalization and correlation input. |
 | `ADVERSARYFLOW-RELEASE-MANIFEST-1` | `SHA256SUMS.json` | Release artifact names, sizes, and SHA-256 hashes. |
 | `ADVERSARYFLOW-RETENTION-1` | `retention preview` output | Local retention eligibility preview; cleanup requires explicit confirmation. |
+| `ADVERSARYFLOW-SAFETY-1` | `artifacts/safety/kill-switch.json` | Local approval kill-switch state; active state blocks new campaign approvals. |
 
 ## Campaign and support artifacts
 
