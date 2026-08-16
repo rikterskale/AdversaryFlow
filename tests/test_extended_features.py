@@ -141,8 +141,12 @@ def test_gap_retest_is_immutable_and_coverage_is_traceable(monkeypatch, tmp_path
     roe, abilities, source = _completed_campaign(root)
     retest = create_gap_retest(root, source.name, roe, abilities)
     assert retest["retest_of"] == source.name
+    assert retest["source_run_id"] == "run-source"
+    assert len(retest["source_gap_report_sha256"]) == 64
+    assert Path(retest["retest_artifact"]).is_file()
     retest_record = json.loads((root / retest["campaign_id"] / "retest.json").read_text(encoding="utf-8"))
     assert retest_record["source_campaign_id"] == source.name
+    assert retest_record["source_gap_report_sha256"] == retest["source_gap_report_sha256"]
     dashboard = coverage_dashboard(root)
     assert dashboard["summary"]["campaigns"] == 2
     assert dashboard["summary"]["gaps"] >= 1

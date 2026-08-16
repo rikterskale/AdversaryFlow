@@ -47,6 +47,6 @@ Correlation is bounded to a window of 1 through 86,400 seconds; the CLI default 
 
 `adversaryflow detection export` writes defensive Sigma, Sentinel KQL, Splunk SPL, and Elastic EQL validation templates. The templates retain placeholders and are never deployed automatically; map them to organization-owned schemas and reviewed vendor rule IDs.
 
-After assessment, run `adversaryflow campaign retest --campaign-id campaign-...`. The new campaign is an immutable review draft containing only unresolved cataloged abilities and provenance linking it to the source campaign and run. It still requires the normal RoE approval.
+After assessment, run `adversaryflow campaign retest --campaign-id campaign-...`. The command returns the source run, gap-report path and SHA-256, the new immutable campaign ID, and the `retest.json` provenance artifact. The retest contains only unresolved cataloged abilities and still requires the normal RoE approval. Its generated report renders the source campaign/run relationship and gap-report hash.
 
 Use `adversaryflow coverage` or the Manager coverage dashboard to review actor → technique → behavior → telemetry → detection → retest evidence.
