@@ -40,6 +40,17 @@ def _quote_command(value: str) -> str:
     return '"' + value.replace('"', "") + '"'
 
 
+def completion_script(shell: str) -> str:
+    commands = "validate plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion"
+    if shell == "bash":
+        return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
+    if shell == "zsh":
+        return f'#compdef adversaryflow\n_arguments "1:command:({commands})"\n'
+    if shell == "fish":
+        return f'complete -c adversaryflow -f -a "{commands}"\n'
+    return f'Register-ArgumentCompleter -Native -CommandName adversaryflow -ScriptBlock {{ param($wordToComplete) "{commands}" -split " " | Where-Object {{ $_ -like "$wordToComplete*" }} }}\n'
+
+
 def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -> str:
     """Return a safe, copyable campaign walkthrough without executing a campaign."""
     if interactive:
@@ -87,7 +98,9 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning")
+    parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning", epilog="Quick start: doctor --json, guide, campaign --actor APT29 --objective \"validate endpoint process visibility\", then campaign inspect --campaign-id ID.")
+    parser.add_argument("--config", help="optional JSON file containing shared CLI defaults")
+    parser.add_argument("--quiet", action="store_true", help="suppress non-essential progress text")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("roe")
@@ -139,6 +152,8 @@ def main() -> None:
     guide.add_argument("--target", default="local-lab")
     guide.add_argument("--objective", default="validate endpoint process visibility")
     guide.add_argument("--interactive", action="store_true", help="prompt for draft-command details without executing a campaign")
+    completion = sub.add_parser("completion", help="print shell completion for the public commands")
+    completion.add_argument("shell", choices=("bash", "zsh", "fish", "powershell"))
     provider = sub.add_parser("provider", help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
@@ -263,6 +278,16 @@ def main() -> None:
     manager.add_argument("--catalog", default="content/abilities/catalog.json", help="safe ability catalog used to validate browser-created offline drafts")
     manager.add_argument("--open", action="store_true", help="open the local campaign guide in your default browser")
     args = parser.parse_args()
+    if args.config:
+        try:
+            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"could not load --config {args.config}: {exc}")
+        if not isinstance(config, dict):
+            parser.error("--config must contain a JSON object")
+        for key, value in config.items():
+            if hasattr(args, key) and key not in {"command", "config", "quiet"}:
+                setattr(args, key, value)
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
         args.catalog = str(default_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "curated-windows":
@@ -281,6 +306,10 @@ def main() -> None:
 
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
+        return
+
+    if args.command == "completion":
+        print(completion_script(args.shell), end="")
         return
 
     if args.command == "intel-sync":
@@ -338,7 +367,10 @@ def main() -> None:
         return
 
     if args.command == "manager":
-        serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
+        if args.quiet:
+            serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog, quiet=True)
+        else:
+            serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
         return
 
     if args.command == "campaign":

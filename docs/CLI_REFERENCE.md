@@ -1,6 +1,6 @@
 # CLI reference
 
-`adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise.
+`adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise. Run `adversaryflow --help` for the quick-start path. Shared defaults can be supplied with `--config defaults.json` before the command. Use `--quiet` with the loopback manager to suppress its startup banner. Shell completion is available with `adversaryflow completion bash|zsh|fish|powershell`.
 
 Parser usage errors, including missing required arguments or an unknown command, use argparse's standard non-zero usage-error exit. Read-only and preparation commands do not approve or execute a campaign unless their command description explicitly says otherwise. The browser manager has a separate HTTP action surface described in [the local-manager guide](modules/local-manager.md).
 
@@ -13,6 +13,7 @@ Parser usage errors, including missing required arguments or an unknown command,
 | `intel-sync --actor ACTOR [--platform windows] [--target local-lab] [--catalog PATH] [--output artifacts/intel/enriched] [--mitre-only]` | Fetch the actor's MITRE ATT&CK relationships and matching CTID plan metadata, fill catalog gaps with synthetic-only marker abilities and benign procedures, and write a reviewable emulation plan. Imported commands, payloads, and setup instructions are discarded. |
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
 | `guide [--actor APT29] [--target local-lab] [--objective "validate endpoint process visibility"] [--interactive]` | Print a campaign walkthrough; it does not create a campaign. |
+| `completion bash|zsh|fish|powershell` | Print installable command completion for the selected shell. |
 | `capabilities` | Print `capabilities.json`. |
 | `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|curated-linux|curated-macos|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT registry selection when applicable. |
 | `coverage [--campaign-root artifacts/campaigns]` | Return the read-only actor → technique → behavior → telemetry → detection → retest dashboard data. |

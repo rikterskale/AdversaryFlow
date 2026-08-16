@@ -22,6 +22,16 @@ def _run(monkeypatch, capsys, *arguments):
     return capsys.readouterr().out
 
 
+def test_cli_completion_and_json_defaults(monkeypatch, capsys, tmp_path):
+    completion = _run(monkeypatch, capsys, "completion", "bash")
+    assert "complete -F" in completion
+    config = tmp_path / "defaults.json"
+    config.write_text(json.dumps({"actor": "ConfiguredActor", "objective": "configured objective"}), encoding="utf-8")
+    guide = _run(monkeypatch, capsys, "--config", str(config), "guide")
+    assert "ConfiguredActor" in guide
+    assert "configured objective" in guide
+
+
 def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, capsys):
     guide = _run(monkeypatch, capsys, "guide", "--actor", "APT29", "--target", "local-lab", "--objective", "validate visibility")
     assert "simulation-only" in guide

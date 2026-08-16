@@ -1,6 +1,7 @@
 """Loopback-only, simulation-only campaign manager and JSON API."""
 
 import json
+import hashlib
 import threading
 import webbrowser
 from importlib.resources import files
@@ -270,6 +271,28 @@ def _operator_readiness(roe_path: str, catalog_path: str) -> dict[str, object]:
     return {"roe": context["roe"], "capabilities": capabilities, "adapter": adapter_readiness(load_catalog(active_catalog))}
 
 
+def _release_status(release_dir: str = "artifacts/release") -> dict[str, object]:
+    root = Path(release_dir)
+    manifest_path = root / "SHA256SUMS.json"
+    if not manifest_path.is_file():
+        return {"available": False, "directory": str(root), "next": "Build a release with python scripts/release.py artifacts/release."}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        items = manifest.get("artifacts", [])
+        names = [item.get("name") for item in items]
+        verified = bool(names) and len(names) == len(set(names))
+        for item in items:
+            path = (root / item["name"]).resolve()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            verified = verified and path.parent == root.resolve() and digest == item["sha256"] and path.stat().st_size == item["bytes"]
+        catalog = manifest.get("catalog_manifest")
+        sbom = manifest.get("sbom")
+        verified = verified and catalog in names and sbom in names
+        return {"available": True, "directory": str(root), "verified": verified, "artifact_count": len(names), "artifacts": names, "catalog_manifest": catalog, "sbom": sbom, "signature": (root / "SHA256SUMS.json.asc").is_file()}
+    except (OSError, KeyError, TypeError, ValueError):
+        return {"available": True, "directory": str(root), "verified": False, "next": "Rebuild the release and rerun verification."}
+
+
 def _reset_saved_campaign(campaign_root: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
     if _input(data, "confirmation", 300) != f"RESET {campaign_id}":
         raise PermissionError(f"Type 'RESET {campaign_id}' to permanently remove this saved campaign")
@@ -501,6 +524,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/api/actor-profiles": self._send(200, {"profiles": list_actor_profiles()})
             elif path == "/api/benign-procedures": self._send(200, benign_procedure_catalog())
             elif path == "/api/coverage": self._send(200, coverage_dashboard(campaign_root))
+            elif path == "/api/release": self._send(200, _release_status())
             elif path.startswith("/api/actor-profiles/"):
                 name = path.removeprefix("/api/actor-profiles/")
                 if path.endswith("/plan"): self._send(200, plan_actor_profile(name.removesuffix("/plan")))
@@ -603,9 +627,10 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
     return Handler
 
 
-def serve(host: str = "127.0.0.1", port: int = 8787, campaign_root: str = "artifacts/campaigns", open_browser: bool = False, roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json") -> None:
+def serve(host: str = "127.0.0.1", port: int = 8787, campaign_root: str = "artifacts/campaigns", open_browser: bool = False, roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json", quiet: bool = False) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}: raise ValueError("Manager must bind to loopback only")
     server = ThreadingHTTPServer((host, port), make_handler(campaign_root, roe_path, catalog_path))
-    url = f"http://{host}:{server.server_port}"; print(f"AdversaryFlow Campaign Guide listening on {url}")
+    url = f"http://{host}:{server.server_port}"
+    if not quiet: print(f"AdversaryFlow Campaign Guide listening on {url}")
     if open_browser: threading.Timer(0.2, webbrowser.open, args=(url,)).start()
     server.serve_forever()
