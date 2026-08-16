@@ -28,7 +28,7 @@ from .detection_mappings import write_bundle as write_detection_bundle
 from .retest import create_gap_retest
 from .product_tools import export_executive_summary, search_campaign_archive, update_campaign_archive, update_campaign_tags
 from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
-from .product_features import cleanup_retention, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
+from .product_features import adapter_compatibility, author_catalog, branch_campaign, cleanup_retention, coverage_trends, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
 
 
 def load_roe(path: str) -> RulesOfEngagement:
@@ -43,7 +43,7 @@ def _quote_command(value: str) -> str:
 
 
 def completion_script(shell: str) -> str:
-    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention"
+    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -291,6 +291,15 @@ def main() -> None:
     detection_score.add_argument("--campaign-root", default="artifacts/campaigns")
     coverage = sub.add_parser("coverage", help="show actor-to-detection campaign coverage")
     coverage.add_argument("--campaign-root", default="artifacts/campaigns")
+    coverage_sub = coverage.add_subparsers(dest="coverage_command")
+    coverage_trends_command = coverage_sub.add_parser("trends", help="show read-only historical coverage trends")
+    coverage_trends_command.add_argument("--campaign-root", default="artifacts/campaigns")
+    branch = sub.add_parser("branch", help="create a new review draft from a saved campaign")
+    branch.add_argument("--campaign-id", required=True); branch.add_argument("--name", required=True); branch.add_argument("--campaign-root", default="artifacts/campaigns")
+    catalog = sub.add_parser("catalog", help="author and validate local catalog drafts")
+    catalog.add_argument("--source", required=True); catalog.add_argument("--output", required=True); catalog.add_argument("--name", required=True); catalog.add_argument("--version", required=True)
+    adapters = sub.add_parser("adapters", help="discover read-only adapter compatibility")
+    adapters.add_argument("--catalog", default="content/abilities/catalog.json")
     archive = sub.add_parser("archive", help="search and manage local campaign archive metadata")
     archive_sub = archive.add_subparsers(dest="archive_command", required=True)
     archive_search = archive_sub.add_parser("search", help="search saved campaigns by text or tag")
@@ -373,6 +382,13 @@ def main() -> None:
             print(json.dumps(cleanup_retention(args.campaign_root, args.confirm), indent=2))
         return
 
+    if args.command == "branch":
+        print(json.dumps(branch_campaign(args.campaign_root, args.campaign_id, args.name), indent=2)); return
+    if args.command == "catalog":
+        print(json.dumps(author_catalog(args.source, args.output, args.name, args.version), indent=2)); return
+    if args.command == "adapters":
+        print(json.dumps(adapter_compatibility(args.catalog), indent=2)); return
+
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
         return
@@ -438,7 +454,8 @@ def main() -> None:
         return
 
     if args.command == "coverage":
-        print(json.dumps(coverage_dashboard(args.campaign_root), indent=2))
+        result = coverage_trends(args.campaign_root) if args.coverage_command == "trends" else coverage_dashboard(args.campaign_root)
+        print(json.dumps(result, indent=2))
         return
 
     if args.command == "manager":

@@ -24,6 +24,10 @@ Parser usage errors, including missing required arguments or an unknown command,
 | `detection export [--catalog PATH] [--output artifacts/detection-mappings]` | Export Sigma, Sentinel KQL, Splunk SPL, and Elastic EQL validation templates. No rule is deployed. |
 | `detection import --input RULES.json [--output artifacts/detection-rules]` / `detection score --rules RULES.json [--campaign-root PATH]` | Import offline detection rules and score them against local evidence without deploying or querying a vendor. |
 | `retention preview [--campaign-root PATH]` / `retention cleanup --confirm [--campaign-root PATH]` | Preview or explicitly remove retention-eligible local campaign directories. |
+| `branch --campaign-id ID --name NAME [--campaign-root PATH]` | Create a new review draft branch without copying approval decisions. |
+| `coverage trends [--campaign-root PATH]` | Show read-only historical campaign, detection, and gap trends. |
+| `catalog --source PATH --output PATH --name NAME --version SEMVER` | Create and validate a governed catalog draft. |
+| `adapters [--catalog PATH]` | Show read-only compatibility for the fixed adapters. |
 | `archive search [--query TEXT] [--tag TAG] [--campaign-root PATH]` | Search local campaign metadata by campaign ID, actor, objective, or tag. |
 | `archive tag --campaign-id ID [--tags tag1,tag2] [--campaign-root PATH]` | Replace normalized local archive tags. |
 | `archive controls --campaign-id ID --owner NAME --retention-days DAYS [--campaign-root PATH]` | Set local ownership and retention-review metadata. |

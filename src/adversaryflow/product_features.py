@@ -2,9 +2,14 @@
 
 import json
 import re
+import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+from .adapters import adapter_readiness
+from .catalog import load_catalog_document, validate_catalog_document
+from .emulation import load_catalog
 
 
 def _root(path: str | Path) -> Path:
@@ -108,3 +113,48 @@ def cleanup_retention(campaign_root: str, confirm: bool = False) -> dict[str, An
             import shutil
             shutil.rmtree(directory); removed.append(item["campaign_id"])
     return {"removed": removed, "count": len(removed), "boundary": "Only retention-eligible local campaign directories were removed."}
+
+
+def branch_campaign(campaign_root: str, source_campaign_id: str, branch_name: str) -> dict[str, Any]:
+    source = _root(campaign_root) / source_campaign_id
+    if not source.is_dir() or not source.name.startswith("campaign-"):
+        raise FileNotFoundError(f"Campaign not found: {source_campaign_id}")
+    branch_id = f"campaign-{_slug(branch_name, 'branch name')}"
+    destination = _root(campaign_root) / branch_id
+    if destination.exists():
+        raise FileExistsError(f"Campaign branch already exists: {branch_id}")
+    shutil.copytree(source, destination)
+    metadata_path = destination / "metadata.json"; metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.update({"campaign_id": branch_id, "status": "awaiting-approval", "branch_of": source_campaign_id, "branch_created_at": datetime.now(timezone.utc).isoformat()})
+    for name in ("approval.json", "rejection.json", "cancellation.json"):
+        (destination / name).unlink(missing_ok=True)
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return {"campaign_id": branch_id, "branch_of": source_campaign_id, "status": metadata["status"], "directory": str(destination), "boundary": "Branch is a new review draft; prior approval was not copied."}
+
+
+def coverage_trends(campaign_root: str) -> dict[str, Any]:
+    points: dict[str, dict[str, int]] = {}
+    for path in _root(campaign_root).glob("campaign-*/metadata.json"):
+        metadata = json.loads(path.read_text(encoding="utf-8")); day = str(metadata.get("created_at", "unknown"))[:10]
+        row = points.setdefault(day, {"campaigns": 0, "detections": 0, "gaps": 0})
+        row["campaigns"] += 1
+        run_dir = metadata.get("run_dir"); report = Path(str(run_dir)) / "telemetry-gap-report.json" if run_dir else None
+        if report and report.is_file():
+            for result in json.loads(report.read_text(encoding="utf-8")).get("results", []):
+                row["detections"] += result.get("telemetry_status") == "detected"
+                row["gaps"] += result.get("outcome") != "detection_fired"
+    return {"schema": "ADVERSARYFLOW-COVERAGE-TRENDS-1", "points": [{"date": day, **points[day]} for day in sorted(points)], "boundary": "Read-only local campaign trend summary."}
+
+
+def author_catalog(source: str, output: str, name: str, version: str) -> dict[str, Any]:
+    raw, _ = load_catalog_document(source, require_governance=False)
+    raw["governance"] = {"name": _slug(name, "catalog name"), "version": version, "status": "active"}
+    validate_catalog_document(raw, output, require_governance=True)
+    destination = _root(output); destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    return {"output": str(destination), "name": name, "version": version, "ability_count": len(raw["abilities"]), "boundary": "Catalog draft is validated locally and requires normal release review."}
+
+
+def adapter_compatibility(catalog: str, adapters: tuple[str, ...] = ("local-synthetic", "local-behavioral", "idpt-local")) -> dict[str, Any]:
+    abilities = load_catalog(catalog)
+    return {"catalog": str(catalog), "adapters": [adapter_readiness(abilities, name) for name in adapters], "boundary": "Read-only compatibility discovery; no adapter was executed."}

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from adversaryflow.product_features import cleanup_retention, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
+from adversaryflow.product_features import adapter_compatibility, author_catalog, branch_campaign, cleanup_retention, coverage_trends, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
 
 
 def test_templates_and_schedules_are_local_review_plans(tmp_path):
@@ -68,3 +68,29 @@ def test_scoring_and_retention_process_local_campaign_records(tmp_path):
     preview = retention_preview(campaigns, datetime(2021, 1, 1, tzinfo=timezone.utc))
     assert preview["count"] == 1
     assert cleanup_retention(campaigns, confirm=True)["removed"] == ["campaign-one"]
+
+
+def test_branch_trends_catalog_authoring_and_adapter_discovery(tmp_path):
+    campaigns = tmp_path / "campaigns"; source = campaigns / "campaign-source"; source.mkdir(parents=True)
+    (source / "metadata.json").write_text(json.dumps({"campaign_id": "campaign-source", "status": "completed", "created_at": "2024-01-01T00:00:00+00:00"}), encoding="utf-8")
+    (source / "approval.json").write_text("{}", encoding="utf-8")
+    branch = branch_campaign(campaigns, "campaign-source", "alternative")
+    assert branch["branch_of"] == "campaign-source"
+    assert not (campaigns / "campaign-alternative" / "approval.json").exists()
+    with pytest.raises(FileExistsError):
+        branch_campaign(campaigns, "campaign-source", "alternative")
+    with pytest.raises(FileNotFoundError):
+        branch_campaign(campaigns, "campaign-missing", "other")
+    assert coverage_trends(campaigns)["points"][0]["campaigns"] == 2
+    catalog = Path("content/abilities/catalog.json")
+    authored = author_catalog(str(catalog), str(tmp_path / "catalog.json"), "local-draft", "1.2.3")
+    assert authored["version"] == "1.2.3"
+    compatibility = adapter_compatibility(str(catalog))
+    assert len(compatibility["adapters"]) == 3
+
+
+def test_trend_and_retention_skip_unusable_records(tmp_path):
+    campaigns = tmp_path / "campaigns"; campaign = campaigns / "campaign-skip"; campaign.mkdir(parents=True)
+    (campaign / "metadata.json").write_text(json.dumps({"campaign_id": "campaign-skip", "created_at": "2024-01-02T00:00:00+00:00", "retention_days": "never"}), encoding="utf-8")
+    assert retention_preview(campaigns)["count"] == 0
+    assert coverage_trends(campaigns)["points"][0]["campaigns"] == 1
