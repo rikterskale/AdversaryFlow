@@ -37,7 +37,7 @@ Support bundles are ZIP files containing exactly `diagnostics.json` and `README.
 
 Manager-only workflows additionally write actor-profile `profiles.json`, benign-procedure `events.jsonl` and `manifest.json`, CTID-fixture `fixtures.jsonl`, `manifest.json`, `ctid-detection-gap-report.json`, and `training-timeline.md`, and executive-summary Markdown/PDF files beneath `artifacts/exports`.
 
-Additional generated files are `sensor-preflight.json` for a campaign's supplied sensor-health snapshot, `benign-procedure-gap-report.json` and `cleanup.json` for benign-procedure assessment and cleanup, and `integration.json` for the IDPT integration record. Release output additionally includes `adversaryflow-source.zip`, `catalog-manifest.json`, and `sbom.cdx.json` alongside the release manifest. When `ADVERSARYFLOW_RELEASE_GPG_KEY` is configured, the catalog manifest is covered by the signed `SHA256SUMS.json` release manifest.
+Additional generated files are `sensor-preflight.json` for a campaign's supplied sensor-health snapshot, `benign-procedure-gap-report.json` and `cleanup.json` for benign-procedure assessment and cleanup, `rules.json` for an offline imported detection-rule registry, and `integration.json` for the IDPT integration record. Release output additionally includes `adversaryflow-source.zip`, `catalog-manifest.json`, and `sbom.cdx.json` alongside the release manifest. When `ADVERSARYFLOW_RELEASE_GPG_KEY` is configured, the catalog manifest is covered by the signed `SHA256SUMS.json` release manifest.
 
 ## Fixed serialized path names
 
