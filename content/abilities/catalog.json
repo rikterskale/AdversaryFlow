@@ -1,5 +1,6 @@
 {
   "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "governance": {"name": "core", "version": "1.0.0", "status": "active"},
   "abilities": [
     {
       "id": "ability-synthetic-shell-marker",
@@ -27,4 +28,3 @@
     }
   ]
 }
-

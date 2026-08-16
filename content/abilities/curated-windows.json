@@ -1,5 +1,6 @@
 {
   "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "governance": {"name": "curated-windows", "version": "1.0.0", "status": "active"},
   "abilities": [
     {
       "id": "ability-windows-current-identity", "version": "1.0.0", "name": "Windows current identity and token discovery",

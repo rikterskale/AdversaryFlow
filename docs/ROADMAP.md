@@ -33,10 +33,10 @@ The current release provides RoE validation, deterministic offline drafting, an 
 
 ## Slice 4: catalog governance and retest workflow
 
-**Status: retest implemented; catalog signing and deprecation governance remain planned.**
+**Status: catalog versioning, lifecycle validation, and signed release inventory implemented; retest workflow implemented.**
 
 - Guided immutable retest drafts are derived from recorded detection gaps and retain source campaign/run provenance.
-- Signed/versioned catalog releases and deprecation metadata remain planned.
+- Catalogs carry active semantic versions and lifecycle metadata; release builds emit `catalog-manifest.json`, covered by the signed SHA-256 manifest when GPG signing is enabled.
 - Preserve the existing integrity check: changed RoE, catalog, or draft requires a new approval.
 - Acceptance: a retest is traceable to a gap while execution remains fixed, local, and explicitly approved.
 

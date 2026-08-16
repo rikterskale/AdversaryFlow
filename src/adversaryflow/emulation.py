@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .catalog import load_catalog_document
+
 
 SAFE_NETWORK_SCOPES = {"none", "loopback"}
 
@@ -59,6 +61,9 @@ class Ability:
     source_refs: tuple[str, ...] = ()
     execution_action: str | None = None
     execution_timeout_seconds: int = 30
+    lifecycle_status: str = "active"
+    replacement_id: str | None = None
+    deprecation_reason: str | None = None
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any]) -> "Ability":
@@ -81,6 +86,9 @@ class Ability:
             source_refs=tuple(str(item) for item in raw.get("source_refs", [])),
             execution_action=raw.get("execution", {}).get("action"),
             execution_timeout_seconds=int(raw.get("execution", {}).get("timeout_seconds", 30)),
+            lifecycle_status=str(raw.get("lifecycle", {}).get("status", "active")),
+            replacement_id=raw.get("lifecycle", {}).get("replacement_id"),
+            deprecation_reason=raw.get("lifecycle", {}).get("reason"),
         )
         validate_ability(ability)
         return ability
@@ -99,11 +107,12 @@ def validate_ability(ability: Ability) -> None:
         raise ValueError("ability execution action must reference a fixed platform action")
     if not 1 <= ability.execution_timeout_seconds <= 60:
         raise ValueError("ability execution timeout must be between 1 and 60 seconds")
+    if ability.lifecycle_status != "active":
+        raise ValueError(f"ability {ability.id} is {ability.lifecycle_status}; create a new reviewed draft")
 
 
 def load_catalog(path: str | Path) -> tuple[Ability, ...]:
-    with Path(path).open(encoding="utf-8") as handle:
-        raw = json.load(handle)
+    raw, _ = load_catalog_document(path)
     return tuple(Ability.from_mapping(item) for item in raw.get("abilities", []))
 
 

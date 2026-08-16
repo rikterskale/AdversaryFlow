@@ -40,6 +40,6 @@ python scripts/artifact_journey.py artifacts/release
 python scripts/release_readiness.py artifacts/release
 ```
 
-The release script builds a wheel, source distribution, source ZIP, SHA-256 manifest, and CycloneDX SBOM. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`.
+The release script builds a wheel, source distribution, source ZIP, governed catalog manifest, SHA-256 manifest, and CycloneDX SBOM. Catalogs must declare an active semantic version and unique ability IDs; deprecated or retired catalogs and abilities fail closed during loading. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`; that signature covers the catalog manifest as a release artifact.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution boundaries and [RELEASE_READINESS.md](RELEASE_READINESS.md) for the CI acceptance standard.
