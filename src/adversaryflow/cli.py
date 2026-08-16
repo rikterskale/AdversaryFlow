@@ -65,8 +65,50 @@ def _explain_last(run_dir: str | None, output: str | None) -> dict[str, object]:
     return result
 
 
+def interactive_workflow(roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json", campaign_root: str = "artifacts/campaigns") -> None:
+    """Run the safe MVP workflow as a guided terminal conversation."""
+    print("AdversaryFlow interactive guide — LOCAL LAB ONLY")
+    print("I will explain each step. Nothing executes without an explicit approval phrase.\n")
+    doctor = run_doctor()
+    print(f"[1/5] Local readiness: {'ready' if doctor['passed'] else 'needs attention'}")
+    if not doctor["passed"]:
+        print("I can apply only safe local folder fixes; no target or provider is contacted.")
+        if input("Apply the safe local fix now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
+            doctor = run_doctor(fix=True)
+            print("Readiness refreshed: " + ("ready" if doctor["passed"] else "still needs attention"))
+        if not doctor["passed"]:
+            print("Pause here, fix the listed readiness issues, then restart with: adversaryflow")
+            return
+    def ask(label: str, default: str) -> str:
+        value = input(f"{label} [{default}]: ").strip()
+        return value or default
+    actor = ask("[2/5] Who are you modeling for defensive validation?", "APT29")
+    objective = ask("What defensive outcome do you want to validate?", "validate endpoint process visibility")
+    target = ask("RoE-approved target", "local-lab")
+    platform = ask("Lab platform", "linux")
+    print("\n[3/5] Building a fixed offline draft. This saves a reviewable plan only.")
+    roe = load_roe(roe_path); abilities = load_catalog(catalog_path)
+    draft = OfflinePlanner().draft(CampaignRequest(actor, target, objective, platform), abilities)
+    validate_ai_draft(draft, roe, abilities)
+    integrity = campaign_integrity_hashes(draft, roe, abilities)
+    campaign_dir = save_campaign_draft(draft, integrity["plan_hash"], "offline", campaign_root, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"], provider_metadata={"provider": "offline", "status": "interactive"})
+    print(f"[4/5] Draft saved as {campaign_dir.name}. Review its scope, abilities, telemetry, and stop conditions.")
+    if input("Open the read-only JSON review now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
+        print(json.dumps(inspect_campaign(campaign_root, campaign_dir.name), indent=2))
+    if input("Proceed to the approval checkpoint? [y/N] ").strip().lower() not in {"y", "yes"}:
+        print(f"[5/5] Done. Review later with: adversaryflow campaign inspect --campaign-id {campaign_dir.name}")
+        return
+    approver = ask("Named RoE approver", roe.approver_name)
+    print("Approval starts only the fixed local synthetic adapter; it does not contact an external target.")
+    if input(f"Type APPROVE {campaign_dir.name} to continue: ").strip() != f"APPROVE {campaign_dir.name}":
+        print("[5/5] Approval cancelled. The draft remains reviewable and no run started.")
+        return
+    result = complete_saved_campaign(campaign_root, campaign_dir.name, roe, abilities, approver, "artifacts/runs")
+    print(f"[5/5] Local synthetic run complete: {result.get('run_dir', 'see campaign record')}")
+
+
 def completion_script(shell: str) -> str:
-    commands = "validate version why explain-last plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
+    commands = "interactive validate version why explain-last plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -143,7 +185,9 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--config", help="optional JSON file containing shared CLI defaults")
     parser.add_argument("--quiet", action="store_true", help="suppress non-essential progress text")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--interactive", action="store_true", help="launch the guided terminal workflow")
+    sub = parser.add_subparsers(dest="command", required=False)
+    sub.add_parser("interactive", help="run the guided local-lab workflow")
     sub.add_parser("version", help="print the installed AdversaryFlow version")
     why = sub.add_parser("why", help="explain a reviewed technique in plain language")
     why.add_argument("technique")
@@ -356,6 +400,9 @@ def main() -> None:
     manager.add_argument("--catalog", default="content/abilities/catalog.json", help="safe ability catalog used to validate browser-created offline drafts")
     manager.add_argument("--open", action="store_true", help="open the local campaign guide in your default browser")
     args = parser.parse_args()
+    if args.command in {None, "interactive"} or (args.interactive and args.command != "guide"):
+        interactive_workflow()
+        return
     if args.config:
         try:
             config = load_cli_config(args.config)

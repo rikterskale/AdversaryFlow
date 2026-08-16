@@ -79,6 +79,29 @@ def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, caps
     assert validation == {"valid": True, "engagement": "Local Purple-Team Telemetry Validation", "dry_run": True}
 
 
+def test_cli_learning_and_last_run_explanation(monkeypatch, capsys, tmp_path):
+    why = json.loads(_run(monkeypatch, capsys, "why", "T1059"))
+    assert why["technique"] == "T1059"
+    assert "local synthetic" in why["boundary"]
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "telemetry-gap-report.json").write_text(json.dumps({"gaps": [{"technique_id": "T1059"}]}), encoding="utf-8")
+    explained = json.loads(_run(monkeypatch, capsys, "explain-last", "--run-dir", str(tmp_path), "--output", str(tmp_path / "last.md")))
+    assert explained["gap_count"] == 1
+    assert (tmp_path / "last.md").is_file()
+
+
+def test_cli_interactive_workflow_stops_at_review_checkpoint(monkeypatch, capsys, tmp_path):
+    answers = iter(["", "", "", "", "y", "n"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: {"passed": True})
+    cli.interactive_workflow(campaign_root=str(tmp_path / "campaigns"))
+    output = capsys.readouterr().out
+    assert "LOCAL LAB ONLY" in output
+    assert "Draft saved as" in output
+    assert "Review later" in output
+
+
 def test_cli_manager_passes_only_explicit_local_configuration(monkeypatch, capsys):
     received = {}
     monkeypatch.setattr(cli, "serve_manager", lambda *args: received.update(args=args))
