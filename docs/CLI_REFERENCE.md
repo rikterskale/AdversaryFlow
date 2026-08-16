@@ -11,6 +11,8 @@ Parser usage errors, including missing required arguments or an unknown command,
 | `validate ROE` | Validate and print RoE engagement metadata. |
 | `version` | Print the installed package name and semantic version as JSON. |
 | `config validate FILE` | Validate supported shared JSON defaults without applying them. |
+| `template save NAME --actor ACTOR --objective TEXT [--target local-lab] [--platform linux] [--root artifacts/templates]` / `template list --root artifacts/templates` | Create or list reusable local campaign templates; templates never approve or execute campaigns. |
+| `schedule create NAME --template TEMPLATE --cadence-days DAYS [--root artifacts/schedules]` | Create a planned local retest schedule; it never starts a campaign automatically. |
 | `plan --roe ROE --actor ACTOR --technique ID [--target local-lab] [--audit artifacts/audit.jsonl]` | Fetch the MITRE ATT&CK Enterprise STIX bundle and produce a dry-run technique plan. This command requires network access; it never executes a campaign. |
 | `intel-sync --actor ACTOR [--platform windows] [--target local-lab] [--catalog PATH] [--output artifacts/intel/enriched] [--mitre-only]` | Fetch the actor's MITRE ATT&CK relationships and matching CTID plan metadata, fill catalog gaps with synthetic-only marker abilities and benign procedures, and write a reviewable emulation plan. Imported commands, payloads, and setup instructions are discarded. |
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
@@ -20,6 +22,8 @@ Parser usage errors, including missing required arguments or an unknown command,
 | `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|curated-linux|curated-macos|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT registry selection when applicable. |
 | `coverage [--campaign-root artifacts/campaigns]` | Return the read-only actor → technique → behavior → telemetry → detection → retest dashboard data. |
 | `detection export [--catalog PATH] [--output artifacts/detection-mappings]` | Export Sigma, Sentinel KQL, Splunk SPL, and Elastic EQL validation templates. No rule is deployed. |
+| `detection import --input RULES.json [--output artifacts/detection-rules]` / `detection score --rules RULES.json [--campaign-root PATH]` | Import offline detection rules and score them against local evidence without deploying or querying a vendor. |
+| `retention preview [--campaign-root PATH]` / `retention cleanup --confirm [--campaign-root PATH]` | Preview or explicitly remove retention-eligible local campaign directories. |
 | `archive search [--query TEXT] [--tag TAG] [--campaign-root PATH]` | Search local campaign metadata by campaign ID, actor, objective, or tag. |
 | `archive tag --campaign-id ID [--tags tag1,tag2] [--campaign-root PATH]` | Replace normalized local archive tags. |
 | `archive controls --campaign-id ID --owner NAME --retention-days DAYS [--campaign-root PATH]` | Set local ownership and retention-review metadata. |

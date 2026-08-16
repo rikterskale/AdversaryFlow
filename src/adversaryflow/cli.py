@@ -28,6 +28,7 @@ from .detection_mappings import write_bundle as write_detection_bundle
 from .retest import create_gap_retest
 from .product_tools import export_executive_summary, search_campaign_archive, update_campaign_archive, update_campaign_tags
 from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
+from .product_features import cleanup_retention, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
 
 
 def load_roe(path: str) -> RulesOfEngagement:
@@ -42,7 +43,7 @@ def _quote_command(value: str) -> str:
 
 
 def completion_script(shell: str) -> str:
-    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config"
+    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -177,6 +178,16 @@ def main() -> None:
     config_sub = config_command.add_subparsers(dest="config_command", required=True)
     config_validate = config_sub.add_parser("validate", help="check supported keys without applying defaults")
     config_validate.add_argument("file")
+    template = sub.add_parser("template", help="manage reusable local campaign templates")
+    template_sub = template.add_subparsers(dest="template_command", required=True)
+    template_save = template_sub.add_parser("save"); template_save.add_argument("name"); template_save.add_argument("--actor", required=True); template_save.add_argument("--objective", required=True); template_save.add_argument("--target", default="local-lab"); template_save.add_argument("--platform", default="linux"); template_save.add_argument("--root", default="artifacts/templates")
+    template_sub.add_parser("list").add_argument("--root", default="artifacts/templates")
+    schedule = sub.add_parser("schedule", help="create local review and retest schedules")
+    schedule_create = schedule.add_subparsers(dest="schedule_command", required=True).add_parser("create"); schedule_create.add_argument("name"); schedule_create.add_argument("--template", required=True); schedule_create.add_argument("--cadence-days", required=True, type=int); schedule_create.add_argument("--root", default="artifacts/schedules")
+    retention = sub.add_parser("retention", help="preview or explicitly clean expired local campaign artifacts")
+    retention_sub = retention.add_subparsers(dest="retention_command", required=True)
+    retention_preview_command = retention_sub.add_parser("preview"); retention_preview_command.add_argument("--campaign-root", default="artifacts/campaigns")
+    retention_cleanup_command = retention_sub.add_parser("cleanup"); retention_cleanup_command.add_argument("--campaign-root", default="artifacts/campaigns"); retention_cleanup_command.add_argument("--confirm", action="store_true")
     provider = sub.add_parser("provider", help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
@@ -272,6 +283,12 @@ def main() -> None:
     detection_export = detection_sub.add_parser("export")
     detection_export.add_argument("--catalog", default="content/abilities/catalog.json")
     detection_export.add_argument("--output", default="artifacts/detection-mappings")
+    detection_import = detection_sub.add_parser("import", help="import offline detection rules for local scoring")
+    detection_import.add_argument("--input", required=True)
+    detection_import.add_argument("--output", default="artifacts/detection-rules")
+    detection_score = detection_sub.add_parser("score", help="score imported rules against local campaign evidence")
+    detection_score.add_argument("--rules", required=True)
+    detection_score.add_argument("--campaign-root", default="artifacts/campaigns")
     coverage = sub.add_parser("coverage", help="show actor-to-detection campaign coverage")
     coverage.add_argument("--campaign-root", default="artifacts/campaigns")
     archive = sub.add_parser("archive", help="search and manage local campaign archive metadata")
@@ -338,6 +355,24 @@ def main() -> None:
             raise SystemExit(1)
         return
 
+    if args.command == "template":
+        if args.template_command == "save":
+            print(json.dumps(save_campaign_template(args.name, args.actor, args.objective, args.target, args.platform, args.root), indent=2))
+        else:
+            print(json.dumps(list_campaign_templates(args.root), indent=2))
+        return
+
+    if args.command == "schedule":
+        print(json.dumps(schedule_retest(args.name, args.template, args.cadence_days, args.root), indent=2))
+        return
+
+    if args.command == "retention":
+        if args.retention_command == "preview":
+            print(json.dumps(retention_preview(args.campaign_root), indent=2))
+        else:
+            print(json.dumps(cleanup_retention(args.campaign_root, args.confirm), indent=2))
+        return
+
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
         return
@@ -393,7 +428,13 @@ def main() -> None:
         return
 
     if args.command == "detection":
-        print(json.dumps(write_detection_bundle(load_catalog(args.catalog), args.output), indent=2))
+        if args.detection_command == "export":
+            result = write_detection_bundle(load_catalog(args.catalog), args.output)
+        elif args.detection_command == "import":
+            result = import_detection_rules(args.input, args.output)
+        else:
+            result = score_detection_rules(args.campaign_root, args.rules)
+        print(json.dumps(result, indent=2))
         return
 
     if args.command == "coverage":

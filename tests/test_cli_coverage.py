@@ -51,6 +51,26 @@ def test_cli_config_validation_rejects_unknown_keys(monkeypatch, capsys, tmp_pat
     assert json.loads(capsys.readouterr().out)["valid"] is False
 
 
+def test_cli_product_commands_are_local_and_machine_readable(monkeypatch, capsys, tmp_path):
+    template_root = tmp_path / "templates"
+    saved = json.loads(_run(monkeypatch, capsys, "template", "save", "endpoint-check", "--actor", "APT29", "--objective", "validate", "--root", str(template_root)))
+    assert saved["name"] == "endpoint-check"
+    listed = json.loads(_run(monkeypatch, capsys, "template", "list", "--root", str(template_root)))
+    assert listed[0]["name"] == "endpoint-check"
+    schedule = json.loads(_run(monkeypatch, capsys, "schedule", "create", "weekly", "--template", "endpoint-check", "--cadence-days", "7", "--root", str(tmp_path / "schedules")))
+    assert schedule["status"] == "planned"
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"rules": [{"id": "rule-1", "technique": "T1059"}]}), encoding="utf-8")
+    imported = json.loads(_run(monkeypatch, capsys, "detection", "import", "--input", str(rules), "--output", str(tmp_path / "rules-out")))
+    assert imported["rule_count"] == 1
+    preview = json.loads(_run(monkeypatch, capsys, "retention", "preview", "--campaign-root", str(tmp_path / "campaigns")))
+    assert preview["count"] == 0
+    cleaned = json.loads(_run(monkeypatch, capsys, "retention", "cleanup", "--campaign-root", str(tmp_path / "campaigns"), "--confirm"))
+    assert cleaned["count"] == 0
+    scored = json.loads(_run(monkeypatch, capsys, "detection", "score", "--rules", str(tmp_path / "rules-out" / "rules.json"), "--campaign-root", str(tmp_path / "campaigns")))
+    assert scored["summary"]["rules"] == 1
+
+
 def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, capsys):
     guide = _run(monkeypatch, capsys, "guide", "--actor", "APT29", "--target", "local-lab", "--objective", "validate visibility")
     assert "simulation-only" in guide
