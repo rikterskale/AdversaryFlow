@@ -40,6 +40,7 @@ The manager exposes a local JSON API on the same loopback-only server as the wor
 | `/api/actor-profiles` | List actor validation profiles. |
 | `/api/benign-procedures` | List fixed benign procedures. |
 | `/api/coverage` | Return the actor-to-detection coverage dashboard. |
+| `/api/release` | Return read-only release artifact, catalog-manifest, SBOM, and signature readiness. |
 | `/api/archive` | Search campaigns by query or tag. |
 | `/api/roe` | Read the validated RoE and recent history. |
 | `/api/campaigns` | List saved campaigns and portfolio status. |
