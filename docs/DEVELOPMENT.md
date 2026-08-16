@@ -40,6 +40,6 @@ python scripts/artifact_journey.py artifacts/release
 python scripts/release_readiness.py artifacts/release
 ```
 
-The release script builds a wheel, source distribution, source ZIP, governed catalog manifest, SHA-256 manifest, and CycloneDX SBOM. Catalogs must declare an active semantic version and unique ability IDs; deprecated or retired catalogs and abilities fail closed during loading. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`; that signature covers the catalog manifest as a release artifact.
+The release script builds a wheel, source distribution, source ZIP, governed catalog manifest, SHA-256 manifest, and CycloneDX SBOM. The release manifest inventories every generated artifact, including the SBOM and catalog manifest; verification rejects missing inventory entries, duplicate artifact names, tampered bytes, or invalid release metadata. Catalogs must declare an active semantic version and unique ability IDs; deprecated or retired catalogs and abilities fail closed during loading. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`; that signature covers the catalog manifest and SBOM as release artifacts.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution boundaries and [RELEASE_READINESS.md](RELEASE_READINESS.md) for the CI acceptance standard.
