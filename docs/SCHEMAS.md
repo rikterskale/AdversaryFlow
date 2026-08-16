@@ -13,8 +13,11 @@ This page names the versioned formats emitted or consumed by the repository. The
 | `ADVERSARYFLOW-BENIGN-PROCEDURES-1` | Benign-procedure catalog | Fixed local procedures and cleanup contracts. |
 | `ADVERSARYFLOW-CAPABILITIES-1` | `capabilities` command output | Advertised capability metadata. |
 | `ADVERSARYFLOW-COVERAGE-DASHBOARD-1` | `coverage` command and manager dashboard | Read-only actor, technique, detection, gap, and retest summary. |
+| `ADVERSARYFLOW-COVERAGE-TRENDS-1` | `coverage trends` command | Read-only historical campaign, detection, and gap trend points. |
 | `ADVERSARYFLOW-CTID-FIXTURES-1` | Packaged CTID fixture catalog | Synthetic fixture vocabulary; not production telemetry. |
 | `ADVERSARYFLOW-DETECTION-MAPPINGS-1` | Detection export bundle | Defensive validation-template metadata. |
+| `ADVERSARYFLOW-DETECTION-RULES-1` | `detection import` output | Offline imported rule inventory; no vendor deployment. |
+| `ADVERSARYFLOW-DETECTION-SCORE-1` | `detection score` output | Read-only local evidence match scoring for imported rules. |
 | `ADVERSARYFLOW-DETECTION-RULE-REGISTRY-1` | Packaged detection mapping registry | Code-owned rule-template mappings. |
 | `ADVERSARYFLOW-EMULATION-1` | Emulation catalog output | Fixed local simulation ability set. |
 | `ADVERSARYFLOW-IDPT-1` | IDPT integration provenance | Verified boundary between AdversaryFlow and the reviewed local IDPT checkout. |
@@ -24,6 +27,7 @@ This page names the versioned formats emitted or consumed by the repository. The
 | `ADVERSARYFLOW-SENSOR-PREFLIGHT-1` | Post-run telemetry preflight | Read-only validation of normalized telemetry coverage. |
 | `ADVERSARYFLOW-TELEMETRY-1` | Normalized telemetry JSONL | Offline vendor-export normalization and correlation input. |
 | `ADVERSARYFLOW-RELEASE-MANIFEST-1` | `SHA256SUMS.json` | Release artifact names, sizes, and SHA-256 hashes. |
+| `ADVERSARYFLOW-RETENTION-1` | `retention preview` output | Local retention eligibility preview; cleanup requires explicit confirmation. |
 
 ## Campaign and support artifacts
 
