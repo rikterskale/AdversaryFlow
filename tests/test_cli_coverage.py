@@ -37,6 +37,20 @@ def test_cli_version_is_machine_readable(monkeypatch, capsys):
     assert version == {"name": "adversaryflow", "version": cli.__version__}
 
 
+def test_cli_config_validation_rejects_unknown_keys(monkeypatch, capsys, tmp_path):
+    valid = tmp_path / "valid.json"
+    valid.write_text(json.dumps({"actor": "APT29", "objective": "validate"}), encoding="utf-8")
+    result = json.loads(_run(monkeypatch, capsys, "config", "validate", str(valid)))
+    assert result["valid"] is True
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text(json.dumps({"secret": "must not be accepted"}), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "config", "validate", str(invalid)])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 1
+    assert json.loads(capsys.readouterr().out)["valid"] is False
+
+
 def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, capsys):
     guide = _run(monkeypatch, capsys, "guide", "--actor", "APT29", "--target", "local-lab", "--objective", "validate visibility")
     assert "simulation-only" in guide

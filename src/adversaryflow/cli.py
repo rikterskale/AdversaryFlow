@@ -42,7 +42,7 @@ def _quote_command(value: str) -> str:
 
 
 def completion_script(shell: str) -> str:
-    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion"
+    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -50,6 +50,22 @@ def completion_script(shell: str) -> str:
     if shell == "fish":
         return f'complete -c adversaryflow -f -a "{commands}"\n'
     return f'Register-ArgumentCompleter -Native -CommandName adversaryflow -ScriptBlock {{ param($wordToComplete) "{commands}" -split " " | Where-Object {{ $_ -like "$wordToComplete*" }} }}\n'
+
+
+CONFIG_KEYS = {"actor", "target", "objective", "platform", "catalog", "roe", "campaign_root", "output", "adapter", "fallback_offline"}
+
+
+def load_cli_config(path: str | Path) -> dict[str, object]:
+    try:
+        config = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not load config {path}: {exc}") from exc
+    if not isinstance(config, dict):
+        raise ValueError("config must contain a JSON object")
+    unknown = sorted(set(config) - CONFIG_KEYS)
+    if unknown:
+        raise ValueError(f"config contains unsupported keys: {', '.join(unknown)}")
+    return config
 
 
 def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -> str:
@@ -157,6 +173,10 @@ def main() -> None:
     guide.add_argument("--interactive", action="store_true", help="prompt for draft-command details without executing a campaign")
     completion = sub.add_parser("completion", help="print shell completion for the public commands")
     completion.add_argument("shell", choices=("bash", "zsh", "fish", "powershell"))
+    config_command = sub.add_parser("config", help="validate shared JSON CLI defaults")
+    config_sub = config_command.add_subparsers(dest="config_command", required=True)
+    config_validate = config_sub.add_parser("validate", help="check supported keys without applying defaults")
+    config_validate.add_argument("file")
     provider = sub.add_parser("provider", help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
@@ -283,11 +303,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.config:
         try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            parser.error(f"could not load --config {args.config}: {exc}")
-        if not isinstance(config, dict):
-            parser.error("--config must contain a JSON object")
+            config = load_cli_config(args.config)
+        except ValueError as exc:
+            parser.error(str(exc))
         for key, value in config.items():
             if hasattr(args, key) and key not in {"command", "config", "quiet"}:
                 setattr(args, key, value)
@@ -309,6 +327,15 @@ def main() -> None:
 
     if args.command == "version":
         print(json.dumps({"name": "adversaryflow", "version": __version__}, indent=2))
+        return
+
+    if args.command == "config":
+        try:
+            config = load_cli_config(args.file)
+            print(json.dumps({"valid": True, "file": str(Path(args.file)), "keys": sorted(config)}, indent=2))
+        except ValueError as exc:
+            print(json.dumps({"valid": False, "file": str(Path(args.file)), "error": str(exc)}, indent=2))
+            raise SystemExit(1)
         return
 
     if args.command == "guide":

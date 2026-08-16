@@ -1,6 +1,6 @@
 # CLI reference
 
-`adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise. Run `adversaryflow --help` for the quick-start path. Use `adversaryflow --version` or `adversaryflow version` to identify the installed build. Shared defaults can be supplied with `--config defaults.json` before the command. Use `--quiet` with the loopback manager to suppress its startup banner. Shell completion is available with `adversaryflow completion bash|zsh|fish|powershell`.
+`adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise. Run `adversaryflow --help` for the quick-start path. Use `adversaryflow --version` or `adversaryflow version` to identify the installed build. Shared defaults can be supplied with `--config defaults.json` before the command; validate them first with `adversaryflow config validate defaults.json`. Use `--quiet` with the loopback manager to suppress its startup banner. Shell completion is available with `adversaryflow completion bash|zsh|fish|powershell`.
 
 Parser usage errors, including missing required arguments or an unknown command, use argparse's standard non-zero usage-error exit. Read-only and preparation commands do not approve or execute a campaign unless their command description explicitly says otherwise. The browser manager has a separate HTTP action surface described in [the local-manager guide](modules/local-manager.md).
 
@@ -10,6 +10,7 @@ Parser usage errors, including missing required arguments or an unknown command,
 |---|---|
 | `validate ROE` | Validate and print RoE engagement metadata. |
 | `version` | Print the installed package name and semantic version as JSON. |
+| `config validate FILE` | Validate supported shared JSON defaults without applying them. |
 | `plan --roe ROE --actor ACTOR --technique ID [--target local-lab] [--audit artifacts/audit.jsonl]` | Fetch the MITRE ATT&CK Enterprise STIX bundle and produce a dry-run technique plan. This command requires network access; it never executes a campaign. |
 | `intel-sync --actor ACTOR [--platform windows] [--target local-lab] [--catalog PATH] [--output artifacts/intel/enriched] [--mitre-only]` | Fetch the actor's MITRE ATT&CK relationships and matching CTID plan metadata, fill catalog gaps with synthetic-only marker abilities and benign procedures, and write a reviewable emulation plan. Imported commands, payloads, and setup instructions are discarded. |
 | `draft --roe ROE --actor ACTOR --objective OBJECTIVE [--target local-lab] [--platform linux] [--catalog content/abilities/catalog.json]` | Produce an offline draft. |
