@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from .audit import AuditLog
+from . import __version__
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import curated_linux_catalog_path, curated_macos_catalog_path, curated_windows_catalog_path, default_catalog_path, idpt_windows_collection_catalog_path, load_catalog
 from .adapters import adapter_readiness
@@ -41,7 +42,7 @@ def _quote_command(value: str) -> str:
 
 
 def completion_script(shell: str) -> str:
-    commands = "validate plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion"
+    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -99,9 +100,11 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning", epilog="Quick start: doctor --json, guide, campaign --actor APT29 --objective \"validate endpoint process visibility\", then campaign inspect --campaign-id ID.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--config", help="optional JSON file containing shared CLI defaults")
     parser.add_argument("--quiet", action="store_true", help="suppress non-essential progress text")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("version", help="print the installed AdversaryFlow version")
     validate = sub.add_parser("validate")
     validate.add_argument("roe")
     plan = sub.add_parser("plan")
@@ -302,6 +305,10 @@ def main() -> None:
     if args.command == "validate":
         roe = load_roe(args.roe)
         print(json.dumps({"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}, indent=2))
+        return
+
+    if args.command == "version":
+        print(json.dumps({"name": "adversaryflow", "version": __version__}, indent=2))
         return
 
     if args.command == "guide":

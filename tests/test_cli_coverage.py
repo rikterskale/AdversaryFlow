@@ -32,6 +32,11 @@ def test_cli_completion_and_json_defaults(monkeypatch, capsys, tmp_path):
     assert "configured objective" in guide
 
 
+def test_cli_version_is_machine_readable(monkeypatch, capsys):
+    version = json.loads(_run(monkeypatch, capsys, "version"))
+    assert version == {"name": "adversaryflow", "version": cli.__version__}
+
+
 def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, capsys):
     guide = _run(monkeypatch, capsys, "guide", "--actor", "APT29", "--target", "local-lab", "--objective", "validate visibility")
     assert "simulation-only" in guide
