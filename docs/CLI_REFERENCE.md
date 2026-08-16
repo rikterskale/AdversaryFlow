@@ -17,6 +17,10 @@ Parser usage errors, including missing required arguments or an unknown command,
 | `adapter status [--name local-synthetic|local-behavioral|idpt-local] [--catalog PATH|curated-windows|curated-linux|curated-macos|idpt-windows-collection]` | Read-only report of a fixed adapter, its contract version, allowed scopes, catalog compatibility, and IDPT registry selection when applicable. |
 | `coverage [--campaign-root artifacts/campaigns]` | Return the read-only actor → technique → behavior → telemetry → detection → retest dashboard data. |
 | `detection export [--catalog PATH] [--output artifacts/detection-mappings]` | Export Sigma, Sentinel KQL, Splunk SPL, and Elastic EQL validation templates. No rule is deployed. |
+| `archive search [--query TEXT] [--tag TAG] [--campaign-root PATH]` | Search local campaign metadata by campaign ID, actor, objective, or tag. |
+| `archive tag --campaign-id ID [--tags tag1,tag2] [--campaign-root PATH]` | Replace normalized local archive tags. |
+| `archive controls --campaign-id ID --owner NAME --retention-days DAYS [--campaign-root PATH]` | Set local ownership and retention-review metadata. |
+| `archive export --campaign-id ID [--output artifacts/exports] [--campaign-root PATH]` | Write a Markdown and PDF executive summary; it does not execute or approve a campaign. |
 
 ## Telemetry commands
 

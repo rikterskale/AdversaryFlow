@@ -25,6 +25,7 @@ from .planner import build_plan
 from .coverage import coverage_dashboard
 from .detection_mappings import write_bundle as write_detection_bundle
 from .retest import create_gap_retest
+from .product_tools import export_executive_summary, search_campaign_archive, update_campaign_archive, update_campaign_tags
 from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
 
 
@@ -235,6 +236,25 @@ def main() -> None:
     detection_export.add_argument("--output", default="artifacts/detection-mappings")
     coverage = sub.add_parser("coverage", help="show actor-to-detection campaign coverage")
     coverage.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive = sub.add_parser("archive", help="search and manage local campaign archive metadata")
+    archive_sub = archive.add_subparsers(dest="archive_command", required=True)
+    archive_search = archive_sub.add_parser("search", help="search saved campaigns by text or tag")
+    archive_search.add_argument("--query", default="")
+    archive_search.add_argument("--tag", default="")
+    archive_search.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_tag = archive_sub.add_parser("tag", help="replace a campaign's normalized archive tags")
+    archive_tag.add_argument("--campaign-id", required=True)
+    archive_tag.add_argument("--tags", default="", help="comma-separated tags")
+    archive_tag.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_controls = archive_sub.add_parser("controls", help="set campaign owner and retention metadata")
+    archive_controls.add_argument("--campaign-id", required=True)
+    archive_controls.add_argument("--owner", required=True)
+    archive_controls.add_argument("--retention-days", required=True, type=int)
+    archive_controls.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_export = archive_sub.add_parser("export", help="write a local Markdown and PDF executive summary")
+    archive_export.add_argument("--campaign-id", required=True)
+    archive_export.add_argument("--output", default="artifacts/exports")
+    archive_export.add_argument("--campaign-root", default="artifacts/campaigns")
     manager = sub.add_parser("manager", help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
@@ -542,6 +562,22 @@ def main() -> None:
         else:
             print(json.dumps({"valid": not errors, "configuration": config.as_dict(), "errors": errors}, indent=2))
             raise SystemExit(0 if not errors else 1)
+        return
+
+    if args.command == "archive":
+        try:
+            if args.archive_command == "search":
+                print(json.dumps({"campaigns": search_campaign_archive(args.campaign_root, args.query, args.tag)}, indent=2))
+            elif args.archive_command == "tag":
+                tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
+                print(json.dumps(update_campaign_tags(args.campaign_root, args.campaign_id, tags), indent=2))
+            elif args.archive_command == "controls":
+                print(json.dumps(update_campaign_archive(args.campaign_root, args.campaign_id, args.owner, args.retention_days), indent=2))
+            else:
+                print(json.dumps(export_executive_summary(args.campaign_root, args.campaign_id, args.output), indent=2))
+        except (OSError, KeyError, ValueError) as exc:
+            print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+            raise SystemExit(1)
         return
 
     roe = load_roe(args.roe)
