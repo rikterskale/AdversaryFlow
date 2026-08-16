@@ -41,6 +41,8 @@ The manager exposes a local JSON API on the same loopback-only server as the wor
 | `/api/benign-procedures` | List fixed benign procedures. |
 | `/api/coverage` | Return the actor-to-detection coverage dashboard. |
 | `/api/release` | Return read-only release artifact, catalog-manifest, SBOM, and signature readiness. |
+| `/api/safety` | Return the local-only safety state, including kill-switch status and dry-run boundary. |
+| `/api/safety/kill` and `/api/safety/clear` | Explicitly set or clear the local approval kill switch; this blocks new campaign approvals while active. |
 | `/api/archive` | Search campaigns by query or tag. |
 | `/api/roe` | Read the validated RoE and recent history. |
 | `/api/campaigns` | List saved campaigns and portfolio status. |

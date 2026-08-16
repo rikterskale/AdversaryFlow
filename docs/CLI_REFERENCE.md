@@ -10,6 +10,8 @@ Parser usage errors, including missing required arguments or an unknown command,
 |---|---|
 | `validate ROE` | Validate and print RoE engagement metadata. |
 | `version` | Print the installed package name and semantic version as JSON. |
+| `why TECHNIQUE [--catalog PATH]` | Explain a reviewed technique in plain language, including fixed lab behavior, expected detections, and safety boundary. |
+| `explain-last [--run-dir PATH] [--output PATH]` | Summarize the newest local telemetry-gap report and optionally export a beginner-friendly Markdown follow-up. |
 | `config validate FILE` | Validate supported shared JSON defaults without applying them. |
 | `template save NAME --actor ACTOR --objective TEXT [--target local-lab] [--platform linux] [--root artifacts/templates]` / `template list --root artifacts/templates` | Create or list reusable local campaign templates; templates never approve or execute campaigns. |
 | `schedule create NAME --template TEMPLATE --cadence-days DAYS [--root artifacts/schedules]` | Create a planned local retest schedule; it never starts a campaign automatically. |

@@ -121,6 +121,29 @@ def _input(data: dict[str, object], name: str, limit: int = 200) -> str:
     return cleaned
 
 
+def _safety_path() -> Path:
+    return Path("artifacts/safety/kill-switch.json")
+
+
+def _safety_state() -> dict[str, object]:
+    path = _safety_path()
+    if not path.is_file():
+        return {"kill_switch": False, "mode": "safe-default", "local_lab_only": True}
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"kill_switch": True, "mode": "fail-closed", "local_lab_only": True}
+    return {"kill_switch": bool(state.get("kill_switch", True)), "mode": "killed" if state.get("kill_switch", True) else "safe-default", "local_lab_only": True, "updated_at": state.get("updated_at")}
+
+
+def _set_kill_switch(enabled: bool) -> dict[str, object]:
+    path = _safety_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    path.write_text(json.dumps({"schema": "ADVERSARYFLOW-SAFETY-1", "kill_switch": enabled, "updated_at": now}, indent=2) + "\n", encoding="utf-8")
+    return _safety_state()
+
+
 def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: dict[str, object]) -> dict[str, object]:
     """Create only a local, offline, RoE-validated draft; never an emulation."""
     roe = _manager_roe(roe_path)
@@ -320,6 +343,8 @@ def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campa
     """Approve and run one reviewed campaign through the fixed local-synthetic adapter."""
     approver = _input(data, "approver")
     confirmation = _input(data, "confirmation")
+    if _safety_state()["kill_switch"]:
+        raise PermissionError("Local kill switch is active; clear it before approving any campaign")
     if confirmation != f"APPROVE {campaign_id}":
         raise PermissionError(f"Type 'APPROVE {campaign_id}' to confirm approval and local synthetic emulation")
     roe = _manager_roe(roe_path)
@@ -514,6 +539,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/assets/manager.css": self._send(200, files("adversaryflow.resources").joinpath("manager.css").read_text(encoding="utf-8"), "text/css; charset=utf-8")
             elif path == "/assets/manager.js": self._send(200, files("adversaryflow.resources").joinpath("manager.js").read_text(encoding="utf-8"), "application/javascript; charset=utf-8")
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
+            elif path == "/api/safety": self._send(200, _safety_state())
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
             elif path == "/api/provider": self._send(200, _provider_status())
             elif path == "/api/provider/compatibility": self._send(200, _provider_compatibility())
@@ -553,6 +579,8 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             path = urlparse(self.path).path
             try:
                 if path == "/api/doctor": self._send(200, run_doctor())
+                elif path == "/api/safety/kill": self._send(200, _set_kill_switch(True))
+                elif path == "/api/safety/clear": self._send(200, _set_kill_switch(False))
                 elif path == "/api/doctor/fix": self._send(200, run_doctor(fix=True))
                 elif path == "/api/support-bundle": self._send(201, {"success": True, "bundle": str(create_support_bundle("artifacts/support", roe_path))})
                 elif path == "/api/demo": self._send(200, _run_demo(roe_path, catalog_path, self._body()))

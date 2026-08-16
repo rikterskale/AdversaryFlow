@@ -42,8 +42,31 @@ def _quote_command(value: str) -> str:
     return '"' + value.replace('"', "") + '"'
 
 
+def _why(technique: str, catalog_path: str) -> dict[str, object]:
+    chosen = technique.strip().upper()
+    abilities = [a for a in load_catalog(catalog_path) if a.technique_id == chosen or a.technique_id.startswith(chosen + ".")]
+    return {"technique": chosen, "boundary": "This explains reviewed local synthetic behavior only; it is not an intrusion procedure.", "abilities": [{"name": a.name, "technique_id": a.technique_id, "what_it_does_in_the_lab": a.simulation_action, "expected_detections": [t.description for t in a.expected_telemetry], "safety": "Fixed, local, simulation-only action; no remote execution or target contact."} for a in abilities]}
+
+
+def _explain_last(run_dir: str | None, output: str | None) -> dict[str, object]:
+    root = Path(run_dir) if run_dir else Path("artifacts/runs")
+    candidates = [p for p in root.glob("**/telemetry-gap-report.json") if p.is_file()]
+    if not candidates:
+        raise FileNotFoundError("No telemetry-gap-report.json was found under the run directory")
+    report_path = max(candidates, key=lambda p: p.stat().st_mtime)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    gaps = report.get("gaps", report.get("detection_gaps", []))
+    if not isinstance(gaps, list): gaps = []
+    lines = ["# Last local run", "", f"Source: `{report_path.parent}`", "", f"Detection gaps: {len(gaps)}", "", "## What to fix next", ""]
+    lines.extend(f"- {item.get('technique_id', item.get('ability_id', 'unknown'))}: review expected telemetry and retest the missing signal" for item in gaps[:3] if isinstance(item, dict))
+    result = {"run_dir": str(report_path.parent), "gap_count": len(gaps), "top_gaps": gaps[:3]}
+    if output:
+        Path(output).write_text("\n".join(lines) + "\n", encoding="utf-8"); result["markdown"] = output
+    return result
+
+
 def completion_script(shell: str) -> str:
-    commands = "validate version plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
+    commands = "validate version why explain-last plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
     if shell == "bash":
         return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
     if shell == "zsh":
@@ -122,6 +145,12 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true", help="suppress non-essential progress text")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("version", help="print the installed AdversaryFlow version")
+    why = sub.add_parser("why", help="explain a reviewed technique in plain language")
+    why.add_argument("technique")
+    why.add_argument("--catalog", default="content/abilities/catalog.json")
+    explain = sub.add_parser("explain-last", help="summarize the newest local run and its top gaps")
+    explain.add_argument("--run-dir", default=None)
+    explain.add_argument("--output", default=None)
     validate = sub.add_parser("validate")
     validate.add_argument("roe")
     plan = sub.add_parser("plan")
@@ -353,6 +382,14 @@ def main() -> None:
 
     if args.command == "version":
         print(json.dumps({"name": "adversaryflow", "version": __version__}, indent=2))
+        return
+
+    if args.command == "why":
+        print(json.dumps(_why(args.technique, args.catalog), indent=2))
+        return
+
+    if args.command == "explain-last":
+        print(json.dumps(_explain_last(args.run_dir, args.output), indent=2))
         return
 
     if args.command == "config":
