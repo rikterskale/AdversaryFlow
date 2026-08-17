@@ -71,4 +71,10 @@ This check is deliberately literal and fail-closed. It does not infer undocument
 
 ## Remaining limits
 
-The repository does not contain a formal machine-readable mapping from every prose sentence to a test. Therefore this audit can prove source/document parity for the checked surfaces, and can identify test modules and the observed test result, but it cannot claim that every sentence in every Markdown document is behaviorally tested. Any future requirement for sentence-level provenance would need an explicit mapping format and test policy.
+`docs/documentation_provenance.csv` provides a machine-readable mapping for
+high-impact interface, route, configuration, schema, platform, and CI claims.
+`scripts/documentation_provenance.py` verifies that each registered claim has a
+unique ID, a non-empty evidence description, and existing repository paths.
+The register is intentionally scoped: semantic equivalence for every prose
+sentence, manual accessibility behavior, browser rendering, and external-link
+availability still require human or environment-specific verification.

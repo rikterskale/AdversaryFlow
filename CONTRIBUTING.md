@@ -17,6 +17,7 @@ python -m adversaryflow doctor --json
 - Do not add exploitation, arbitrary command execution, credential access, persistence, evasion, lateral movement, or unrestricted networking.
 - Add tests for new behavior and retain the coverage gate.
 - Update source-confirmed documentation when commands, defaults, safety boundaries, or recovery paths change.
+- Update `docs/documentation_provenance.csv` when a high-impact CLI, route, configuration, schema, platform, or CI claim changes. Run `python scripts/documentation_provenance.py` locally; CI rejects missing files, duplicate claim IDs, and incomplete evidence rows.
 
 ## Pull requests
 

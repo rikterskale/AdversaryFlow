@@ -4,6 +4,11 @@ This page names the versioned formats emitted or consumed by the repository. The
 
 ## Versioned schemas
 
+The repository also maintains `docs/documentation_provenance.csv`, a
+documentation-maintenance register rather than a runtime artifact. It maps
+high-impact claims to source or CI evidence and is validated by
+`scripts/documentation_provenance.py`.
+
 | Identifier | Source or output | Documentation boundary |
 |---|---|---|
 | `ADVERSARYFLOW-ABILITY-CATALOG-1` | Ability catalog | Fixed ability metadata; commands are code-owned. |

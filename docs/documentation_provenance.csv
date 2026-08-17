@@ -1,0 +1,7 @@
+claim_id,document,anchor,evidence_type,evidence_path,evidence_symbol,verification
+PROV-001,docs/CLI_REFERENCE.md,plan command,source,src/adversaryflow/cli.py,build_parser,Parser definition and dispatch are authoritative
+PROV-002,docs/modules/local-manager.md,Local API surface,source,src/adversaryflow/manager.py,make_handler,Loopback route dispatch is authoritative
+PROV-003,docs/modules/providers.md,Configuration precedence,source,src/adversaryflow/provider.py,load_provider_config,Configuration reads and validation are authoritative
+PROV-004,docs/SCHEMAS.md,Versioned schemas,source,src/adversaryflow/models.py,CampaignPlan,Serialized model definitions are authoritative
+PROV-005,docs/INSTALL.md,Supported platform matrix,test,.github/workflows/ci.yml,tests matrix,CI platform matrix is executable evidence
+PROV-006,docs/RELEASE_READINESS.md,CI enforcement,source,.github/workflows/ci.yml,new-user-release-standard,Release-readiness command is executable evidence
