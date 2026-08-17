@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,8 @@ from .coverage import coverage_dashboard
 from .detection_mappings import write_bundle as write_detection_bundle
 from .retest import create_gap_retest
 from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
+from .output import ExitCode, EXIT_CODE_HELP, respond, progress, dry_run_banner, severity, supports_color
+from .completion import completion_script, SUPPORTED_SHELLS
 
 
 def load_roe(path: str) -> RulesOfEngagement:
@@ -37,6 +40,90 @@ def load_roe(path: str) -> RulesOfEngagement:
 
 def _quote_command(value: str) -> str:
     return '"' + value.replace('"', "") + '"'
+
+
+def _pick_campaign(campaign_root: str) -> str | None:
+    """Offer an interactive numbered picker of saved campaigns on a real terminal.
+
+    Returns the chosen campaign id, or ``None`` when non-interactive or on any
+    empty/invalid selection, so callers fall back to their normal usage error.
+    """
+    if not (sys.stdin.isatty() and sys.stderr.isatty()):
+        return None
+    try:
+        campaigns = list_campaigns(campaign_root)
+    except (OSError, ValueError):
+        return None
+    if not campaigns:
+        return None
+    sys.stderr.write("Select a saved campaign to resume (or press Enter to cancel):\n")
+    for index, campaign in enumerate(campaigns, 1):
+        sys.stderr.write(f"  {index}. {campaign.get('campaign_id')}  [{campaign.get('status', 'unknown')}]\n")
+    sys.stderr.flush()
+    try:
+        choice = input("Campaign number: ").strip()
+    except EOFError:
+        return None
+    if not choice.isdigit():
+        return None
+    number = int(choice)
+    if 1 <= number <= len(campaigns):
+        return str(campaigns[number - 1].get("campaign_id"))
+    return None
+
+
+def _campaign_table(campaigns: list[dict], *, enabled: bool) -> str:
+    """Render saved campaigns as an aligned, severity-coloured text table."""
+    if not campaigns:
+        return "No saved campaigns yet. Create a draft with: adversaryflow campaign --actor <name> --objective <goal>"
+    level = {"completed": "ok", "awaiting-approval": "warn", "rejected": "fail", "cancelled": "fail"}
+    width = max((len(str(c.get("campaign_id", ""))) for c in campaigns), default=9)
+    lines = [f"{'CAMPAIGN'.ljust(width)}  STATUS"]
+    for campaign in campaigns:
+        status = str(campaign.get("status", "unknown"))
+        badge = severity(status, "", level.get(status, "info"), enabled=enabled).rstrip()
+        lines.append(f"{str(campaign.get('campaign_id', '')).ljust(width)}  {badge}")
+    return "\n".join(lines)
+
+
+def _campaign_result_human(result: dict, *, enabled: bool) -> str:
+    """One-line human summary for a drafted or completed campaign."""
+    campaign_id = result.get("campaign_id", "?")
+    if result.get("run_dir"):
+        return severity("COMPLETED", f"{campaign_id} · local run at {result['run_dir']}", "ok", enabled=enabled)
+    if result.get("stage") == "drafted":
+        return severity("DRAFTED", f"{campaign_id} · {result.get('provider', 'offline')} · approval required", "warn", enabled=enabled)
+    return severity(str(result.get("stage", "done")).upper(), str(campaign_id), "info", enabled=enabled)
+
+
+def _doctor_human(result: dict, *, enabled: bool) -> str:
+    """Human doctor report: per-check verdicts plus an ordered remediation plan."""
+    lines = []
+    for item in result.get("checks", []):
+        passed = item.get("passed")
+        badge = severity("PASS" if passed else "FAIL", f"{item.get('name')}: {item.get('detail')}", "ok" if passed else "fail", enabled=enabled)
+        lines.append(badge)
+    if result.get("fixes_applied"):
+        lines.append(f"FIXED local folders: {', '.join(result['fixes_applied'])}")
+    for item in result.get("guided_fixes", []):
+        lines.append(f"NEXT {item.get('check')}: {item.get('fix')}")
+    provider_readiness = result.get("provider_readiness")
+    if provider_readiness:
+        ready = provider_readiness.get("ready")
+        lines.append(severity("PROVIDER READY" if ready else "PROVIDER NOT READY", provider_readiness.get("detail", ""), "ok" if ready else "warn", enabled=enabled))
+    if result.get("passed"):
+        lines.append(severity("READY", "All local safety checks passed.", "ok", enabled=enabled))
+    else:
+        guided = result.get("guided_fixes", [])
+        if guided:
+            windows = "windows" in str(result.get("platform", "")).lower()
+            activate = ".\\.venv\\Scripts\\Activate.ps1" if windows else "source .venv/bin/activate"
+            lines.append("")
+            lines.append("Suggested next steps (in order):")
+            for index, item in enumerate(guided, 1):
+                lines.append(f"  {index}. {item.get('fix', '').strip()}")
+            lines.append(f"  {len(guided) + 1}. Activate the environment and re-check: {activate} && adversaryflow doctor --fix")
+    return "\n".join(lines)
 
 
 def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -> str:
@@ -87,30 +174,37 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning")
+    io_parent = argparse.ArgumentParser(add_help=False)
+    io_group = io_parent.add_argument_group("output")
+    io_group.add_argument("--json", action="store_true", help="force machine-readable JSON output")
+    io_group.add_argument("--human", action="store_true", help="force human-readable output even when piped")
+    io_group.add_argument("--quiet", action="store_true", help="print only a terse status line")
+    io_group.add_argument("--verbose", action="store_true", help="include extra detail where available")
+    io_group.add_argument("--no-color", action="store_true", help="disable ANSI colour in human output")
     sub = parser.add_subparsers(dest="command", required=True)
-    validate = sub.add_parser("validate")
+    validate = sub.add_parser("validate", parents=[io_parent])
     validate.add_argument("roe")
-    plan = sub.add_parser("plan")
+    plan = sub.add_parser("plan", parents=[io_parent])
     plan.add_argument("--roe", required=True)
     plan.add_argument("--actor", required=True)
     plan.add_argument("--target", default="local-lab")
     plan.add_argument("--technique", required=True)
     plan.add_argument("--audit", default="artifacts/audit.jsonl")
-    intel_sync = sub.add_parser("intel-sync", help="pull ATT&CK/CTID technique metadata and create synthetic-only coverage")
+    intel_sync = sub.add_parser("intel-sync", parents=[io_parent], help="pull ATT&CK/CTID technique metadata and create synthetic-only coverage")
     intel_sync.add_argument("--actor", required=True)
     intel_sync.add_argument("--platform", default="windows")
     intel_sync.add_argument("--target", default="local-lab")
     intel_sync.add_argument("--catalog", default="content/abilities/catalog.json")
     intel_sync.add_argument("--output", default="artifacts/intel/enriched")
     intel_sync.add_argument("--mitre-only", action="store_true", help="skip the CTID library lookup")
-    draft = sub.add_parser("draft")
+    draft = sub.add_parser("draft", parents=[io_parent])
     draft.add_argument("--roe", required=True)
     draft.add_argument("--actor", required=True)
     draft.add_argument("--objective", required=True)
     draft.add_argument("--target", default="local-lab")
     draft.add_argument("--platform", default="linux")
     draft.add_argument("--catalog", default="content/abilities/catalog.json")
-    demo = sub.add_parser("demo", help="run the complete safe local workflow")
+    demo = sub.add_parser("demo", parents=[io_parent], help="run the complete safe local workflow")
     demo.add_argument("--roe", default="examples/roe.yaml")
     demo.add_argument("--actor", default="APT29")
     demo.add_argument("--objective", default="validate endpoint process visibility")
@@ -119,26 +213,29 @@ def main() -> None:
     demo.add_argument("--catalog", default="content/abilities/catalog.json")
     demo.add_argument("--output", default="artifacts/runs")
     demo.add_argument("--adapter", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic")
-    doctor = sub.add_parser("doctor", help="diagnose installation and local runtime")
+    doctor = sub.add_parser("doctor", parents=[io_parent], help="diagnose installation and local runtime")
     doctor.add_argument("--roe", default="examples/roe.yaml")
     doctor.add_argument("--catalog", default="content/abilities/catalog.json")
-    doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--fix", action="store_true", help="apply safe local fixes, then diagnose again")
-    support = sub.add_parser("support-bundle", help="create a redacted troubleshooting bundle")
+    support = sub.add_parser("support-bundle", parents=[io_parent], help="create a redacted troubleshooting bundle")
     support.add_argument("--output", default="artifacts/support")
     support.add_argument("--roe", default="examples/roe.yaml")
-    sub.add_parser("capabilities", help="list advertised capabilities")
-    adapter = sub.add_parser("adapter", help="inspect the fixed local execution adapter")
+    sub.add_parser("capabilities", parents=[io_parent], help="list advertised capabilities")
+    completion = sub.add_parser("completion", parents=[io_parent], help="print a shell completion script")
+    completion.add_argument("shell", choices=SUPPORTED_SHELLS, help="the shell to generate completion for")
+    explain = sub.add_parser("explain", parents=[io_parent], help="explain a process exit code")
+    explain.add_argument("code", nargs="?", type=int, help="exit code to explain; omit to list all")
+    adapter = sub.add_parser("adapter", parents=[io_parent], help="inspect the fixed local execution adapter")
     adapter_sub = adapter.add_subparsers(dest="adapter_command", required=True)
     adapter_status = adapter_sub.add_parser("status", help="show read-only adapter readiness")
     adapter_status.add_argument("--catalog", default="content/abilities/catalog.json")
     adapter_status.add_argument("--name", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic")
-    guide = sub.add_parser("guide", help="walk through the safe campaign workflow and next steps")
+    guide = sub.add_parser("guide", parents=[io_parent], help="walk through the safe campaign workflow and next steps")
     guide.add_argument("--actor", default="APT29")
     guide.add_argument("--target", default="local-lab")
     guide.add_argument("--objective", default="validate endpoint process visibility")
     guide.add_argument("--interactive", action="store_true", help="prompt for draft-command details without executing a campaign")
-    provider = sub.add_parser("provider", help="configure and validate AI provider settings")
+    provider = sub.add_parser("provider", parents=[io_parent], help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
     provider_sub.add_parser("validate", help="validate settings without network access")
@@ -170,7 +267,7 @@ def main() -> None:
     test_provider.add_argument("--roe", default="examples/roe.yaml", help="Rules of Engagement used to validate the returned draft")
     test_provider.add_argument("--platform", default="linux")
     test_provider.add_argument("--catalog", default="content/abilities/catalog.json")
-    campaign = sub.add_parser("campaign", help="draft, validate, approve, and optionally emulate a campaign")
+    campaign = sub.add_parser("campaign", parents=[io_parent], help="draft, validate, approve, and optionally emulate a campaign")
     campaign.add_argument("--roe", default="examples/roe.yaml")
     campaign.add_argument("--actor", default=None)
     campaign.add_argument("--target", default="local-lab")
@@ -212,7 +309,7 @@ def main() -> None:
     retest = campaign_sub.add_parser("retest", help="create an immutable review draft from recorded detection gaps")
     retest.add_argument("--campaign-id", required=True)
     retest.add_argument("--campaign-root", default="artifacts/campaigns")
-    telemetry = sub.add_parser("telemetry", help="normalize and validate offline EDR/SIEM exports")
+    telemetry = sub.add_parser("telemetry", parents=[io_parent], help="normalize and validate offline EDR/SIEM exports")
     telemetry_sub = telemetry.add_subparsers(dest="telemetry_command", required=True)
     telemetry_normalize = telemetry_sub.add_parser("normalize")
     telemetry_normalize.add_argument("--source", choices=tuple(sorted(SUPPORTED_SOURCES)), required=True)
@@ -228,14 +325,14 @@ def main() -> None:
     telemetry_export.add_argument("--run-dir", required=True)
     telemetry_export.add_argument("--format", choices=("json", "csv"), required=True)
     telemetry_export.add_argument("--output", required=True)
-    detection = sub.add_parser("detection", help="export defensive detection-as-code validation mappings")
+    detection = sub.add_parser("detection", parents=[io_parent], help="export defensive detection-as-code validation mappings")
     detection_sub = detection.add_subparsers(dest="detection_command", required=True)
     detection_export = detection_sub.add_parser("export")
     detection_export.add_argument("--catalog", default="content/abilities/catalog.json")
     detection_export.add_argument("--output", default="artifacts/detection-mappings")
-    coverage = sub.add_parser("coverage", help="show actor-to-detection campaign coverage")
+    coverage = sub.add_parser("coverage", parents=[io_parent], help="show actor-to-detection campaign coverage")
     coverage.add_argument("--campaign-root", default="artifacts/campaigns")
-    manager = sub.add_parser("manager", help="start the loopback-only guided campaign workspace")
+    manager = sub.add_parser("manager", parents=[io_parent], help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
     manager.add_argument("--campaign-root", default="artifacts/campaigns")
@@ -254,9 +351,26 @@ def main() -> None:
     if hasattr(args, "catalog") and args.catalog == "idpt-windows-collection":
         args.catalog = str(idpt_windows_collection_catalog_path())
 
+    if args.command == "completion":
+        print(completion_script(args.shell))
+        return
+
+    if args.command == "explain":
+        if args.code is None:
+            payload = {"exit_codes": [{"code": code, "meaning": text} for code, text in sorted(EXIT_CODE_HELP.items())]}
+            human = "AdversaryFlow exit codes:\n" + "\n".join(f"  {code}  {text}" for code, text in sorted(EXIT_CODE_HELP.items()))
+        else:
+            meaning = EXIT_CODE_HELP.get(args.code, "Unknown exit code. AdversaryFlow does not define this value.")
+            payload = {"code": args.code, "meaning": meaning}
+            human = severity(str(args.code), meaning, "info", enabled=supports_color(no_color=args.no_color))
+        respond(args, payload, human)
+        return
+
     if args.command == "validate":
         roe = load_roe(args.roe)
-        print(json.dumps({"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}, indent=2))
+        payload = {"valid": True, "engagement": roe.engagement_name, "dry_run": roe.dry_run}
+        human = severity("VALID", f"{roe.engagement_name} · dry-run={roe.dry_run}", "ok", enabled=supports_color(no_color=args.no_color))
+        respond(args, payload, human)
         return
 
     if args.command == "guide":
@@ -265,21 +379,25 @@ def main() -> None:
 
     if args.command == "intel-sync":
         try:
+            progress("Fetching official MITRE ATT&CK STIX bundle", 1, 3)
             bundle = fetch_attack_bundle()
+            progress("Looking up CTID technique metadata" if not args.mitre_only else "Skipping CTID lookup (--mitre-only)", 2, 3)
             ctid_ids = () if args.mitre_only else fetch_ctid_technique_ids(args.actor)
+            progress("Building synthetic-only coverage", 3, 3)
             coverage = build_enriched_coverage(args.actor, args.platform, bundle, ctid_ids, args.catalog, benign_procedure_catalog())
             result = write_enriched_coverage(coverage, args.output, args.target)
-            print(json.dumps({"success": True, **result}, indent=2))
+            respond(args, {"success": True, **result})
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-            print(json.dumps({"success": False, "error": str(exc), "boundary": "No commands or payloads are imported."}, indent=2))
-            raise SystemExit(1)
+            respond(args, {"success": False, "error": str(exc), "boundary": "No commands or payloads are imported."}, exit_code=ExitCode.ERROR)
         return
 
     if args.command == "adapter":
         abilities = load_catalog(args.catalog)
         readiness = adapter_readiness(abilities, args.name)
-        print(json.dumps(readiness, indent=2))
-        raise SystemExit(0 if readiness["compatible"] else 1)
+        level = "ok" if readiness["compatible"] else "fail"
+        human = severity("READY" if readiness["compatible"] else "NOT READY", f"{args.name}: {readiness['detail']}", level, enabled=supports_color(no_color=args.no_color))
+        respond(args, readiness, human)
+        raise SystemExit(ExitCode.OK if readiness["compatible"] else ExitCode.ERROR)
 
     if args.command == "telemetry":
         try:
@@ -304,17 +422,20 @@ def main() -> None:
                     else:
                         report = json.loads((root / "telemetry-gap-report.json").read_text(encoding="utf-8"))
                         result = {"success": True, "output": str(export_assessment(report, args.output, args.format))}
-            print(json.dumps(result, indent=2))
+            respond(args, result)
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-            print(json.dumps({"success": False, "error": str(exc)}, indent=2)); raise SystemExit(1)
+            respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
         return
 
     if args.command == "detection":
-        print(json.dumps(write_detection_bundle(load_catalog(args.catalog), args.output), indent=2))
+        respond(args, write_detection_bundle(load_catalog(args.catalog), args.output))
         return
 
     if args.command == "coverage":
-        print(json.dumps(coverage_dashboard(args.campaign_root), indent=2))
+        dashboard = coverage_dashboard(args.campaign_root)
+        summary = dashboard.get("summary", {}) if isinstance(dashboard, dict) else {}
+        human = severity("COVERAGE", f"{summary.get('campaigns', 0)} campaigns · {summary.get('techniques', 0)} techniques · {summary.get('detections', 0)} detections · {summary.get('gaps', 0)} gaps", "info", enabled=supports_color(no_color=args.no_color))
+        respond(args, dashboard, human)
         return
 
     if args.command == "manager":
@@ -323,38 +444,36 @@ def main() -> None:
 
     if args.command == "campaign":
         if args.lifecycle_command == "list":
-            print(json.dumps(list_campaigns(args.campaign_root), indent=2))
+            campaigns = list_campaigns(args.campaign_root)
+            human = _campaign_table(campaigns, enabled=supports_color(no_color=args.no_color))
+            respond(args, campaigns, human)
             return
         if args.lifecycle_command == "inspect":
             try:
-                print(json.dumps(inspect_campaign(args.campaign_root, args.campaign_id), indent=2))
+                respond(args, inspect_campaign(args.campaign_root, args.campaign_id))
             except (OSError, ValueError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         if args.lifecycle_command == "reject":
             try:
                 path = reject_campaign(args.campaign_root, args.campaign_id, args.approver, args.reason)
-                print(json.dumps({"success": True, "status": "rejected", "record": str(path)}, indent=2))
+                respond(args, {"success": True, "status": "rejected", "record": str(path)})
             except (OSError, KeyError, ValueError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         if args.lifecycle_command == "cancel":
             try:
                 path = cancel_campaign(args.campaign_root, args.campaign_id, args.reason)
-                print(json.dumps({"success": True, "status": "cancelled", "record": str(path)}, indent=2))
+                respond(args, {"success": True, "status": "cancelled", "record": str(path)})
             except (OSError, KeyError, ValueError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         if args.lifecycle_command == "reset":
             try:
                 reset_campaign(args.campaign_root, args.campaign_id, args.confirm)
-                print(json.dumps({"success": True, "status": "reset", "campaign_id": args.campaign_id}, indent=2))
+                respond(args, {"success": True, "status": "reset", "campaign_id": args.campaign_id})
             except (OSError, ValueError, PermissionError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         if args.lifecycle_command == "assess":
             try:
@@ -364,21 +483,22 @@ def main() -> None:
                     raise ValueError("Only a completed campaign with a run directory can be assessed")
                 report = build_gap_report(metadata["run_dir"], args.telemetry_file, args.window_seconds)
                 write_campaign_reports(campaign_record["campaign_dir"], metadata["run_dir"])
-                print(json.dumps({"success": True, "campaign_id": args.campaign_id, "assessment": report}, indent=2))
+                respond(args, {"success": True, "campaign_id": args.campaign_id, "assessment": report})
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         if args.lifecycle_command == "retest":
             try:
                 result = create_gap_retest(args.campaign_root, args.campaign_id, load_roe(args.roe), load_catalog(args.catalog))
-                print(json.dumps({"success": True, **result}, indent=2))
+                respond(args, {"success": True, **result})
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2)); raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
             return
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
         config = load_provider_config()
+        if not args.campaign_id and not (args.actor and args.objective):
+            args.campaign_id = _pick_campaign(args.campaign_root)
         if args.campaign_id:
             try:
                 campaign_dir = Path(args.campaign_root) / args.campaign_id
@@ -389,11 +509,14 @@ def main() -> None:
                 validate_ai_draft(draft_result, roe, abilities)
                 provider_name = saved_metadata["provider"]
             except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
-                print(json.dumps({"success": False, "stage": "resume", "error": f"Could not resume campaign: {exc}"}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "stage": "resume", "error": f"Could not resume campaign: {exc}"}, exit_code=ExitCode.ERROR)
         else:
             if not args.actor or not args.objective:
                 parser.error("campaign requires --actor and --objective when --campaign-id is not supplied")
+            dry_run_banner(
+                will=["draft a local, RoE-validated plan", "record integrity hashes for later review"],
+                will_not=["contact a target", "run a command", "approve or execute anything"],
+            )
             request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
             provider_name = config.name
             try:
@@ -411,8 +534,7 @@ def main() -> None:
                 validate_ai_draft(draft_result, roe, abilities)
             except (ProviderError, ValueError) as exc:
                 if not args.fallback_offline or config.name == "offline":
-                    print(json.dumps({"success": False, "stage": "draft-validation", "error": str(exc), "recovery": "Review provider configuration or rerun with --fallback-offline."}, indent=2))
-                    raise SystemExit(1)
+                    respond(args, {"success": False, "stage": "draft-validation", "error": str(exc), "recovery": "Review provider configuration or rerun with --fallback-offline."}, exit_code=ExitCode.ERROR)
                 draft_result = OfflinePlanner().draft(request, abilities)
                 validate_ai_draft(draft_result, roe, abilities)
                 provider_metadata = {"provider": config.name, "status": "fallback-offline", "error": str(exc)}
@@ -423,43 +545,57 @@ def main() -> None:
         result = {"success": True, "stage": "drafted", "provider": provider_name, "plan_hash": plan_hash, "campaign_id": campaign_dir.name, "campaign_dir": str(campaign_dir), "draft": draft_result.as_dict(), "approval_required": True}
         if args.approve:
             try:
+                progress("Verifying draft, RoE, and catalog integrity", 1, 3)
                 if args.sensor_manifest:
                     selected = tuple(ability for ability in abilities if ability.id in draft_result.ability_ids)
                     categories = {item.category for ability in selected for item in ability.expected_telemetry}
+                    progress("Running read-only sensor preflight", 2, 3)
                     preflight = planned_sensor_preflight(categories, draft_result.target, args.sensor_manifest)
                     if not preflight["ready"]:
                         raise ValueError("Sensor preflight failed; no execution was started")
                     (campaign_dir / "sensor-preflight.json").write_text(json.dumps(preflight, indent=2), encoding="utf-8")
                     result["sensor_preflight"] = preflight
+                progress("Running fixed local synthetic emulation", 3, 3)
                 result.update(complete_saved_campaign(args.campaign_root, campaign_dir.name, roe, abilities, args.approver or "", args.output, args.adapter))
             except (PermissionError, ValueError) as exc:
-                print(json.dumps({"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "stage": "approval", "error": str(exc), "draft": draft_result.as_dict()}, exit_code=ExitCode.ERROR)
         else:
             result["next"] = "Review the draft, then rerun with --approve --approver <RoE approver>"
-        print(json.dumps(result, indent=2))
+        human = _campaign_result_human(result, enabled=supports_color(no_color=args.no_color))
+        respond(args, result, human)
         return
 
     if args.command == "draft":
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
+        dry_run_banner(
+            will=["produce a local offline plan for review"],
+            will_not=["contact a target", "run a command", "approve or execute anything"],
+        )
         request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
         draft_result = OfflinePlanner().draft(request, abilities)
         validate_ai_draft(draft_result, roe, abilities)
-        print(json.dumps({"mode": "offline-ai-fallback", "draft": draft_result.as_dict(), "next": "send to manager approval before emulation"}, indent=2))
+        respond(args, {"mode": "offline-ai-fallback", "draft": draft_result.as_dict(), "next": "send to manager approval before emulation"})
         return
 
     if args.command == "demo":
         roe = load_roe(args.roe)
         abilities = load_catalog(args.catalog)
+        dry_run_banner(
+            will=["run the fixed local-synthetic example", "write a local telemetry-gap report"],
+            will_not=["contact an external target", "accept operator-supplied commands"],
+        )
         request = CampaignRequest(args.actor, "local-lab", args.objective, args.platform)
+        progress("Drafting and validating the offline plan", 1, 3)
         draft_result = OfflinePlanner().draft(request, abilities)
         validate_ai_draft(draft_result, roe, abilities)
         plan_hash = campaign_integrity_hashes(draft_result, roe, abilities)["plan_hash"]
+        progress("Recording auto-approval for the demo", 2, 3)
         approval = approve_draft(draft_result, roe, abilities, args.approver or roe.approver_name, plan_hash)
+        progress("Running local synthetic emulation", 3, 3)
         run_dir = run_local_emulation(draft_result, abilities, approval, args.output, args.adapter)
         report = build_gap_report(run_dir)
-        print(json.dumps({"draft": draft_result.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": report}, indent=2))
+        respond(args, {"draft": draft_result.as_dict(), "approval": approval.__dict__, "run_dir": str(run_dir), "telemetry_gap_report": report})
         return
 
     if args.command == "doctor":
@@ -467,89 +603,87 @@ def main() -> None:
         if args.json:
             print(json.dumps(result, indent=2))
         else:
-            print("\n".join(f"{'PASS' if item['passed'] else 'FAIL'} {item['name']}: {item['detail']}" for item in result["checks"]))
-            if result["fixes_applied"]:
-                print(f"FIXED local folders: {', '.join(result['fixes_applied'])}")
-            for item in result["guided_fixes"]:
-                print(f"NEXT {item['check']}: {item['fix']}")
-            provider_readiness = result.get("provider_readiness")
-            if provider_readiness:
-                print(f"PROVIDER {'READY' if provider_readiness['ready'] else 'NOT READY'}: {provider_readiness['detail']}")
-        raise SystemExit(0 if result["passed"] else 1)
+            print(_doctor_human(result, enabled=supports_color(no_color=args.no_color)))
+        raise SystemExit(ExitCode.OK if result["passed"] else ExitCode.ERROR)
 
     if args.command == "support-bundle":
         print(create_support_bundle(args.output, args.roe))
         return
 
     if args.command == "capabilities":
-        print(__import__("importlib.resources", fromlist=["files"]).files("adversaryflow.resources").joinpath("capabilities.json").read_text(encoding="utf-8"))
+        text = __import__("importlib.resources", fromlist=["files"]).files("adversaryflow.resources").joinpath("capabilities.json").read_text(encoding="utf-8")
+        print(text)
         return
 
     if args.command == "provider":
         config = load_provider_config()
         errors = validate_provider_config(config)
         if args.provider_command == "status":
-            print(json.dumps(config.as_dict(), indent=2))
+            respond(args, config.as_dict())
         elif args.provider_command == "configure":
             print(provider_setup_instructions())
         elif args.provider_command == "diagnose":
-            print(json.dumps({"configuration": config.as_dict(), "valid": not errors, "errors": errors, "recovery": [
+            respond(args, {"configuration": config.as_dict(), "valid": not errors, "errors": errors, "recovery": [
                 "Offline mode requires no key and never sends network requests.",
                 "For hosted mode, confirm the endpoint is HTTPS and ends with /v1 when required by the provider.",
                 "Use provider validate before provider test; provider test is the only command here that sends a request.",
                 "If a hosted request fails, rerun campaign with --fallback-offline to continue a safe local rehearsal.",
-            ]}, indent=2))
+            ]})
         elif args.provider_command == "profile":
             try:
                 if args.profile_command == "list":
-                    print(json.dumps(list_profiles(), indent=2))
+                    respond(args, list_profiles())
                 elif args.profile_command == "status":
-                    print(json.dumps(activation_summary(), indent=2))
+                    respond(args, activation_summary())
                 elif args.profile_command == "use":
                     profile_file = use_profile(args.name)
-                    summary = activation_summary(args.name)
-                    print(json.dumps({**summary, "file": str(profile_file)}, indent=2))
+                    respond(args, {**activation_summary(args.name), "file": str(profile_file)})
                 elif args.profile_command == "save":
-                    print(json.dumps({"saved": args.name, "file": str(save_profile(args.name, args.provider, args.endpoint, args.model, args.credential_env))}, indent=2))
+                    respond(args, {"saved": args.name, "file": str(save_profile(args.name, args.provider, args.endpoint, args.model, args.credential_env))})
                 else:
                     remove_profile(args.name)
-                    print(json.dumps({"removed": args.name}, indent=2))
+                    respond(args, {"removed": args.name})
             except (OSError, KeyError, ValueError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
         elif args.provider_command == "test":
             if config.name != "openai-compatible":
                 print("Provider test requires ADVERSARYFLOW_PROVIDER=openai-compatible.")
-                raise SystemExit(1)
+                raise SystemExit(ExitCode.ERROR)
             try:
                 request = CampaignRequest(args.actor, args.target, args.objective, args.platform)
                 abilities = load_catalog(args.catalog)
+                progress("Sending one harmless planning request to the active provider", 1, 1)
                 draft = OpenAICompatiblePlanner(config).draft(request, abilities)
                 validate_ai_draft(draft, load_roe(args.roe), abilities)
-                print(json.dumps({"success": True, "stage": "draft-validated", "draft": draft.as_dict()}, indent=2))
+                respond(args, {"success": True, "stage": "draft-validated", "draft": draft.as_dict()})
             except (ProviderError, ValueError, OSError, json.JSONDecodeError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
         elif args.provider_command == "policy":
             try:
                 if args.policy_command == "status":
-                    print(json.dumps(policy_summary(), indent=2))
+                    respond(args, policy_summary())
                 else:
-                    print(json.dumps({"allowed": args.name, "file": str(allow_profile(args.name))}, indent=2))
+                    respond(args, {"allowed": args.name, "file": str(allow_profile(args.name))})
             except (OSError, KeyError, ValueError) as exc:
-                print(json.dumps({"success": False, "error": str(exc)}, indent=2))
-                raise SystemExit(1)
+                respond(args, {"success": False, "error": str(exc)}, exit_code=ExitCode.ERROR)
         else:
-            print(json.dumps({"valid": not errors, "configuration": config.as_dict(), "errors": errors}, indent=2))
-            raise SystemExit(0 if not errors else 1)
+            level = "ok" if not errors else "fail"
+            human = severity("VALID" if not errors else "INVALID", "; ".join(errors) or "provider configuration is valid", level, enabled=supports_color(no_color=args.no_color))
+            respond(args, {"valid": not errors, "configuration": config.as_dict(), "errors": errors}, human)
+            raise SystemExit(ExitCode.OK if not errors else ExitCode.ERROR)
         return
 
     roe = load_roe(args.roe)
     audit = AuditLog(args.audit)
     audit.record("plan_requested", actor=args.actor, target=args.target, technique=args.technique)
+    dry_run_banner(
+        will=["fetch the official ATT&CK STIX bundle", "produce a dry-run plan for one technique"],
+        will_not=["contact a target", "run a command", "create or approve a campaign"],
+    )
+    progress("Fetching official MITRE ATT&CK STIX bundle", 1, 1)
     bundle = fetch_attack_bundle()
     technique = find_technique(bundle, args.technique)
     if not technique:
         raise SystemExit(f"Technique not found in MITRE ATT&CK source: {args.technique}")
     result = build_plan(roe, args.actor, args.target, technique, "MITRE ATT&CK Enterprise STIX")
-    print(json.dumps({"notice": "DRY RUN ONLY", "plan": result.__dict__}, default=lambda value: value.__dict__, indent=2))
+    respond(args, json.loads(json.dumps({"notice": "DRY RUN ONLY", "plan": result.__dict__}, default=lambda value: value.__dict__)))

@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- CLI UX: consistent `--json`, `--human`, `--quiet`, and `--no-color` output flags across commands; auto-detected human/colour output on an interactive terminal and clean JSON when piped; severity-coloured safety verdicts; `adversaryflow completion {bash,zsh,fish,powershell}` scripts; an `adversaryflow explain <code>` exit-code reference with documented `ExitCode` constants; will/will-not dry-run banners and step progress indicators on mutating commands; an interactive saved-campaign picker when `--campaign-id` is omitted on a terminal; and a platform-aware, copy-ready remediation summary in `doctor`.
+- Manager GUI UX: light/dark/system theme toggle (with `t` shortcut) and theme-aware palette; a persistent local-readiness health badge; keyboard navigation (`1`–`9`) between sections; non-blocking toast notifications; archive free-text plus tag filtering with sortable columns and result counts; a structured scope/telemetry inspect view with an offline-only reminder; and copy-to-clipboard for CLI command blocks including a live "equivalent CLI command" in the draft form.
 - A commit-pinned `idpt-local` adapter, fixed Windows collection mapping, derived plan-bound IDPT authorization, verified evidence ingestion, and independent telemetry-gap reporting.
 - Offline Sentinel, Defender, Splunk, Elastic, CrowdStrike, and generic telemetry normalization; time-bounded correlation; sensor preflight; JSON/CSV assessment export; immutable gap-derived retests; detection-as-code validation mappings; a campaign coverage dashboard; a reviewed IDPT scenario registry; and fixed read-only Linux/macOS catalogs.
 

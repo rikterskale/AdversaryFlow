@@ -2,6 +2,13 @@
 
 `adversaryflow` is the installed command. It uses `argparse`; required options are enforced by the parser. Commands return JSON where stated below. Handled operational failures return exit code `1`; `doctor` and `provider validate` return `0` when valid and `1` otherwise.
 
+## Global output options
+
+Every command accepts the same output flags (place them after the command name, before any nested subcommand): `--json` forces machine-readable JSON, `--human` forces the readable text view, `--quiet` prints only a terse status line, `--verbose` includes extra detail where available, and `--no-color` disables ANSI colour. With no flag, output is auto-detected: a real terminal gets human-readable, severity-coloured text and a redirected/piped stream gets clean JSON, so scripts and CI stay deterministic. On an interactive terminal, mutating commands also print a will/will-not dry-run banner and step-progress indicators to stderr.
+
+- `completion {bash,zsh,fish,powershell}` prints a shell completion script (e.g. `source <(adversaryflow completion bash)`). Generating a script contacts nothing.
+- `explain [CODE]` prints the meaning of a process exit code, or the full table when no code is given. Documented codes: `0` success, `1` general error, `2` usage error (argparse). Codes `3`–`7` are reserved for scope, approval, provider, integrity, and not-found conditions.
+
 ## Read-only and preparation commands
 
 | Command | Purpose |
@@ -38,7 +45,7 @@ Policy commands: `provider policy status` and `provider policy allow NAME`. A ho
 
 ## Campaign commands
 
-Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. Add `--approve --approver NAME [--output artifacts/runs] [--sensor-manifest HEALTH.json]` only after review by the named RoE approver. When supplied, the sensor manifest must pass before execution starts.
+Create or resume a draft with `campaign [--roe examples/roe.yaml] [--actor ACTOR] [--target local-lab] [--objective TEXT] [--platform linux] [--catalog PATH] [--campaign-root artifacts/campaigns] [--campaign-id ID] [--fallback-offline]`. Creating a new draft requires `--actor` and `--objective`. On an interactive terminal, running `campaign` with neither `--campaign-id` nor `--actor`/`--objective` offers a numbered picker of saved campaigns to resume; non-interactively it fails with a usage error (exit code `2`). Add `--approve --approver NAME [--output artifacts/runs] [--sensor-manifest HEALTH.json]` only after review by the named RoE approver. When supplied, the sensor manifest must pass before execution starts.
 
 Lifecycle commands are: `campaign list [--campaign-root PATH]`; `campaign inspect --campaign-id ID [--campaign-root PATH]`; `campaign reject --campaign-id ID --approver NAME --reason TEXT [--campaign-root PATH]`; `campaign cancel --campaign-id ID --reason TEXT [--campaign-root PATH]`; `campaign reset --campaign-id ID --confirm [--campaign-root PATH]`; and `campaign retest --campaign-id ID [--campaign-root PATH]`, which creates a new immutable review draft from unresolved gaps.
 
@@ -52,6 +59,6 @@ Use `--adapter idpt-local --catalog idpt-windows-collection` to delegate the fix
 
 `manager [--host 127.0.0.1] [--port 8787] [--campaign-root artifacts/campaigns] [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--open]` starts the loopback-only guided workspace. The named RoE approver can approve and run a reviewed campaign through the fixed local-synthetic adapter after typed confirmation and integrity revalidation.
 
-The workspace includes local provider-profile and policy setup (without credentials), provider readiness, MITRE ATT&CK dry-run planning, and redacted support-bundle generation.
+The workspace includes local provider-profile and policy setup (without credentials), provider readiness, MITRE ATT&CK dry-run planning, and redacted support-bundle generation. The UI offers a light/dark/system theme toggle (keyboard `t`), a persistent readiness health badge, `1`–`9` keyboard navigation between sections, toast notifications, sortable/tag-filtered archive search, a structured scope-and-telemetry inspect view, and copy-to-clipboard CLI command blocks. All of these stay loopback-only and never contact an external target.
 
 See [USAGE.md](USAGE.md) for a safe end-to-end flow.
