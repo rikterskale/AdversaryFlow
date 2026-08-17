@@ -83,7 +83,7 @@ def build_enriched_coverage(actor: str, platform: str, bundle: dict, ctid_ids: t
         "actor": actor, "platform": platform, "discovered_technique_ids": sorted(discovered),
         "unresolved_technique_ids": sorted(discovered - enriched_ids),
         "generated_ability_ids": generated_abilities, "generated_procedure_ids": generated_procedures,
-        "catalog": {"format": "ADVERSARYFLOW-ABILITY-CATALOG-1", "abilities": abilities},
+        "catalog": {"format": "ADVERSARYFLOW-ABILITY-CATALOG-1", "governance": {"name": f"enriched-{platform.casefold()}", "version": "1.0.0", "status": "active"}, "abilities": abilities},
         "procedures": {"format": "ADVERSARYFLOW-BENIGN-PROCEDURES-1", "boundary": "Generated metadata is synthetic-only; no imported command, payload, credential, remote action, or destructive behavior is retained.", "procedures": procedure_items},
     }
 

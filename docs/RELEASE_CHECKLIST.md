@@ -6,6 +6,7 @@
 - [ ] Run `python -m pytest -q --cov=adversaryflow --cov-branch --cov-fail-under=95`.
 - [ ] Run `python scripts/validate_documentation.py`.
 - [ ] Build and verify artifacts with `python scripts/release.py artifacts/release`.
+- [ ] Confirm `SHA256SUMS.json` inventories `catalog-manifest.json` and `sbom.cdx.json`.
 - [ ] Run `python scripts/release_readiness.py artifacts/release` in a network-enabled environment.
 - [ ] Confirm no credentials, target data, or raw provider responses are included in release material.
 - [ ] For the hosted-provider slice, use an approved non-production endpoint to run `provider validate` and one `provider test`; confirm its returned draft reaches the `draft-validated` stage. Do not use production target data.

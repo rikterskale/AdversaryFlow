@@ -21,7 +21,15 @@ python -m pytest -q --cov=adversaryflow --cov-branch --cov-fail-under=95
 python -m adversaryflow doctor --json
 ```
 
-The CI workflow runs tests on Windows and Ubuntu with Python 3.11 and 3.12, plus release-readiness and security jobs. The current suite measures full line and branch coverage; the configured CI threshold remains 95%.
+If pytest cannot create its default Windows temporary directory, keep the temporary files inside the repository and rerun with an explicit basetemp:
+
+```powershell
+python -m pytest -q --basetemp .pytest-tmp --cov=adversaryflow --cov-branch --cov-fail-under=95
+```
+
+The directory is local test output; remove it after the run if it is not needed.
+
+The CI workflow runs tests on Windows and Ubuntu with Python 3.11 and 3.12, plus release-readiness and security jobs. The current suite meets the configured 95% combined line-and-branch coverage threshold.
 
 ## Release artifacts
 
@@ -32,6 +40,6 @@ python scripts/artifact_journey.py artifacts/release
 python scripts/release_readiness.py artifacts/release
 ```
 
-The release script builds a wheel, source distribution, source ZIP, SHA-256 manifest, and CycloneDX SBOM. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`.
+The release script builds a wheel, source distribution, source ZIP, governed catalog manifest, SHA-256 manifest, and CycloneDX SBOM. The release manifest inventories every generated artifact, including the SBOM and catalog manifest; verification rejects missing inventory entries, duplicate artifact names, tampered bytes, or invalid release metadata. Catalogs must declare an active semantic version and unique ability IDs; deprecated or retired catalogs and abilities fail closed during loading. Set `ADVERSARYFLOW_RELEASE_GPG_KEY` before running the release script to create an armored signature for `SHA256SUMS.json`; that signature covers the catalog manifest and SBOM as release artifacts.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution boundaries and [RELEASE_READINESS.md](RELEASE_READINESS.md) for the CI acceptance standard.

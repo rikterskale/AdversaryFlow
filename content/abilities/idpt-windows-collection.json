@@ -1,5 +1,6 @@
 {
   "format": "ADVERSARYFLOW-ABILITY-CATALOG-1",
+  "governance": {"name": "idpt-windows-collection", "version": "1.0.0", "status": "active"},
   "abilities": [
     {
       "id": "ability-idpt-powershell-marker", "version": "1.0.0", "name": "IDPT PowerShell execution marker",

@@ -6,7 +6,7 @@ Curated abilities execute fixed benign host behavior through the `local-behavior
 
 The packaged `curated-windows` catalog includes five read-only behaviors: current identity (`T1033`), system information (`T1082`), network configuration (`T1016`), process discovery (`T1057`), and local-group discovery (`T1069.001`). The executor maps each catalog action name to a code-owned command and argument list. Catalog files cannot provide commands or scripts.
 
-The packaged `curated-linux` and `curated-macos` catalogs each include three fixed read-only behaviors: current identity (`T1033`), system information (`T1082`), and process discovery (`T1057`). They use only code-owned argument lists, bounded output, and no network access.
+The packaged `curated-linux` and `curated-macos` catalogs each include three fixed read-only behaviors: current identity (`T1033`), system information (`T1082`), and process discovery (`T1057`). They use only code-owned argument lists, bounded output, and no network access. The macOS catalog is packaged and its fixed actions are implemented, but macOS is not currently in the platform list accepted by `doctor`; the supported-platform check recognizes Windows, Debian, Ubuntu, and Kali. Treat macOS execution as an explicitly separate catalog path until macOS is added to the platform support check.
 
 Run the reviewed catalog:
 

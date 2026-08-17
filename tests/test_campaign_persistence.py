@@ -1,4 +1,7 @@
+import json
+
 from adversaryflow.ai import CampaignRequest, OfflinePlanner
+from adversaryflow.campaign_service import complete_saved_campaign
 from adversaryflow.emulation import load_catalog
 from adversaryflow.models import RulesOfEngagement
 from adversaryflow.workflow import campaign_integrity_hashes, load_campaign_draft, save_campaign_draft, verify_campaign_integrity
@@ -52,3 +55,19 @@ def test_campaign_resume_rejects_legacy_metadata_without_integrity_hashes():
     abilities = load_catalog("content/abilities/catalog.json")
     with pytest.raises(ValueError, match="roe_sha256"):
         verify_campaign_integrity(draft, {"plan_hash": campaign_integrity_hashes(draft, roe, abilities)["plan_hash"]}, roe, abilities)
+
+
+def test_completed_campaign_cannot_be_approved_again():
+    root = Path("artifacts") / f"campaign-service-{uuid4()}"
+    abilities = load_catalog("content/abilities/catalog.json")
+    draft = OfflinePlanner().draft(CampaignRequest("APT29", "local-lab", "test"), abilities)
+    roe = RulesOfEngagement.from_mapping({"engagement_name": "test", "operator_name": "operator@example.test", "approver_name": "manager@example.test", "approved_targets": ["local-lab"]})
+    integrity = campaign_integrity_hashes(draft, roe, abilities)
+    campaign_dir = save_campaign_draft(draft, integrity["plan_hash"], "offline", root, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"])
+    metadata_path = campaign_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "completed"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Only campaigns awaiting approval"):
+        complete_saved_campaign(str(root), campaign_dir.name, roe, abilities, "manager@example.test", str(root / "runs"))

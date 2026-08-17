@@ -6,7 +6,7 @@ No. The ability catalog models synthetic actions only. It does not provide opera
 
 ## Can the browser manager approve or run a campaign?
 
-No. The loopback-only manager can run local diagnostics, create offline drafts, inspect campaigns, and record rejection or cancellation. Approval and local synthetic emulation are CLI-only and RoE-gated.
+Yes, but only for the fixed local-synthetic path. The loopback-only manager can run local diagnostics, create drafts, inspect campaigns, record rejection or cancellation, and approve and run a reviewed campaign after exact RoE-approver identity, campaign-specific typed confirmation, and integrity checks. `local-behavioral` and `idpt-local` execution remain CLI-only.
 
 ## Is a provider key required?
 

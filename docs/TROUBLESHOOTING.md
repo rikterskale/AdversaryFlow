@@ -43,8 +43,25 @@ Use `campaign list` and `campaign inspect --campaign-id campaign-...` before rec
 
 If resume reports an integrity mismatch, do not approve the record; create a new reviewed draft. See [USAGE.md](USAGE.md).
 
+## IDPT integration
+
+IDPT execution is intentionally stricter than the synthetic and behavioral adapters. Start with the read-only readiness check:
+
+```powershell
+$env:ADVERSARYFLOW_IDPT_ROOT = "C:\Tools\IDPT-Emulation"
+adversaryflow adapter status --name idpt-local --catalog idpt-windows-collection
+```
+
+The configured directory must contain `src/cli.mjs`, be pinned to the reviewed commit shown in [IDPT_INTEGRATION.md](IDPT_INTEGRATION.md), and have no modified tracked files. Git and Node.js 20 or newer must be available on `PATH`. If readiness fails, do not bypass the check by changing the catalog or using an unreviewed commit; correct the checkout and rerun the status command.
+
+If the error says that the scenario or ability mapping is unexpected, confirm that the draft was created with `--catalog idpt-windows-collection` and that every selected ability comes from that packaged catalog. A different or partial ability set cannot use the reviewed IDPT scenario.
+
+If execution reports plan identity, host, technique, run identity, or evidence-integrity failure, treat the run as untrusted. Do not use its evidence for validation. Preserve the run-owned diagnostics, inspect the checkout and configuration, and create a new reviewed campaign after correcting the cause.
+
+If IDPT behavior succeeds but the report says telemetry is not configured, this is expected until matching offline EDR/SIEM observations are normalized and supplied to `campaign assess`. IDPT evidence verification and detection assessment are separate results.
+
 ## Local manager
 
-The manager must bind to loopback (`127.0.0.1`, `localhost`, or `::1`). It cannot bind to external interfaces. The browser workspace creates offline drafts and records rejection/cancellation only; approval and local emulation remain CLI actions.
+The manager must bind to loopback (`127.0.0.1`, `localhost`, or `::1`). It cannot bind to external interfaces. The browser workspace creates drafts and records rejection/cancellation. It can also approve and run a reviewed campaign through the fixed `local-synthetic` adapter after exact RoE-approver identity, campaign-specific typed confirmation, and integrity checks. `local-behavioral` and `idpt-local` execution remain CLI actions.
 
 See [CLI_REFERENCE.md](CLI_REFERENCE.md) for exact command options.

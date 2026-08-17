@@ -11,8 +11,11 @@ import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from adversaryflow.catalog import CATALOG_MANIFEST_FORMAT, catalog_release_record
 
 
 def project_version() -> str:
@@ -38,17 +41,24 @@ def build_release(output: str | Path = "artifacts/release") -> Path:
         shutil.rmtree(dist)
     subprocess.run([sys.executable, "-m", "build", "--outdir", str(destination)], cwd=ROOT, check=True)
     zip_path = destination / "adversaryflow-source.zip"
-    excluded = {".git", ".venv", "dist", "artifacts", "__pycache__", ".pytest_cache"}
+    excluded = {".git", ".venv", "dist", "artifacts", "__pycache__", ".pytest_cache", ".pytest-local"}
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in ROOT.rglob("*"):
             if not path.is_file() or any(part in excluded for part in path.relative_to(ROOT).parts):
                 continue
             archive.write(path, Path("adversaryflow") / path.relative_to(ROOT))
-    artifacts = sorted(path for path in destination.iterdir() if path.is_file())
-    manifest = {"format": "ADVERSARYFLOW-RELEASE-MANIFEST-1", "created_at": datetime.now(timezone.utc).isoformat(), "artifacts": [{"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size} for path in artifacts]}
-    (destination / "SHA256SUMS.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    catalog_dir = ROOT / "content" / "abilities"
+    catalog_records = []
+    for path in sorted(catalog_dir.glob("*.json")):
+        record = catalog_release_record(path)
+        record["path"] = path.relative_to(ROOT).as_posix()
+        catalog_records.append(record)
+    (destination / "catalog-manifest.json").write_text(json.dumps({"format": CATALOG_MANIFEST_FORMAT, "catalogs": catalog_records}, indent=2), encoding="utf-8")
     sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": project_version()}}, "components": [{"type": "library", "name": "PyYAML", "version": ">=6.0"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
     (destination / "sbom.cdx.json").write_text(json.dumps(sbom, indent=2), encoding="utf-8")
+    artifacts = sorted(path for path in destination.iterdir() if path.is_file())
+    manifest = {"format": "ADVERSARYFLOW-RELEASE-MANIFEST-1", "created_at": datetime.now(timezone.utc).isoformat(), "catalog_manifest": "catalog-manifest.json", "sbom": "sbom.cdx.json", "artifacts": [{"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size} for path in artifacts]}
+    (destination / "SHA256SUMS.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     signing_key = os.environ.get("ADVERSARYFLOW_RELEASE_GPG_KEY")
     if signing_key:
         sign_release(destination, signing_key)
@@ -74,7 +84,44 @@ def verify_release_signature(release_dir: str | Path, keyring: str | Path | None
 def verify_release(release_dir: str | Path) -> bool:
     root = Path(release_dir)
     manifest = json.loads((root / "SHA256SUMS.json").read_text(encoding="utf-8"))
-    return all((root / item["name"]).exists() and sha256(root / item["name"]) == item["sha256"] for item in manifest["artifacts"])
+    if manifest.get("format") != "ADVERSARYFLOW-RELEASE-MANIFEST-1":
+        return False
+    try:
+        items = manifest.get("artifacts")
+        if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+            return False
+        names = [item.get("name") for item in items]
+        if not names or len(names) != len(set(names)):
+            return False
+        if manifest.get("catalog_manifest") not in names or manifest.get("sbom") not in names:
+            return False
+        def release_file(name: str) -> Path | None:
+            if not isinstance(name, str):
+                return None
+            path = (root / name).resolve()
+            return path if path.parent == root.resolve() and path.exists() else None
+
+        catalog_path = release_file(manifest["catalog_manifest"])
+        sbom_path = release_file(manifest["sbom"])
+        if catalog_path is None or sbom_path is None:
+            return False
+        if "catalog_manifest" in manifest:
+            catalog_manifest = json.loads(catalog_path.read_text(encoding="utf-8"))
+            if catalog_manifest.get("format") != CATALOG_MANIFEST_FORMAT or not catalog_manifest.get("catalogs"):
+                return False
+        sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+        if sbom.get("bomFormat") != "CycloneDX" or sbom.get("metadata", {}).get("component", {}).get("name") != "adversaryflow":
+            return False
+        return all(
+            isinstance(item.get("name"), str)
+            and (root / item["name"]).resolve().parent == root.resolve()
+            and (root / item["name"]).exists()
+            and sha256(root / item["name"]) == item["sha256"]
+            and (root / item["name"]).stat().st_size == item["bytes"]
+            for item in items
+        )
+    except (KeyError, OSError, ValueError, TypeError):
+        return False
 
 
 if __name__ == "__main__":

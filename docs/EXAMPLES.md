@@ -18,6 +18,36 @@ adversaryflow draft --roe examples/roe.yaml --actor "APT29" --objective "validat
 
 `plan` is dry-run planning; `draft` uses the offline planner and validates the resulting draft against the RoE and catalog.
 
+## Enrich actor coverage
+
+```powershell
+adversaryflow intel-sync --actor "APT29" --platform windows --output artifacts/intel/apt29
+adversaryflow intel-sync --actor "APT29" --platform windows --output artifacts/intel/apt29 --mitre-only
+```
+
+`intel-sync` writes a reviewable synthetic-only coverage plan beneath the selected output directory. `--mitre-only` skips the CTID library lookup. Imported commands, payloads, and setup instructions are not retained.
+
+## Normalize and export telemetry
+
+```powershell
+adversaryflow telemetry normalize --source defender --input defender-export.json --output normalized.jsonl
+adversaryflow telemetry preflight --run-dir artifacts/runs/run-... --telemetry-file normalized.jsonl
+adversaryflow campaign assess --campaign-id campaign-... --telemetry-file normalized.jsonl
+adversaryflow telemetry export --run-dir artifacts/runs/run-... --format csv --output assessment.csv
+```
+
+These commands use offline files. They do not query a sensor or deploy a detection rule.
+
+## Detection mappings, coverage, and retesting
+
+```powershell
+adversaryflow detection export --output artifacts/detection-mappings
+adversaryflow coverage --campaign-root artifacts/campaigns
+adversaryflow campaign retest --campaign-id campaign-...
+```
+
+Detection export produces validation templates only. Coverage is read-only. Retesting creates a new immutable review draft from recorded unresolved gaps and still requires approval.
+
 ## Reviewable campaign
 
 ```powershell
@@ -52,4 +82,4 @@ adversaryflow guide --interactive
 adversaryflow manager --open
 ```
 
-The manager is loopback-only. It does not approve or execute a campaign.
+The manager is loopback-only. It can approve and run a reviewed campaign only through the fixed `local-synthetic` adapter after the named RoE approver enters the exact confirmation; `local-behavioral` and `idpt-local` execution remain CLI-only.

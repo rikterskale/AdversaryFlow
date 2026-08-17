@@ -141,8 +141,12 @@ def test_gap_retest_is_immutable_and_coverage_is_traceable(monkeypatch, tmp_path
     roe, abilities, source = _completed_campaign(root)
     retest = create_gap_retest(root, source.name, roe, abilities)
     assert retest["retest_of"] == source.name
+    assert retest["source_run_id"] == "run-source"
+    assert len(retest["source_gap_report_sha256"]) == 64
+    assert Path(retest["retest_artifact"]).is_file()
     retest_record = json.loads((root / retest["campaign_id"] / "retest.json").read_text(encoding="utf-8"))
     assert retest_record["source_campaign_id"] == source.name
+    assert retest_record["source_gap_report_sha256"] == retest["source_gap_report_sha256"]
     dashboard = coverage_dashboard(root)
     assert dashboard["summary"]["campaigns"] == 2
     assert dashboard["summary"]["gaps"] >= 1
@@ -158,6 +162,23 @@ def test_gap_retest_rejects_resolved_source(monkeypatch, tmp_path):
     report = json.loads(report_path.read_text(encoding="utf-8")); report["gaps"] = []
     report_path.write_text(json.dumps(report), encoding="utf-8")
     with pytest.raises(ValueError, match="no unresolved"):
+        create_gap_retest(root, source.name, roe, abilities)
+
+
+def test_gap_retest_requires_completed_source_and_gap_report(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "campaigns"
+    roe, abilities, source = _completed_campaign(root)
+    metadata_path = source / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["status"] = "awaiting-approval"
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="completed source"):
+        create_gap_retest(root, source.name, roe, abilities)
+    metadata["status"] = "completed"
+    metadata["run_dir"] = str(tmp_path / "missing-run")
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="no telemetry gap report"):
         create_gap_retest(root, source.name, roe, abilities)
 
 

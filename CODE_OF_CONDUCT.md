@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at [VERIFY: code-of-conduct reporting contact].
+No repository-specific Code of Conduct reporting contact is declared in this checkout. Until maintainers publish one, report concerns through the community leaders or owning organization responsible for this project, and do not publish private information in public issues.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

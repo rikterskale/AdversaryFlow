@@ -117,7 +117,7 @@ def test_cli_explain_lists_all_codes():
 
 
 def test_cli_quiet_flag_suppresses_full_payload():
-    result = _cli("validate", "examples/roe.yaml", "--quiet")
+    result = _cli("--quiet", "validate", "examples/roe.yaml")
     # Quiet mode prints no JSON braces, just a short status-derived line or nothing.
     assert "{" not in result.stdout
 

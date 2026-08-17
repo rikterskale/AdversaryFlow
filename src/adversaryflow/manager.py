@@ -1,6 +1,7 @@
 """Loopback-only, simulation-only campaign manager and JSON API."""
 
 import json
+import hashlib
 import threading
 import webbrowser
 from importlib.resources import files
@@ -36,17 +37,17 @@ from .detection_mappings import mappings as detection_rule_mappings
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow Campaign Guide</title><style>
 :root{color-scheme:dark;--bg:#08111f;--panel:#112239;--line:#31516e;--text:#edf5fc;--muted:#b8c9db;--accent:#62d4e8;--safe:#8de0ac;--warn:#f3cb72}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 0,#143a61 0,var(--bg) 40%);color:var(--text);font:16px/1.5 system-ui,sans-serif}main{max-width:1060px;margin:auto;padding:42px 20px 80px}h1{font-size:clamp(2.2rem,5vw,3.6rem);line-height:1.05;margin:.2rem 0}.eyebrow{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem}.lede,.muted{color:var(--muted)}.notice,.card{background:linear-gradient(145deg,#142940,#0e1b2d);border:1px solid var(--line);border-radius:16px;padding:22px;margin-top:20px}.notice{border-color:#277291}.journey{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-top:24px}.step{margin:0;padding:13px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;text-align:left;cursor:pointer}.step:hover,.step[aria-current="step"]{border-color:var(--accent);background:#123552}.step b{display:block;color:var(--accent);font-size:.8rem}.step span{display:block;font-weight:750;margin:4px 0}.step small{color:var(--muted)}.checklist{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.check{padding:6px 10px;border:1px solid var(--line);border-radius:99px;color:var(--muted)}.check.done{border-color:var(--safe);color:var(--safe)}.layout{display:grid;grid-template-columns:1fr 1fr;gap:22px}.next{border-left:4px solid var(--safe);padding:12px 14px;background:#112f29;border-radius:0 8px 8px 0}code,pre{display:block;white-space:pre-wrap;overflow:auto;background:#07111e;padding:13px;border-radius:8px;color:#d9f4fa}button{margin:12px 8px 0 0;padding:11px 15px;background:var(--accent);border:0;border-radius:8px;color:#06212a;font:700 15px system-ui;cursor:pointer}button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}button.warn{background:transparent;color:var(--warn);border:1px solid var(--warn)}button:disabled{opacity:.45;cursor:not-allowed}label{display:block;margin-top:12px;font-weight:650}input,select{width:100%;margin-top:4px;padding:11px;background:#07111e;color:var(--text);border:1px solid #41647f;border-radius:8px;font:inherit}details{border-top:1px solid var(--line);padding:12px 0}summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;padding:10px 7px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted)}a{color:var(--accent)}.inline button{margin-top:4px;padding:6px 9px;font-size:.8rem}@media(max-width:760px){main{padding-top:28px}.journey,.layout{grid-template-columns:1fr}.step{min-height:auto}table{display:block;overflow:auto}}
 </style></head><body><main>
-<p class="eyebrow">Local-only campaign workspace</p><h1>Start a safe campaign in five clear steps.</h1><p class="lede">Follow one step at a time. This guide can run an allowlisted health check and create an offline draft. It never contacts an external target, creates an exploit, or bypasses approval.</p><div class="notice"><strong>Boundary:</strong> browser actions are limited to local drafts, inspection, rejection, and cancellation. The named RoE approver—not this page—authorizes local synthetic emulation in the CLI.</div>
-<nav class="journey" aria-label="Campaign walkthrough"><button class="step" onclick="showStep(0)"><b>Step 1</b><span>Check</span><small>Verify setup.</small></button><button class="step" onclick="showStep(1)"><b>Step 2</b><span>Draft</span><small>Save offline plan.</small></button><button class="step" onclick="showStep(2)"><b>Step 3</b><span>Review</span><small>Inspect scope.</small></button><button class="step" onclick="showStep(3)"><b>Step 4</b><span>Approve</span><small>Use CLI.</small></button><button class="step" onclick="showStep(4)"><b>Step 5</b><span>Learn</span><small>Review report.</small></button></nav>
+<p class="eyebrow">Local-only campaign workspace</p><h1>Start a safe campaign in five clear steps.</h1><p class="lede">Follow one step at a time. This guide can run an allowlisted health check, create an offline draft, and—after explicit checks—run the fixed local-synthetic workflow. It never contacts an external target, creates an exploit, or bypasses approval.</p><div class="notice"><strong>Boundary:</strong> browser actions remain local and use only the reviewed fixed local-synthetic adapter. Approval requires the named RoE approver, typed campaign-specific confirmation, and integrity verification.</div>
+<nav class="journey" aria-label="Campaign walkthrough"><button class="step" onclick="showStep(0)"><b>Step 1</b><span>Check</span><small>Verify setup.</small></button><button class="step" onclick="showStep(1)"><b>Step 2</b><span>Draft</span><small>Save offline plan.</small></button><button class="step" onclick="showStep(2)"><b>Step 3</b><span>Review</span><small>Inspect scope.</small></button><button class="step" onclick="showStep(3)"><b>Step 4</b><span>Approve</span><small>Confirm and run.</small></button><button class="step" onclick="showStep(4)"><b>Step 5</b><span>Learn</span><small>Review report.</small></button></nav>
 <section class="notice"><strong>Your setup checklist</strong><p class="muted">Saved in this browser only. Completed items help you resume without repeating setup.</p><div class="checklist" id="setup-checklist" aria-live="polite"></div></section>
 <section class="card" id="walkthrough" aria-live="polite"><p class="eyebrow" id="guide-count">Guided walkthrough · step 1 of 5</p><h2 id="guide-title">Check your setup</h2><p id="guide-detail">Confirm the local environment, RoE, and safe ability catalog are healthy.</p><code id="guide-command">adversaryflow doctor --json</code><p class="next" id="guide-next"><strong>Do this now:</strong> Run the health check. Continue only after it passes.</p><button id="run-safe-check" onclick="runDoctor()">Run health check here</button><button class="secondary" id="guide-back" onclick="moveStep(-1)">Back</button><button id="guide-forward" onclick="moveStep(1)">Next: create a draft</button><div class="notice" id="safe-result" hidden></div></section>
 <section class="card" id="draft-helper"><h2>Create a reviewable offline draft</h2><p class="muted">This stores a locally generated, RoE-validated plan for review. It does not use a hosted provider and does not run an emulation.</p><p id="draft-context" class="notice">Loading the local RoE scope and safe catalog…</p><div class="layout"><div><label>Threat actor<input id="actor" value="APT29" maxlength="200" oninput="updateDraftPreview()"></label><label>Defensive objective<input id="objective" value="validate endpoint process visibility" maxlength="200" oninput="updateDraftPreview()"></label><label>RoE-approved target<select id="target" disabled onchange="updateDraftPreview()"><option>Loading approved targets…</option></select></label><p class="muted">Targets come from the active local RoE; the server validates scope again before saving.</p><button id="create-draft" onclick="createDraft()" disabled>Create safe offline draft</button><button class="secondary" id="create-example" onclick="createSafeExample()" disabled>Create safe example draft</button><button class="secondary" onclick="copyCommand()">Copy equivalent CLI command</button></div><div><h3 id="draft-heading">Before you save</h3><pre id="command">Waiting for the active local RoE before a draft can be prepared.</pre><p class="next" id="command-next"><strong>This action creates:</strong> a local, offline review draft. It will not contact a target, run a command, use a hosted provider, approve a campaign, or start emulation.</p></div></div></section>
-<section class="card"><h2>Saved campaigns</h2><p class="muted">Inspect every plan before scheduling. You may record a rejection or cancellation here; the manager cannot approve or execute a campaign.</p><button onclick="loadCampaigns()">Refresh campaign list</button><label>Show status<select id="status-filter" onchange="loadCampaigns()"><option value="all">All campaigns</option><option value="awaiting-approval">Awaiting approval</option><option value="completed">Completed</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select></label><div id="portfolio" class="muted">Loading local campaign summary…</div><div id="campaigns" class="muted">Loading local campaigns…</div><div id="campaign-detail" hidden></div></section>
-<section class="card"><h2>What happens after review?</h2><div class="layout"><div><h3>Approve only when scheduled</h3><code>adversaryflow campaign --campaign-id campaign-... --approve --approver &lt;RoE-approver&gt;</code><p class="muted">The CLI verifies the draft, RoE, and ability catalog integrity before local synthetic emulation.</p></div><div><h3>Learn and retest</h3><p class="muted">Open a completed report, use detection gaps to define a new objective, and draft a new campaign instead of modifying an approved one.</p></div></div></section>
+<section class="card"><h2>Saved campaigns</h2><p class="muted">Inspect every plan before scheduling. You may record a rejection or cancellation here; the named RoE approver may approve the fixed local-synthetic workflow after its readiness and confirmation checks.</p><button onclick="loadCampaigns()">Refresh campaign list</button><label>Show status<select id="status-filter" onchange="loadCampaigns()"><option value="all">All campaigns</option><option value="awaiting-approval">Awaiting approval</option><option value="completed">Completed</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option></select></label><div id="portfolio" class="muted">Loading local campaign summary…</div><div id="campaigns" class="muted">Loading local campaigns…</div><div id="campaign-detail" hidden></div></section>
+<section class="card"><h2>What happens after review?</h2><div class="layout"><div><h3>Approve only when scheduled</h3><p class="muted">Use the approval panel after the named RoE approver confirms the campaign-specific text. The manager verifies the draft, RoE, and ability catalog integrity before local synthetic emulation.</p></div><div><h3>Learn and retest</h3><p class="muted">Open a completed report, use detection gaps to define a new objective, and draft a new campaign instead of modifying an approved one.</p></div></div></section>
 <section class="card"><h2>Common questions</h2><details><summary>My setup is not ready.</summary><p>Run <code>adversaryflow doctor --fix --json</code>. It only creates local artifact folders, then explains remaining problems.</p></details><details><summary>My provider is unavailable.</summary><p>The browser draft flow is always offline. For CLI help, run <code>adversaryflow provider diagnose</code> and use <code>--fallback-offline</code> for a safe rehearsal.</p></details><details><summary>I prefer the terminal.</summary><p>Run <code>adversaryflow guide --interactive</code> for the same step-by-step workflow.</p></details></section>
 </main><script>
 function q(id){return document.getElementById(id)}function esc(v){let d=document.createElement('div');d.textContent=String(v??'');return d.innerHTML}async function api(path,options={}){let r=await fetch(path,options),d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed');return d}
-const steps=[['Check your setup','Confirm the local environment, RoE, and safe ability catalog are healthy.','adversaryflow doctor --json','Run the health check. Continue only after it passes.','Next: create a draft'],['Create a reviewable offline draft','Describe a defensive objective and an RoE-approved target. This saves an offline plan for review; it does not run an emulation.','Use the draft helper below.','Create the local draft, then inspect its scope and selected abilities.','Next: review the draft'],['Review the saved plan','Inspect the campaign record for scope, selected abilities, telemetry, assumptions, and stop conditions.','Use Inspect in Saved campaigns.','Reject or cancel an inappropriate draft; do not edit an approval-bound plan.','Next: obtain approval'],['Obtain explicit approval','Only the approver named in the RoE can authorize local synthetic emulation. This action is deliberately CLI-only.','adversaryflow campaign --campaign-id campaign-... --approve --approver <RoE-approver>','Confirm schedule and scope, then use the CLI approval command.','Next: learn from results'],['Learn and retest','Open a completed report, review detection gaps, and create a focused new draft for any retest.','Open report in Saved campaigns.','Do not modify an approved campaign. Use its report to define a new defensive objective.','Finish walkthrough']];let currentStep=0;
+const steps=[['Check your setup','Confirm the local environment, RoE, and safe ability catalog are healthy.','adversaryflow doctor --json','Run the health check. Continue only after it passes.','Next: create a draft'],['Create a reviewable offline draft','Describe a defensive objective and an RoE-approved target. This saves an offline plan for review; it does not run an emulation.','Use the draft helper below.','Create the local draft, then inspect its scope and selected abilities.','Next: review the draft'],['Review the saved plan','Inspect the campaign record for scope, selected abilities, telemetry, assumptions, and stop conditions.','Use Inspect in Saved campaigns.','Reject or cancel an inappropriate draft; do not edit an approval-bound plan.','Next: obtain approval'],['Obtain explicit approval','Only the approver named in the RoE can authorize local synthetic emulation. Enter the exact approver name and campaign-specific confirmation in the approval panel.','Use the approval panel in the campaign review.','Confirm schedule and scope, then approve and run the fixed local-synthetic workflow.','Next: learn from results'],['Learn and retest','Open a completed report, review detection gaps, and create a focused new draft for any retest.','Open report in Saved campaigns.','Do not modify an approved campaign. Use its report to define a new defensive objective.','Finish walkthrough']];let currentStep=0;
 const checklistItems=[['scope','Scope loaded'],['health','Health check passed'],['draft','Draft saved'],['review','Campaign reviewed']];function checklist(){let done=JSON.parse(localStorage.getItem('adversaryflow-setup')||'{}');q('setup-checklist').innerHTML=checklistItems.map(([id,label])=>'<span class="check '+(done[id]?'done':'')+'">'+(done[id]?'✓ ':'○ ')+label+'</span>').join('')}function complete(id){let done=JSON.parse(localStorage.getItem('adversaryflow-setup')||'{}');done[id]=true;localStorage.setItem('adversaryflow-setup',JSON.stringify(done));checklist()}
 function showStep(index){currentStep=Math.max(0,Math.min(steps.length-1,index));let s=steps[currentStep];q('guide-count').textContent='Guided walkthrough · step '+(currentStep+1)+' of 5';q('guide-title').textContent=s[0];q('guide-detail').textContent=s[1];q('guide-command').textContent=s[2];q('guide-next').innerHTML='<strong>Do this now:</strong> '+s[3];q('guide-back').disabled=currentStep===0;q('guide-forward').textContent=s[4];q('run-safe-check').hidden=currentStep!==0;document.querySelectorAll('.step').forEach((el,i)=>el.setAttribute('aria-current',i===currentStep?'step':'false'))}function moveStep(delta){showStep(currentStep+delta)}
 function copyDoctorFix(command){navigator.clipboard.writeText(command);q('safe-result').insertAdjacentHTML('beforeend','<p class="muted">Copied: '+esc(command)+'</p>')}function doctorSummary(result){if(result.passed)return '<strong>Setup is ready.</strong><p class="muted">Your local safety checks passed. You can continue to create an offline draft.</p>';let fixes=result.guided_fixes||[];if(!fixes.length)return '<strong>Setup needs attention.</strong><p>Run <code>adversaryflow doctor --json</code> in your terminal for details.</p>';return '<strong>Setup needs attention.</strong><p>Work through these steps, then run the check again.</p><ol>'+fixes.map(f=>'<li><strong>'+esc(f.check)+':</strong> '+esc(f.problem)+'<br><code>'+esc(f.fix)+'</code><button class="secondary" onclick="copyDoctorFix(this.previousElementSibling.textContent)">Copy fix</button></li>').join('')+'</ol>'}async function runDoctor(){let b=q('run-safe-check'),o=q('safe-result');b.disabled=true;b.textContent='Checking…';try{let result=await api('/api/doctor',{method:'POST'});o.hidden=false;o.innerHTML=doctorSummary(result);b.textContent=result.passed?'Health check passed':'Health check needs attention';if(result.passed)complete('health');q('guide-next').innerHTML=result.passed?'<strong>Ready:</strong> Your local checks passed. Continue to create a draft.':'<strong>Pause:</strong> Use the copyable fix above, then run the check again.'}catch(e){o.hidden=false;o.textContent='Health check could not run: '+e.message+' Try adversaryflow doctor --json in your terminal.';b.textContent='Try health check again'}finally{b.disabled=false}}
@@ -118,6 +119,29 @@ def _input(data: dict[str, object], name: str, limit: int = 200) -> str:
     if len(cleaned) > limit:
         raise ValueError(f"{name} must be at most {limit} characters")
     return cleaned
+
+
+def _safety_path() -> Path:
+    return Path("artifacts/safety/kill-switch.json")
+
+
+def _safety_state() -> dict[str, object]:
+    path = _safety_path()
+    if not path.is_file():
+        return {"kill_switch": False, "mode": "safe-default", "local_lab_only": True}
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"kill_switch": True, "mode": "fail-closed", "local_lab_only": True}
+    return {"kill_switch": bool(state.get("kill_switch", True)), "mode": "killed" if state.get("kill_switch", True) else "safe-default", "local_lab_only": True, "updated_at": state.get("updated_at")}
+
+
+def _set_kill_switch(enabled: bool) -> dict[str, object]:
+    path = _safety_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    path.write_text(json.dumps({"schema": "ADVERSARYFLOW-SAFETY-1", "kill_switch": enabled, "updated_at": now}, indent=2) + "\n", encoding="utf-8")
+    return _safety_state()
 
 
 def _offline_draft(campaign_root: str, roe_path: str, catalog_path: str, data: dict[str, object]) -> dict[str, object]:
@@ -270,6 +294,28 @@ def _operator_readiness(roe_path: str, catalog_path: str) -> dict[str, object]:
     return {"roe": context["roe"], "capabilities": capabilities, "adapter": adapter_readiness(load_catalog(active_catalog))}
 
 
+def _release_status(release_dir: str = "artifacts/release") -> dict[str, object]:
+    root = Path(release_dir)
+    manifest_path = root / "SHA256SUMS.json"
+    if not manifest_path.is_file():
+        return {"available": False, "directory": str(root), "next": "Build a release with python scripts/release.py artifacts/release."}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        items = manifest.get("artifacts", [])
+        names = [item.get("name") for item in items]
+        verified = bool(names) and len(names) == len(set(names))
+        for item in items:
+            path = (root / item["name"]).resolve()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            verified = verified and path.parent == root.resolve() and digest == item["sha256"] and path.stat().st_size == item["bytes"]
+        catalog = manifest.get("catalog_manifest")
+        sbom = manifest.get("sbom")
+        verified = verified and catalog in names and sbom in names
+        return {"available": True, "directory": str(root), "verified": verified, "artifact_count": len(names), "artifacts": names, "catalog_manifest": catalog, "sbom": sbom, "signature": (root / "SHA256SUMS.json.asc").is_file()}
+    except (OSError, KeyError, TypeError, ValueError):
+        return {"available": True, "directory": str(root), "verified": False, "next": "Rebuild the release and rerun verification."}
+
+
 def _reset_saved_campaign(campaign_root: str, campaign_id: str, data: dict[str, object]) -> dict[str, object]:
     if _input(data, "confirmation", 300) != f"RESET {campaign_id}":
         raise PermissionError(f"Type 'RESET {campaign_id}' to permanently remove this saved campaign")
@@ -297,6 +343,8 @@ def _approve_and_run(campaign_root: str, roe_path: str, catalog_path: str, campa
     """Approve and run one reviewed campaign through the fixed local-synthetic adapter."""
     approver = _input(data, "approver")
     confirmation = _input(data, "confirmation")
+    if _safety_state()["kill_switch"]:
+        raise PermissionError("Local kill switch is active; clear it before approving any campaign")
     if confirmation != f"APPROVE {campaign_id}":
         raise PermissionError(f"Type 'APPROVE {campaign_id}' to confirm approval and local synthetic emulation")
     roe = _manager_roe(roe_path)
@@ -491,6 +539,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/assets/manager.css": self._send(200, files("adversaryflow.resources").joinpath("manager.css").read_text(encoding="utf-8"), "text/css; charset=utf-8")
             elif path == "/assets/manager.js": self._send(200, files("adversaryflow.resources").joinpath("manager.js").read_text(encoding="utf-8"), "application/javascript; charset=utf-8")
             elif path == "/api/health": self._send(200, {"ok": True, "mode": "local-guided-manager"})
+            elif path == "/api/safety": self._send(200, _safety_state())
             elif path == "/api/context": self._send(200, _manager_context(roe_path, catalog_path))
             elif path == "/api/provider": self._send(200, _provider_status())
             elif path == "/api/provider/compatibility": self._send(200, _provider_compatibility())
@@ -501,6 +550,7 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             elif path == "/api/actor-profiles": self._send(200, {"profiles": list_actor_profiles()})
             elif path == "/api/benign-procedures": self._send(200, benign_procedure_catalog())
             elif path == "/api/coverage": self._send(200, coverage_dashboard(campaign_root))
+            elif path == "/api/release": self._send(200, _release_status())
             elif path.startswith("/api/actor-profiles/"):
                 name = path.removeprefix("/api/actor-profiles/")
                 if path.endswith("/plan"): self._send(200, plan_actor_profile(name.removesuffix("/plan")))
@@ -529,6 +579,8 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
             path = urlparse(self.path).path
             try:
                 if path == "/api/doctor": self._send(200, run_doctor())
+                elif path == "/api/safety/kill": self._send(200, _set_kill_switch(True))
+                elif path == "/api/safety/clear": self._send(200, _set_kill_switch(False))
                 elif path == "/api/doctor/fix": self._send(200, run_doctor(fix=True))
                 elif path == "/api/support-bundle": self._send(201, {"success": True, "bundle": str(create_support_bundle("artifacts/support", roe_path))})
                 elif path == "/api/demo": self._send(200, _run_demo(roe_path, catalog_path, self._body()))
@@ -603,9 +655,10 @@ def make_handler(campaign_root: str, roe_path: str = "examples/roe.yaml", catalo
     return Handler
 
 
-def serve(host: str = "127.0.0.1", port: int = 8787, campaign_root: str = "artifacts/campaigns", open_browser: bool = False, roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json") -> None:
+def serve(host: str = "127.0.0.1", port: int = 8787, campaign_root: str = "artifacts/campaigns", open_browser: bool = False, roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json", quiet: bool = False) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}: raise ValueError("Manager must bind to loopback only")
     server = ThreadingHTTPServer((host, port), make_handler(campaign_root, roe_path, catalog_path))
-    url = f"http://{host}:{server.server_port}"; print(f"AdversaryFlow Campaign Guide listening on {url}")
+    url = f"http://{host}:{server.server_port}"
+    if not quiet: print(f"AdversaryFlow Campaign Guide listening on {url}")
     if open_browser: threading.Timer(0.2, webbrowser.open, args=(url,)).start()
     server.serve_forever()

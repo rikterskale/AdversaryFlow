@@ -10,7 +10,9 @@ def build_campaign_report(campaign_dir: str | Path, run_dir: str | Path | None =
     draft = json.loads((root / "draft.json").read_text(encoding="utf-8"))
     approval_path = root / "approval.json"
     approval = json.loads(approval_path.read_text(encoding="utf-8")) if approval_path.exists() else None
-    report: dict[str, Any] = {"campaign": metadata, "draft": draft, "approval": approval, "run": None}
+    retest_path = root / "retest.json"
+    retest = json.loads(retest_path.read_text(encoding="utf-8")) if retest_path.exists() else None
+    report: dict[str, Any] = {"campaign": metadata, "draft": draft, "approval": approval, "run": None, "retest": retest}
     selected_run = Path(run_dir) if run_dir else (Path(metadata["run_dir"]) if metadata.get("run_dir") else None)
     if selected_run and (selected_run / "telemetry-gap-report.json").exists():
         report["run"] = json.loads((selected_run / "telemetry-gap-report.json").read_text(encoding="utf-8"))
@@ -34,11 +36,13 @@ def write_campaign_reports(campaign_dir: str | Path, run_dir: str | Path | None 
         f"- Detections fired: `{run.get('detections_fired', 0)}`",
         f"- Detection gaps: `{run.get('detection_gap_count', 0)}`", "",
         "## Detection gaps", "", *gap_lines,
+        "", "## Retest provenance", "", json.dumps(report["retest"] or {"status": "not a retest draft"}, indent=2),
         "", "## Safety note", "", "This report describes authorized, local synthetic validation. Behavior success does not prove production detection success.",
     ]
     markdown = root / "campaign-report.md"
     markdown.write_text("\n".join(lines) + "\n", encoding="utf-8")
     html_items = "".join(f"<li><strong>{html.escape(str(item.get('technique_id', item.get('category', 'unknown'))))}</strong>: {html.escape(str(item.get('status', item.get('description', 'missing'))))}</li>" for item in gaps) or "<li>None recorded.</li>"
     html_report = root / "campaign-report.html"
-    html_report.write_text(f"<!doctype html><html><head><meta charset='utf-8'><title>AdversaryFlow Campaign Report</title></head><body><h1>AdversaryFlow Campaign Report</h1><p><b>Campaign:</b> {html.escape(report['campaign']['campaign_id'])}</p><p><b>Actor:</b> {html.escape(report['draft']['actor'])}</p><p><b>Objective:</b> {html.escape(report['draft']['objective'])}</p><h2>Results</h2><ul><li>Behavior success: {html.escape(str(run.get('behavior_success', 'not-run')))}</li><li>Telemetry observed: {run.get('telemetry_observed', 0)}</li><li>Detections fired: {run.get('detections_fired', 0)}</li><li>Detection gaps: {run.get('detection_gap_count', 0)}</li></ul><h2>Detection gaps</h2><ul>{html_items}</ul><p>Behavior, telemetry, detection, and cleanup are independent outcomes.</p></body></html>\n", encoding="utf-8")
+    retest_text = html.escape(json.dumps(report["retest"] or {"status": "not a retest draft"}, indent=2))
+    html_report.write_text(f"<!doctype html><html><head><meta charset='utf-8'><title>AdversaryFlow Campaign Report</title></head><body><h1>AdversaryFlow Campaign Report</h1><p><b>Campaign:</b> {html.escape(report['campaign']['campaign_id'])}</p><p><b>Actor:</b> {html.escape(report['draft']['actor'])}</p><p><b>Objective:</b> {html.escape(report['draft']['objective'])}</p><h2>Results</h2><ul><li>Behavior success: {html.escape(str(run.get('behavior_success', 'not-run')))}</li><li>Telemetry observed: {run.get('telemetry_observed', 0)}</li><li>Detections fired: {run.get('detections_fired', 0)}</li><li>Detection gaps: {run.get('detection_gap_count', 0)}</li></ul><h2>Detection gaps</h2><ul>{html_items}</ul><h2>Retest provenance</h2><pre>{retest_text}</pre><p>Behavior, telemetry, detection, and cleanup are independent outcomes.</p></body></html>\n", encoding="utf-8")
     return markdown, html_report

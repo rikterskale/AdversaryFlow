@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from .audit import AuditLog
+from . import __version__
 from .ai import CampaignRequest, OfflinePlanner, validate_ai_draft
 from .emulation import curated_linux_catalog_path, curated_macos_catalog_path, curated_windows_catalog_path, default_catalog_path, idpt_windows_collection_catalog_path, load_catalog
 from .adapters import adapter_readiness
@@ -26,9 +27,11 @@ from .planner import build_plan
 from .coverage import coverage_dashboard
 from .detection_mappings import write_bundle as write_detection_bundle
 from .retest import create_gap_retest
+from .product_tools import export_executive_summary, search_campaign_archive, update_campaign_archive, update_campaign_tags
 from .telemetry import SUPPORTED_SOURCES, export_assessment, load_telemetry_records, normalize_export, planned_sensor_preflight, sensor_preflight, write_normalized
 from .output import ExitCode, EXIT_CODE_HELP, respond, progress, dry_run_banner, severity, supports_color
-from .completion import completion_script, SUPPORTED_SHELLS
+from .completion import SUPPORTED_SHELLS
+from .product_features import adapter_compatibility, author_catalog, branch_campaign, cleanup_retention, coverage_trends, import_detection_rules, list_campaign_templates, retention_preview, save_campaign_template, schedule_retest, score_detection_rules
 
 
 def load_roe(path: str) -> RulesOfEngagement:
@@ -126,6 +129,98 @@ def _doctor_human(result: dict, *, enabled: bool) -> str:
     return "\n".join(lines)
 
 
+def _why(technique: str, catalog_path: str) -> dict[str, object]:
+    chosen = technique.strip().upper()
+    abilities = [a for a in load_catalog(catalog_path) if a.technique_id == chosen or a.technique_id.startswith(chosen + ".")]
+    return {"technique": chosen, "boundary": "This explains reviewed local synthetic behavior only; it is not an intrusion procedure.", "abilities": [{"name": a.name, "technique_id": a.technique_id, "what_it_does_in_the_lab": a.simulation_action, "expected_detections": [t.description for t in a.expected_telemetry], "safety": "Fixed, local, simulation-only action; no remote execution or target contact."} for a in abilities]}
+
+
+def _explain_last(run_dir: str | None, output: str | None) -> dict[str, object]:
+    root = Path(run_dir) if run_dir else Path("artifacts/runs")
+    candidates = [p for p in root.glob("**/telemetry-gap-report.json") if p.is_file()]
+    if not candidates:
+        raise FileNotFoundError("No telemetry-gap-report.json was found under the run directory")
+    report_path = max(candidates, key=lambda p: p.stat().st_mtime)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    gaps = report.get("gaps", report.get("detection_gaps", []))
+    if not isinstance(gaps, list): gaps = []
+    lines = ["# Last local run", "", f"Source: `{report_path.parent}`", "", f"Detection gaps: {len(gaps)}", "", "## What to fix next", ""]
+    lines.extend(f"- {item.get('technique_id', item.get('ability_id', 'unknown'))}: review expected telemetry and retest the missing signal" for item in gaps[:3] if isinstance(item, dict))
+    result = {"run_dir": str(report_path.parent), "gap_count": len(gaps), "top_gaps": gaps[:3]}
+    if output:
+        Path(output).write_text("\n".join(lines) + "\n", encoding="utf-8"); result["markdown"] = output
+    return result
+
+
+def interactive_workflow(roe_path: str = "examples/roe.yaml", catalog_path: str = "content/abilities/catalog.json", campaign_root: str = "artifacts/campaigns") -> None:
+    """Run the safe MVP workflow as a guided terminal conversation."""
+    print("AdversaryFlow interactive guide — LOCAL LAB ONLY")
+    print("I will explain each step. Nothing executes without an explicit approval phrase.\n")
+    doctor = run_doctor()
+    print(f"[1/5] Local readiness: {'ready' if doctor['passed'] else 'needs attention'}")
+    if not doctor["passed"]:
+        print("I can apply only safe local folder fixes; no target or provider is contacted.")
+        if input("Apply the safe local fix now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
+            doctor = run_doctor(fix=True)
+            print("Readiness refreshed: " + ("ready" if doctor["passed"] else "still needs attention"))
+        if not doctor["passed"]:
+            print("Pause here, fix the listed readiness issues, then restart with: adversaryflow")
+            return
+    def ask(label: str, default: str) -> str:
+        value = input(f"{label} [{default}]: ").strip()
+        return value or default
+    actor = ask("[2/5] Who are you modeling for defensive validation?", "APT29")
+    objective = ask("What defensive outcome do you want to validate?", "validate endpoint process visibility")
+    target = ask("RoE-approved target", "local-lab")
+    platform = ask("Lab platform", "linux")
+    print("\n[3/5] Building a fixed offline draft. This saves a reviewable plan only.")
+    roe = load_roe(roe_path); abilities = load_catalog(catalog_path)
+    draft = OfflinePlanner().draft(CampaignRequest(actor, target, objective, platform), abilities)
+    validate_ai_draft(draft, roe, abilities)
+    integrity = campaign_integrity_hashes(draft, roe, abilities)
+    campaign_dir = save_campaign_draft(draft, integrity["plan_hash"], "offline", campaign_root, roe_hash=integrity["roe_sha256"], catalog_hash=integrity["catalog_sha256"], provider_metadata={"provider": "offline", "status": "interactive"})
+    print(f"[4/5] Draft saved as {campaign_dir.name}. Review its scope, abilities, telemetry, and stop conditions.")
+    if input("Open the read-only JSON review now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
+        print(json.dumps(inspect_campaign(campaign_root, campaign_dir.name), indent=2))
+    if input("Proceed to the approval checkpoint? [y/N] ").strip().lower() not in {"y", "yes"}:
+        print(f"[5/5] Done. Review later with: adversaryflow campaign inspect --campaign-id {campaign_dir.name}")
+        return
+    approver = ask("Named RoE approver", roe.approver_name)
+    print("Approval starts only the fixed local synthetic adapter; it does not contact an external target.")
+    if input(f"Type APPROVE {campaign_dir.name} to continue: ").strip() != f"APPROVE {campaign_dir.name}":
+        print("[5/5] Approval cancelled. The draft remains reviewable and no run started.")
+        return
+    result = complete_saved_campaign(campaign_root, campaign_dir.name, roe, abilities, approver, "artifacts/runs")
+    print(f"[5/5] Local synthetic run complete: {result.get('run_dir', 'see campaign record')}")
+
+
+def completion_script(shell: str) -> str:
+    commands = "interactive validate version why explain-last plan intel-sync draft demo doctor support-bundle capabilities adapter guide provider campaign telemetry detection coverage archive manager completion config template schedule retention branch catalog adapters"
+    if shell == "bash":
+        return f'_adversaryflow() {{ COMPREPLY=( $(compgen -W "{commands}" -- "${{COMP_WORDS[1]}}") ); }}\ncomplete -F _adversaryflow adversaryflow\n'
+    if shell == "zsh":
+        return f'#compdef adversaryflow\n_arguments "1:command:({commands})"\n'
+    if shell == "fish":
+        return f'complete -c adversaryflow -f -a "{commands}"\n'
+    return f'Register-ArgumentCompleter -Native -CommandName adversaryflow -ScriptBlock {{ param($wordToComplete) "{commands}" -split " " | Where-Object {{ $_ -like "$wordToComplete*" }} }}\n'
+
+
+CONFIG_KEYS = {"actor", "target", "objective", "platform", "catalog", "roe", "campaign_root", "output", "adapter", "fallback_offline"}
+
+
+def load_cli_config(path: str | Path) -> dict[str, object]:
+    try:
+        config = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not load config {path}: {exc}") from exc
+    if not isinstance(config, dict):
+        raise ValueError("config must contain a JSON object")
+    unknown = sorted(set(config) - CONFIG_KEYS)
+    if unknown:
+        raise ValueError(f"config contains unsupported keys: {', '.join(unknown)}")
+    return config
+
+
 def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -> str:
     """Return a safe, copyable campaign walkthrough without executing a campaign."""
     if interactive:
@@ -173,15 +268,29 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning")
+    parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning", epilog="Quick start: doctor --json, guide, campaign --actor APT29 --objective \"validate endpoint process visibility\", then campaign inspect --campaign-id ID.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--config", help="optional JSON file containing shared CLI defaults")
+    parser.add_argument("--quiet", action="store_true", help="suppress non-essential progress text")
+    parser.add_argument("--interactive", action="store_true", help="launch the guided terminal workflow")
+    # Output-mode flags shared by every subcommand (place after the command name).
     io_parent = argparse.ArgumentParser(add_help=False)
     io_group = io_parent.add_argument_group("output")
     io_group.add_argument("--json", action="store_true", help="force machine-readable JSON output")
     io_group.add_argument("--human", action="store_true", help="force human-readable output even when piped")
-    io_group.add_argument("--quiet", action="store_true", help="print only a terse status line")
     io_group.add_argument("--verbose", action="store_true", help="include extra detail where available")
     io_group.add_argument("--no-color", action="store_true", help="disable ANSI colour in human output")
-    sub = parser.add_subparsers(dest="command", required=True)
+    # Guarantee the output attributes exist even when no subcommand (e.g. interactive) is used.
+    parser.set_defaults(json=False, human=False, verbose=False, no_color=False)
+    sub = parser.add_subparsers(dest="command", required=False)
+    sub.add_parser("interactive", help="run the guided local-lab workflow")
+    sub.add_parser("version", help="print the installed AdversaryFlow version")
+    why = sub.add_parser("why", help="explain a reviewed technique in plain language")
+    why.add_argument("technique")
+    why.add_argument("--catalog", default="content/abilities/catalog.json")
+    explain = sub.add_parser("explain-last", help="summarize the newest local run and its top gaps")
+    explain.add_argument("--run-dir", default=None)
+    explain.add_argument("--output", default=None)
     validate = sub.add_parser("validate", parents=[io_parent])
     validate.add_argument("roe")
     plan = sub.add_parser("plan", parents=[io_parent])
@@ -235,6 +344,20 @@ def main() -> None:
     guide.add_argument("--target", default="local-lab")
     guide.add_argument("--objective", default="validate endpoint process visibility")
     guide.add_argument("--interactive", action="store_true", help="prompt for draft-command details without executing a campaign")
+    config_command = sub.add_parser("config", help="validate shared JSON CLI defaults")
+    config_sub = config_command.add_subparsers(dest="config_command", required=True)
+    config_validate = config_sub.add_parser("validate", help="check supported keys without applying defaults")
+    config_validate.add_argument("file")
+    template = sub.add_parser("template", help="manage reusable local campaign templates")
+    template_sub = template.add_subparsers(dest="template_command", required=True)
+    template_save = template_sub.add_parser("save"); template_save.add_argument("name"); template_save.add_argument("--actor", required=True); template_save.add_argument("--objective", required=True); template_save.add_argument("--target", default="local-lab"); template_save.add_argument("--platform", default="linux"); template_save.add_argument("--root", default="artifacts/templates")
+    template_sub.add_parser("list").add_argument("--root", default="artifacts/templates")
+    schedule = sub.add_parser("schedule", help="create local review and retest schedules")
+    schedule_create = schedule.add_subparsers(dest="schedule_command", required=True).add_parser("create"); schedule_create.add_argument("name"); schedule_create.add_argument("--template", required=True); schedule_create.add_argument("--cadence-days", required=True, type=int); schedule_create.add_argument("--root", default="artifacts/schedules")
+    retention = sub.add_parser("retention", help="preview or explicitly clean expired local campaign artifacts")
+    retention_sub = retention.add_subparsers(dest="retention_command", required=True)
+    retention_preview_command = retention_sub.add_parser("preview"); retention_preview_command.add_argument("--campaign-root", default="artifacts/campaigns")
+    retention_cleanup_command = retention_sub.add_parser("cleanup"); retention_cleanup_command.add_argument("--campaign-root", default="artifacts/campaigns"); retention_cleanup_command.add_argument("--confirm", action="store_true")
     provider = sub.add_parser("provider", parents=[io_parent], help="configure and validate AI provider settings")
     provider_sub = provider.add_subparsers(dest="provider_command", required=True)
     provider_sub.add_parser("status", help="show redacted provider configuration")
@@ -330,8 +453,42 @@ def main() -> None:
     detection_export = detection_sub.add_parser("export")
     detection_export.add_argument("--catalog", default="content/abilities/catalog.json")
     detection_export.add_argument("--output", default="artifacts/detection-mappings")
+    detection_import = detection_sub.add_parser("import", help="import offline detection rules for local scoring")
+    detection_import.add_argument("--input", required=True)
+    detection_import.add_argument("--output", default="artifacts/detection-rules")
+    detection_score = detection_sub.add_parser("score", help="score imported rules against local campaign evidence")
+    detection_score.add_argument("--rules", required=True)
+    detection_score.add_argument("--campaign-root", default="artifacts/campaigns")
     coverage = sub.add_parser("coverage", parents=[io_parent], help="show actor-to-detection campaign coverage")
     coverage.add_argument("--campaign-root", default="artifacts/campaigns")
+    coverage_sub = coverage.add_subparsers(dest="coverage_command")
+    coverage_trends_command = coverage_sub.add_parser("trends", help="show read-only historical coverage trends")
+    coverage_trends_command.add_argument("--campaign-root", default="artifacts/campaigns")
+    branch = sub.add_parser("branch", help="create a new review draft from a saved campaign")
+    branch.add_argument("--campaign-id", required=True); branch.add_argument("--name", required=True); branch.add_argument("--campaign-root", default="artifacts/campaigns")
+    catalog = sub.add_parser("catalog", help="author and validate local catalog drafts")
+    catalog.add_argument("--source", required=True); catalog.add_argument("--output", required=True); catalog.add_argument("--name", required=True); catalog.add_argument("--version", required=True)
+    adapters = sub.add_parser("adapters", help="discover read-only adapter compatibility")
+    adapters.add_argument("--catalog", default="content/abilities/catalog.json")
+    archive = sub.add_parser("archive", help="search and manage local campaign archive metadata")
+    archive_sub = archive.add_subparsers(dest="archive_command", required=True)
+    archive_search = archive_sub.add_parser("search", help="search saved campaigns by text or tag")
+    archive_search.add_argument("--query", default="")
+    archive_search.add_argument("--tag", default="")
+    archive_search.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_tag = archive_sub.add_parser("tag", help="replace a campaign's normalized archive tags")
+    archive_tag.add_argument("--campaign-id", required=True)
+    archive_tag.add_argument("--tags", default="", help="comma-separated tags")
+    archive_tag.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_controls = archive_sub.add_parser("controls", help="set campaign owner and retention metadata")
+    archive_controls.add_argument("--campaign-id", required=True)
+    archive_controls.add_argument("--owner", required=True)
+    archive_controls.add_argument("--retention-days", required=True, type=int)
+    archive_controls.add_argument("--campaign-root", default="artifacts/campaigns")
+    archive_export = archive_sub.add_parser("export", help="write a local Markdown and PDF executive summary")
+    archive_export.add_argument("--campaign-id", required=True)
+    archive_export.add_argument("--output", default="artifacts/exports")
+    archive_export.add_argument("--campaign-root", default="artifacts/campaigns")
     manager = sub.add_parser("manager", parents=[io_parent], help="start the loopback-only guided campaign workspace")
     manager.add_argument("--host", default="127.0.0.1")
     manager.add_argument("--port", type=int, default=8787)
@@ -340,6 +497,17 @@ def main() -> None:
     manager.add_argument("--catalog", default="content/abilities/catalog.json", help="safe ability catalog used to validate browser-created offline drafts")
     manager.add_argument("--open", action="store_true", help="open the local campaign guide in your default browser")
     args = parser.parse_args()
+    if args.command in {None, "interactive"} or (args.interactive and args.command != "guide"):
+        interactive_workflow()
+        return
+    if args.config:
+        try:
+            config = load_cli_config(args.config)
+        except ValueError as exc:
+            parser.error(str(exc))
+        for key, value in config.items():
+            if hasattr(args, key) and key not in {"command", "config", "quiet"}:
+                setattr(args, key, value)
     if hasattr(args, "catalog") and not Path(args.catalog).exists() and args.catalog == "content/abilities/catalog.json":
         args.catalog = str(default_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "curated-windows":
@@ -350,10 +518,6 @@ def main() -> None:
         args.catalog = str(curated_macos_catalog_path())
     if hasattr(args, "catalog") and args.catalog == "idpt-windows-collection":
         args.catalog = str(idpt_windows_collection_catalog_path())
-
-    if args.command == "completion":
-        print(completion_script(args.shell))
-        return
 
     if args.command == "explain":
         if args.code is None:
@@ -373,8 +537,58 @@ def main() -> None:
         respond(args, payload, human)
         return
 
+    if args.command == "version":
+        print(json.dumps({"name": "adversaryflow", "version": __version__}, indent=2))
+        return
+
+    if args.command == "why":
+        print(json.dumps(_why(args.technique, args.catalog), indent=2))
+        return
+
+    if args.command == "explain-last":
+        print(json.dumps(_explain_last(args.run_dir, args.output), indent=2))
+        return
+
+    if args.command == "config":
+        try:
+            config = load_cli_config(args.file)
+            print(json.dumps({"valid": True, "file": str(Path(args.file)), "keys": sorted(config)}, indent=2))
+        except ValueError as exc:
+            print(json.dumps({"valid": False, "file": str(Path(args.file)), "error": str(exc)}, indent=2))
+            raise SystemExit(1)
+        return
+
+    if args.command == "template":
+        if args.template_command == "save":
+            print(json.dumps(save_campaign_template(args.name, args.actor, args.objective, args.target, args.platform, args.root), indent=2))
+        else:
+            print(json.dumps(list_campaign_templates(args.root), indent=2))
+        return
+
+    if args.command == "schedule":
+        print(json.dumps(schedule_retest(args.name, args.template, args.cadence_days, args.root), indent=2))
+        return
+
+    if args.command == "retention":
+        if args.retention_command == "preview":
+            print(json.dumps(retention_preview(args.campaign_root), indent=2))
+        else:
+            print(json.dumps(cleanup_retention(args.campaign_root, args.confirm), indent=2))
+        return
+
+    if args.command == "branch":
+        print(json.dumps(branch_campaign(args.campaign_root, args.campaign_id, args.name), indent=2)); return
+    if args.command == "catalog":
+        print(json.dumps(author_catalog(args.source, args.output, args.name, args.version), indent=2)); return
+    if args.command == "adapters":
+        print(json.dumps(adapter_compatibility(args.catalog), indent=2)); return
+
     if args.command == "guide":
         print(campaign_guide(args.actor, args.target, args.objective, args.interactive))
+        return
+
+    if args.command == "completion":
+        print(completion_script(args.shell), end="")
         return
 
     if args.command == "intel-sync":
@@ -428,18 +642,30 @@ def main() -> None:
         return
 
     if args.command == "detection":
-        respond(args, write_detection_bundle(load_catalog(args.catalog), args.output))
+        if args.detection_command == "export":
+            result = write_detection_bundle(load_catalog(args.catalog), args.output)
+        elif args.detection_command == "import":
+            result = import_detection_rules(args.input, args.output)
+        else:
+            result = score_detection_rules(args.campaign_root, args.rules)
+        respond(args, result)
         return
 
     if args.command == "coverage":
-        dashboard = coverage_dashboard(args.campaign_root)
-        summary = dashboard.get("summary", {}) if isinstance(dashboard, dict) else {}
-        human = severity("COVERAGE", f"{summary.get('campaigns', 0)} campaigns · {summary.get('techniques', 0)} techniques · {summary.get('detections', 0)} detections · {summary.get('gaps', 0)} gaps", "info", enabled=supports_color(no_color=args.no_color))
-        respond(args, dashboard, human)
+        if args.coverage_command == "trends":
+            respond(args, coverage_trends(args.campaign_root))
+        else:
+            dashboard = coverage_dashboard(args.campaign_root)
+            summary = dashboard.get("summary", {}) if isinstance(dashboard, dict) else {}
+            human = severity("COVERAGE", f"{summary.get('campaigns', 0)} campaigns · {summary.get('techniques', 0)} techniques · {summary.get('detections', 0)} detections · {summary.get('gaps', 0)} gaps", "info", enabled=supports_color(no_color=args.no_color))
+            respond(args, dashboard, human)
         return
 
     if args.command == "manager":
-        serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
+        if args.quiet:
+            serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog, quiet=True)
+        else:
+            serve_manager(args.host, args.port, args.campaign_root, args.open, args.roe, args.catalog)
         return
 
     if args.command == "campaign":
@@ -671,6 +897,22 @@ def main() -> None:
             human = severity("VALID" if not errors else "INVALID", "; ".join(errors) or "provider configuration is valid", level, enabled=supports_color(no_color=args.no_color))
             respond(args, {"valid": not errors, "configuration": config.as_dict(), "errors": errors}, human)
             raise SystemExit(ExitCode.OK if not errors else ExitCode.ERROR)
+        return
+
+    if args.command == "archive":
+        try:
+            if args.archive_command == "search":
+                print(json.dumps({"campaigns": search_campaign_archive(args.campaign_root, args.query, args.tag)}, indent=2))
+            elif args.archive_command == "tag":
+                tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
+                print(json.dumps(update_campaign_tags(args.campaign_root, args.campaign_id, tags), indent=2))
+            elif args.archive_command == "controls":
+                print(json.dumps(update_campaign_archive(args.campaign_root, args.campaign_id, args.owner, args.retention_days), indent=2))
+            else:
+                print(json.dumps(export_executive_summary(args.campaign_root, args.campaign_id, args.output), indent=2))
+        except (OSError, KeyError, ValueError) as exc:
+            print(json.dumps({"success": False, "error": str(exc)}, indent=2))
+            raise SystemExit(1)
         return
 
     roe = load_roe(args.roe)

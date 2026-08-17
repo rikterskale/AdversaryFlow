@@ -22,12 +22,194 @@ def _run(monkeypatch, capsys, *arguments):
     return capsys.readouterr().out
 
 
+def test_cli_completion_and_json_defaults(monkeypatch, capsys, tmp_path):
+    completion = _run(monkeypatch, capsys, "completion", "bash")
+    assert "complete -F" in completion
+    config = tmp_path / "defaults.json"
+    config.write_text(json.dumps({"actor": "ConfiguredActor", "objective": "configured objective"}), encoding="utf-8")
+    guide = _run(monkeypatch, capsys, "--config", str(config), "guide")
+    assert "ConfiguredActor" in guide
+    assert "configured objective" in guide
+
+
+def test_cli_version_is_machine_readable(monkeypatch, capsys):
+    version = json.loads(_run(monkeypatch, capsys, "version"))
+    assert version == {"name": "adversaryflow", "version": cli.__version__}
+
+
+def test_cli_config_validation_rejects_unknown_keys(monkeypatch, capsys, tmp_path):
+    valid = tmp_path / "valid.json"
+    valid.write_text(json.dumps({"actor": "APT29", "objective": "validate"}), encoding="utf-8")
+    result = json.loads(_run(monkeypatch, capsys, "config", "validate", str(valid)))
+    assert result["valid"] is True
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text(json.dumps({"secret": "must not be accepted"}), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "config", "validate", str(invalid)])
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main()
+    assert exit_code.value.code == 1
+    assert json.loads(capsys.readouterr().out)["valid"] is False
+
+
+def test_cli_main_rejects_malformed_shared_config(monkeypatch, tmp_path):
+    config = tmp_path / "broken.json"
+    config.write_text("{", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["adversaryflow", "--config", str(config), "version"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_main_ignores_config_keys_not_used_by_command(monkeypatch, capsys, tmp_path):
+    config = tmp_path / "defaults.json"
+    config.write_text(json.dumps({"output": "artifacts/unused"}), encoding="utf-8")
+    result = json.loads(_run(monkeypatch, capsys, "--config", str(config), "version"))
+    assert result["name"] == "adversaryflow"
+
+
+def test_cli_resolves_curated_catalog_alias(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "curated_linux_catalog_path", lambda: Path("content/abilities/catalog.json"))
+    result = json.loads(_run(monkeypatch, capsys, "why", "T1059", "--catalog", "curated-linux"))
+    assert result["technique"] == "T1059"
+
+
+def test_cli_product_commands_are_local_and_machine_readable(monkeypatch, capsys, tmp_path):
+    template_root = tmp_path / "templates"
+    saved = json.loads(_run(monkeypatch, capsys, "template", "save", "endpoint-check", "--actor", "APT29", "--objective", "validate", "--root", str(template_root)))
+    assert saved["name"] == "endpoint-check"
+    listed = json.loads(_run(monkeypatch, capsys, "template", "list", "--root", str(template_root)))
+    assert listed[0]["name"] == "endpoint-check"
+    schedule = json.loads(_run(monkeypatch, capsys, "schedule", "create", "weekly", "--template", "endpoint-check", "--cadence-days", "7", "--root", str(tmp_path / "schedules")))
+    assert schedule["status"] == "planned"
+    rules = tmp_path / "rules.json"
+    rules.write_text(json.dumps({"rules": [{"id": "rule-1", "technique": "T1059"}]}), encoding="utf-8")
+    imported = json.loads(_run(monkeypatch, capsys, "detection", "import", "--input", str(rules), "--output", str(tmp_path / "rules-out")))
+    assert imported["rule_count"] == 1
+    preview = json.loads(_run(monkeypatch, capsys, "retention", "preview", "--campaign-root", str(tmp_path / "campaigns")))
+    assert preview["count"] == 0
+    cleaned = json.loads(_run(monkeypatch, capsys, "retention", "cleanup", "--campaign-root", str(tmp_path / "campaigns"), "--confirm"))
+    assert cleaned["count"] == 0
+    scored = json.loads(_run(monkeypatch, capsys, "detection", "score", "--rules", str(tmp_path / "rules-out" / "rules.json"), "--campaign-root", str(tmp_path / "campaigns")))
+    assert scored["summary"]["rules"] == 1
+
+
 def test_cli_guide_and_validate_paths_are_safe_and_descriptive(monkeypatch, capsys):
     guide = _run(monkeypatch, capsys, "guide", "--actor", "APT29", "--target", "local-lab", "--objective", "validate visibility")
     assert "simulation-only" in guide
     assert 'campaign --actor "APT29"' in guide
     validation = json.loads(_run(monkeypatch, capsys, "validate", "examples/roe.yaml"))
     assert validation == {"valid": True, "engagement": "Local Purple-Team Telemetry Validation", "dry_run": True}
+
+
+def test_cli_learning_and_last_run_explanation(monkeypatch, capsys, tmp_path):
+    why = json.loads(_run(monkeypatch, capsys, "why", "T1059"))
+    assert why["technique"] == "T1059"
+    assert "local synthetic" in why["boundary"]
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "telemetry-gap-report.json").write_text(json.dumps({"gaps": [{"technique_id": "T1059"}]}), encoding="utf-8")
+    explained = json.loads(_run(monkeypatch, capsys, "explain-last", "--run-dir", str(tmp_path), "--output", str(tmp_path / "last.md")))
+    assert explained["gap_count"] == 1
+    assert (tmp_path / "last.md").is_file()
+
+
+def test_cli_explain_last_reports_missing_runs_and_supports_legacy_gap_key(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        cli._explain_last(str(tmp_path), None)
+    run = tmp_path / "legacy"
+    run.mkdir()
+    (run / "telemetry-gap-report.json").write_text(json.dumps({"detection_gaps": [{"ability_id": "ability-1"}]}), encoding="utf-8")
+    result = cli._explain_last(str(tmp_path), None)
+    assert result["top_gaps"][0]["ability_id"] == "ability-1"
+
+
+def test_cli_config_loader_rejects_malformed_and_non_object_files(tmp_path):
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError, match="could not load config"):
+        cli.load_cli_config(malformed)
+    scalar = tmp_path / "scalar.json"
+    scalar.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON object"):
+        cli.load_cli_config(scalar)
+
+
+def test_cli_completion_supports_each_shell(capsys, monkeypatch):
+    for shell, marker in (("zsh", "#compdef"), ("fish", "complete -c"), ("powershell", "Register-ArgumentCompleter")):
+        assert marker in _run(monkeypatch, capsys, "completion", shell)
+
+
+def test_cli_interactive_workflow_stops_at_review_checkpoint(monkeypatch, capsys, tmp_path):
+    answers = iter(["", "", "", "", "y", "n"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: {"passed": True})
+    cli.interactive_workflow(campaign_root=str(tmp_path / "campaigns"))
+    output = capsys.readouterr().out
+    assert "LOCAL LAB ONLY" in output
+    assert "Draft saved as" in output
+    assert "Review later" in output
+
+
+def test_cli_interactive_workflow_handles_unresolved_readiness(monkeypatch, capsys):
+    states = iter([{"passed": False}, {"passed": False}])
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: next(states))
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    cli.interactive_workflow()
+    assert "Pause here" in capsys.readouterr().out
+
+
+def test_cli_interactive_workflow_can_decline_safe_fix(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: {"passed": False})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    cli.interactive_workflow()
+    assert "Pause here" in capsys.readouterr().out
+
+
+def test_cli_interactive_workflow_refreshes_after_safe_readiness_fix(monkeypatch, capsys):
+    states = iter([{"passed": False}, {"passed": True}])
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: next(states))
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    monkeypatch.setattr(cli, "load_roe", lambda _path: type("Roe", (), {"approver_name": "approver"})())
+    monkeypatch.setattr(cli, "load_catalog", lambda _path: [])
+    monkeypatch.setattr(cli.OfflinePlanner, "draft", lambda *args: type("Draft", (), {})())
+    with pytest.raises(Exception):
+        cli.interactive_workflow(campaign_root="artifacts/coverage-fix")
+    assert "Readiness refreshed: ready" in capsys.readouterr().out
+
+
+def test_cli_interactive_workflow_cancels_at_approval(monkeypatch, capsys, tmp_path):
+    answers = iter(["", "", "", "", "n", "y", "", "WRONG"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: {"passed": True})
+    cli.interactive_workflow(campaign_root=str(tmp_path / "campaigns"))
+    assert "Approval cancelled" in capsys.readouterr().out
+
+
+def test_cli_interactive_workflow_completes_after_typed_approval(monkeypatch, capsys, tmp_path):
+    campaign_id = {"value": ""}
+    answers = iter(["", "", "", "", "n", "y", ""])
+    def answer(prompt):
+        if prompt.startswith("Type APPROVE"):
+            return f"APPROVE {campaign_id['value']}"
+        return next(answers)
+    monkeypatch.setattr("builtins.input", answer)
+    monkeypatch.setattr(cli, "run_doctor", lambda fix=False: {"passed": True})
+    monkeypatch.setattr(cli, "complete_saved_campaign", lambda *args: {"run_dir": "artifacts/runs/interactive"})
+    original_save = cli.save_campaign_draft
+    def save(*args, **kwargs):
+        path = original_save(*args, **kwargs)
+        campaign_id["value"] = path.name
+        return path
+    monkeypatch.setattr(cli, "save_campaign_draft", save)
+    cli.interactive_workflow(campaign_root=str(tmp_path / "campaigns"))
+    assert "Local synthetic run complete" in capsys.readouterr().out
+
+
+def test_cli_no_command_launches_interactive_workflow(monkeypatch):
+    called = []
+    monkeypatch.setattr(cli, "interactive_workflow", lambda: called.append(True))
+    monkeypatch.setattr(sys, "argv", ["adversaryflow"])
+    cli.main()
+    assert called == [True]
 
 
 def test_cli_manager_passes_only_explicit_local_configuration(monkeypatch, capsys):

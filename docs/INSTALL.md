@@ -66,7 +66,7 @@ adversaryflow campaign --actor APT29 --objective "validate endpoint process visi
 adversaryflow campaign --actor APT29 --objective "validate endpoint process visibility" --approve --approver manager@example.test
 ```
 
-If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve a safe local rehearsal. Use `campaign cancel --campaign-id campaign-... --reason "operator requested stop"` for an incomplete saved campaign; completed campaigns remain immutable.
+If a hosted provider is unavailable, rerun with `--fallback-offline` to preserve a safe local rehearsal. Use `adversaryflow campaign cancel --campaign-id campaign-... --reason "operator requested stop"` for an incomplete saved campaign; completed campaigns remain immutable.
 
 ## Release signatures
 
@@ -82,5 +82,7 @@ Download release artifacts from the [releases page](https://github.com/rikterska
 | Debian | `scripts/install.sh` | Debian container |
 | Ubuntu | `scripts/install.sh` | Ubuntu runner |
 | Kali | `scripts/install.sh` | Kali container |
+
+The supported-platform check covers Windows, Debian, Ubuntu, and Kali. The packaged `curated-macos` catalog has fixed read-only actions, but macOS is not accepted by `doctor`; treat that catalog as a separate experimental path until the platform check changes.
 
 Continue with [USAGE.md](USAGE.md), [CLI_REFERENCE.md](CLI_REFERENCE.md), and [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

@@ -37,7 +37,7 @@ def test_doctor_uses_a_safe_version_fallback_when_package_metadata_is_unavailabl
     import adversaryflow.doctor as doctor
 
     monkeypatch.setattr(doctor, "package_version", lambda _name: (_ for _ in ()).throw(doctor.PackageNotFoundError()))
-    assert run_doctor()["version"] == "0.2.0"
+    assert run_doctor()["version"] == "0.2.3"
 
 
 def test_support_bundle_contains_redacted_diagnostics():
