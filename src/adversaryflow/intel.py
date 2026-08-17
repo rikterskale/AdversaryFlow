@@ -1,7 +1,10 @@
 import json
 import re
+import time
+from http.client import IncompleteRead, RemoteDisconnected
 from urllib.parse import quote
 from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -10,12 +13,31 @@ CTID_LIBRARY_TREE = "https://api.github.com/repos/center-for-threat-informed-def
 _ATTACK_ID = re.compile(r"(?<![A-Z0-9])T\d{4}(?:\.\d{3})?(?![A-Z0-9])")
 
 
-def fetch_attack_bundle(url: str = MITRE_ENTERPRISE_STIX, timeout: int = 20) -> dict:
+def fetch_attack_bundle(
+    url: str = MITRE_ENTERPRISE_STIX,
+    timeout: int = 20,
+    *,
+    attempts: int = 3,
+    retry_delay: float = 1.0,
+) -> dict:
     if urlparse(url).scheme != "https":
         raise ValueError("Threat-intelligence source must use HTTPS")
+    if attempts < 1:
+        raise ValueError("ATT&CK fetch attempts must be at least 1")
     request = Request(url, headers={"User-Agent": "AdversaryFlow/0.1"})
-    with urlopen(request, timeout=timeout) as response:  # nosec B310 - HTTPS-only source validation above.
-        return json.load(response)
+    for attempt in range(attempts):
+        try:
+            with urlopen(request, timeout=timeout) as response:  # nosec B310 - HTTPS-only source validation above.
+                return json.load(response)
+        except HTTPError as exc:
+            if exc.code not in {408, 425, 429} and exc.code < 500:
+                raise
+            error = exc
+        except (URLError, TimeoutError, ConnectionError, IncompleteRead, RemoteDisconnected, json.JSONDecodeError) as exc:
+            error = exc
+        if attempt + 1 < attempts:
+            time.sleep(retry_delay * (2 ** attempt))
+    raise error
 
 
 def find_technique(bundle: dict, technique_id: str) -> dict | None:

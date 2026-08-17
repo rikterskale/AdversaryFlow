@@ -298,6 +298,7 @@ def main() -> None:
     plan.add_argument("--actor", required=True)
     plan.add_argument("--target", default="local-lab")
     plan.add_argument("--technique", required=True)
+    plan.add_argument("--attack-bundle", help="read an ATT&CK STIX bundle from a local JSON file instead of fetching it")
     plan.add_argument("--audit", default="artifacts/audit.jsonl")
     intel_sync = sub.add_parser("intel-sync", parents=[io_parent], help="pull ATT&CK/CTID technique metadata and create synthetic-only coverage")
     intel_sync.add_argument("--actor", required=True)
@@ -918,14 +919,16 @@ def main() -> None:
     roe = load_roe(args.roe)
     audit = AuditLog(args.audit)
     audit.record("plan_requested", actor=args.actor, target=args.target, technique=args.technique)
+    intelligence_action = "read the local ATT&CK STIX bundle" if args.attack_bundle else "fetch the official ATT&CK STIX bundle"
     dry_run_banner(
-        will=["fetch the official ATT&CK STIX bundle", "produce a dry-run plan for one technique"],
+        will=[intelligence_action, "produce a dry-run plan for one technique"],
         will_not=["contact a target", "run a command", "create or approve a campaign"],
     )
-    progress("Fetching official MITRE ATT&CK STIX bundle", 1, 1)
-    bundle = fetch_attack_bundle()
+    progress("Reading local ATT&CK STIX bundle" if args.attack_bundle else "Fetching official MITRE ATT&CK STIX bundle", 1, 1)
+    bundle = json.loads(Path(args.attack_bundle).read_text(encoding="utf-8")) if args.attack_bundle else fetch_attack_bundle()
     technique = find_technique(bundle, args.technique)
     if not technique:
         raise SystemExit(f"Technique not found in MITRE ATT&CK source: {args.technique}")
-    result = build_plan(roe, args.actor, args.target, technique, "MITRE ATT&CK Enterprise STIX")
+    source = str(Path(args.attack_bundle).resolve()) if args.attack_bundle else "MITRE ATT&CK Enterprise STIX"
+    result = build_plan(roe, args.actor, args.target, technique, source)
     respond(args, json.loads(json.dumps({"notice": "DRY RUN ONLY", "plan": result.__dict__}, default=lambda value: value.__dict__)))

@@ -1,6 +1,7 @@
 """Coverage for offline foundational safety and planning helpers."""
 
 import json
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -71,3 +72,54 @@ def test_intel_lookup_is_offline_and_https_constrained(monkeypatch):
     bundle = intel.fetch_attack_bundle("https://example.test/attack.json")
     assert intel.find_technique(bundle, "T1003")["name"] == "Technique"
     assert intel.find_technique(bundle, "T9999") is None
+
+
+def test_attack_fetch_retries_transient_failures(monkeypatch):
+    calls = []
+    sleeps = []
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self): return b'{"objects": []}'
+
+    def flaky_urlopen(_request, timeout):
+        calls.append(timeout)
+        if len(calls) < 3:
+            raise URLError("temporary upstream failure")
+        return Response()
+
+    monkeypatch.setattr(intel, "urlopen", flaky_urlopen)
+    monkeypatch.setattr(intel.time, "sleep", sleeps.append)
+
+    assert intel.fetch_attack_bundle(timeout=7) == {"objects": []}
+    assert calls == [7, 7, 7]
+    assert sleeps == [1.0, 2.0]
+
+
+def test_attack_fetch_does_not_retry_permanent_http_errors(monkeypatch):
+    calls = []
+
+    def missing(request, timeout):
+        assert timeout == 20
+        calls.append(request.full_url)
+        raise HTTPError(request.full_url, 404, "not found", {}, None)
+
+    monkeypatch.setattr(intel, "urlopen", missing)
+    with pytest.raises(HTTPError):
+        intel.fetch_attack_bundle()
+    assert calls == [intel.MITRE_ENTERPRISE_STIX]
+
+
+def test_attack_fetch_raises_after_transient_http_attempts_are_exhausted(monkeypatch):
+    def unavailable(request, timeout):
+        raise HTTPError(request.full_url, 503, "unavailable", {}, None)
+
+    monkeypatch.setattr(intel, "urlopen", unavailable)
+    with pytest.raises(HTTPError, match="unavailable"):
+        intel.fetch_attack_bundle(attempts=1)
+
+
+def test_attack_fetch_validates_retry_attempts():
+    with pytest.raises(ValueError, match="at least 1"):
+        intel.fetch_attack_bundle(attempts=0)

@@ -486,14 +486,19 @@ def test_cli_profile_errors_are_returned_as_safe_json(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out) == {"success": False, "error": "profile fixture failure"}
 
 
-def test_cli_plan_uses_explicit_offline_intelligence_fixture(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "fetch_attack_bundle", lambda: {"objects": []})
-    monkeypatch.setattr(cli, "find_technique", lambda _bundle, _technique: {"name": "Fixture", "external_references": [{"external_id": "T1003"}]})
-    monkeypatch.setattr(sys, "argv", ["adversaryflow", "plan", "--roe", "examples/roe.yaml", "--actor", "APT29", "--technique", "T1003"])
+def test_cli_plan_uses_explicit_offline_intelligence_fixture(monkeypatch, capsys, tmp_path):
+    fixture = tmp_path / "attack.json"
+    fixture.write_text(json.dumps({"objects": [{"name": "Fixture", "external_references": [{"external_id": "T1003"}]}]}), encoding="utf-8")
+    monkeypatch.setattr(cli, "fetch_attack_bundle", lambda: pytest.fail("offline fixture must not fetch the network"))
+    monkeypatch.setattr(sys, "argv", [
+        "adversaryflow", "plan", "--roe", "examples/roe.yaml", "--actor", "APT29",
+        "--technique", "T1003", "--attack-bundle", str(fixture),
+    ])
     cli.main()
     payload = json.loads(capsys.readouterr().out)
     assert payload["notice"] == "DRY RUN ONLY"
     assert payload["plan"]["steps"][0]["technique_id"] == "T1003"
+    assert payload["plan"]["source"] == str(fixture.resolve())
 
 
 def test_cli_campaign_resume_and_hosted_fallback_paths_are_local(monkeypatch, capsys):

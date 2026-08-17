@@ -62,12 +62,21 @@ def journey(release_dir: str | Path) -> list[str]:
             run([str(python), "-m", "adversaryflow", "capabilities"], env_root)
             run([str(python), "-m", "adversaryflow", "adapter", "status"], env_root)
             run([str(python), "-m", "adversaryflow", "draft", "--roe", "examples/roe.yaml", "--actor", "APT29", "--objective", "release draft"], env_root)
-            plan_output = run_capture([str(python), "-m", "adversaryflow", "plan", "--roe", "examples/roe.yaml", "--actor", "APT29", "--technique", "T1059"], env_root)
+            attack_bundle = env_root / "attack-release-fixture.stix"
+            attack_bundle.write_text(json.dumps({"objects": [{
+                "type": "attack-pattern",
+                "name": "Command and Scripting Interpreter",
+                "external_references": [{"external_id": "T1059"}],
+            }]}), encoding="utf-8")
+            plan_output = run_capture([
+                str(python), "-m", "adversaryflow", "plan", "--roe", "examples/roe.yaml",
+                "--actor", "APT29", "--technique", "T1059", "--attack-bundle", str(attack_bundle),
+            ], env_root)
             if "DRY RUN ONLY" not in plan_output:
                 raise RuntimeError(f"MITRE dry-run planning did not complete for {artifact.name}")
             missing_technique = run_expect_failure([
                 str(python), "-m", "adversaryflow", "plan", "--roe", "examples/roe.yaml",
-                "--actor", "APT29", "--technique", "T0000",
+                "--actor", "APT29", "--technique", "T0000", "--attack-bundle", str(attack_bundle),
             ], env_root)
             if "Technique not found in MITRE ATT&CK source" not in missing_technique:
                 raise RuntimeError(f"MITRE troubleshooting did not explain a missing technique for {artifact.name}")
