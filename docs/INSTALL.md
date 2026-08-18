@@ -83,6 +83,18 @@ bash scripts/install.sh
 
 The scripts resolve the project directory from their own location, so they also work when called by absolute path from another directory. A normal install is non-editable. Each script creates or reuses the extracted project's `.venv`, upgrades the installed runtime package, and runs `doctor --fix`.
 
+### Docker installation
+
+Docker is an optional alternative to a local Python installation. From a source checkout or extracted source ZIP:
+
+```bash
+docker build -t adversaryflow .
+docker run --rm adversaryflow doctor --json
+docker run --rm -v "$PWD/artifacts:/app/artifacts" adversaryflow demo
+```
+
+The image runs as a non-root user. The demo writes artifacts to the mounted `artifacts/` directory; the image itself does not contact an external target or require an API key. Dockerfile smoke tests run in CI, but Docker is not required for the normal installer path.
+
 ## Source checkout installation
 
 Clone the repository, then use the same runtime installer:
@@ -141,6 +153,14 @@ If installation or startup fails:
 
 `doctor --fix` only creates local `artifacts/` folders. It does not change system settings, install system software, or contact an AI provider. Follow each `NEXT` remediation line and attach the redacted support bundle when requesting help.
 
+Common environment-specific recovery:
+
+- If PowerShell blocks the installer, run it from an approved shell policy or use the wheel installation path; do not bypass a corporate execution policy without authorization.
+- If pip cannot reach the package index, configure the approved `HTTPS_PROXY`/`PIP_INDEX_URL` or install from a local wheelhouse. The default demo remains offline after installation.
+- If Windows reports access denied under a protected directory, move the extracted project to a user-writable directory and rerun the installer.
+- If Linux reports `ensurepip` or `venv` errors, install `python3-venv` and `python3-pip`, then rerun the installer.
+- If an existing environment is owned by another user, preserve it and create a new `.venv` in a writable directory rather than deleting it.
+
 ## Complete offline journey
 
 After installation, these activation-not-required commands validate the safe local workflow:
@@ -168,3 +188,13 @@ CI also tests the package on every claimed Python minor version from 3.11 throug
 The supported-platform check covers Windows, Debian, Ubuntu, and Kali. The packaged `curated-macos` catalog has fixed read-only actions, but macOS is not accepted by `doctor`; treat that catalog as a separate experimental path until the platform check changes.
 
 Continue with [USAGE.md](USAGE.md), [CLI_REFERENCE.md](CLI_REFERENCE.md), and [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+## Local CI preflight
+
+Run the checks that are available on the current machine with:
+
+```bash
+python scripts/check_local_ci.py
+```
+
+The command runs tests, coverage, documentation contracts, and available security tools. It explicitly reports unavailable Docker, GitHub-only CodeQL/Gitleaks, and multi-OS release checks instead of treating them as passed.

@@ -8,7 +8,7 @@ Each wheel, source distribution, and source ZIP must install into its own new en
 
 ## Guided troubleshooting
 
-The installed CLI must run `doctor --fix --json`, `provider validate`, `provider diagnose`, `support-bundle`, and `guide`. The campaign guide must direct a new user to scope review, explicit approval, reports, provider diagnostics, and the local manager.
+The installed CLI must run `doctor --fix --json`, `quickstart --json`, `provider validate`, `provider diagnose`, `support-bundle`, and `guide`. The campaign guide must direct a new user to scope review, explicit approval, reports, provider diagnostics, and the local manager.
 
 ## Full-feature validation
 
@@ -24,4 +24,4 @@ The README and installation guide must document the guide, local manager, troubl
 
 ## CI enforcement
 
-The `new-user-release-standard` CI job builds release artifacts and runs `scripts/release_readiness.py` on Ubuntu and Windows. Separate `first-user-windows` and `first-user-linux` jobs invoke the documented installers from outside the checkout for Windows, Debian, Ubuntu, and Kali, rerun each installer against the same environment, and execute the installed doctor and demo commands. The source-test matrix covers Python 3.11, 3.12, 3.13, and 3.14 without multiplying every release journey across every OS/version combination. These jobs are required before release tagging. Any failed installation, operation, recovery path, static asset, report, documentation assertion, or parser-surface assertion fails the build.
+The `new-user-release-standard` CI job builds release artifacts and runs `scripts/release_readiness.py` on Ubuntu and Windows. Separate `first-user-windows` and `first-user-linux` jobs invoke the documented installers from outside the checkout for Windows, Debian, Ubuntu, and Kali, rerun each installer against the same environment, and execute the installed doctor, quickstart, and demo commands. The Docker smoke job builds the repository Dockerfile and runs doctor plus the offline demo. The source-test matrix covers Python 3.11, 3.12, 3.13, and 3.14 without multiplying every release journey across every OS/version combination. These jobs are required before release tagging. Any failed installation, operation, recovery path, static asset, report, documentation assertion, or parser-surface assertion fails the build.

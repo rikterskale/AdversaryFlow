@@ -48,6 +48,24 @@ jobs:
       - name: Run unit tests and coverage
         run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=95
 
+  docker-smoke:
+    name: Docker image smoke test
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build --tag adversaryflow:ci .
+      - name: Run readiness check
+        run: docker run --rm adversaryflow:ci doctor --json
+      - name: Run offline demo
+        run: |
+          mkdir -p artifacts/docker
+          docker run --rm -v "$PWD/artifacts/docker:/app/artifacts" adversaryflow:ci demo
+
   documentation:
     name: Documentation contracts
     timeout-minutes: 10
@@ -100,6 +118,7 @@ jobs:
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\.venv\Scripts\adversaryflow.exe" doctor --json
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\adversaryflow.exe" quickstart --json
           & "$env:GITHUB_WORKSPACE\.venv\Scripts\adversaryflow.exe" demo
           & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -I -m adversaryflow doctor --json
 
@@ -135,6 +154,7 @@ jobs:
           bash /tmp/adversaryflow/scripts/install.sh;
           bash /tmp/adversaryflow/scripts/install.sh;
           /tmp/adversaryflow/.venv/bin/adversaryflow doctor --json;
+          /tmp/adversaryflow/.venv/bin/adversaryflow quickstart --json;
           /tmp/adversaryflow/.venv/bin/adversaryflow demo;
           /tmp/adversaryflow/.venv/bin/python -I -m adversaryflow doctor --json"
 

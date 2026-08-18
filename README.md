@@ -58,6 +58,14 @@ bash scripts/install.sh
 
 No activation is required. The demo is simulation-only, uses the offline planner, and needs no API key or network connection. The installer can be rerun safely and reuses a compatible `.venv`. See the [installation guide](docs/INSTALL.md) for prerequisites, wheel installation and hash verification, source checkouts, and recovery. Contributors should use [CONTRIBUTING.md](CONTRIBUTING.md), which installs editable source and development tools separately.
 
+For a guided first run after installation, use:
+
+```powershell
+.\.venv\Scripts\adversaryflow.exe quickstart
+```
+
+`quickstart` runs the local readiness checks and prints the next safe actions. It does not contact a target or provider. Use `quickstart --fix` only for the safe local artifact-folder fixes described by `doctor --fix`.
+
 The current release supports scoped local synthetic simulation, opt-in fixed read-only Windows/Linux/macOS behaviors, and a reviewed registry-selected pinned IDPT scenario; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option. See [IDPT local integration](docs/IDPT_INTEGRATION.md) and [detection validation](docs/DETECTION_VALIDATION.md).
 
 The IDPT integration is a narrowly bounded local adapter: AdversaryFlow owns the RoE, draft, approval, plan provenance, and reporting; the exact reviewed IDPT checkout runs one packaged Windows scenario and returns verified evidence. It does not accept campaign commands, arbitrary scenarios, remote destinations, dirty checkouts, or unreviewed commits. See the [IDPT integration guide](docs/IDPT_INTEGRATION.md) for the full lifecycle and artifact map.
@@ -65,6 +73,8 @@ The IDPT integration is a narrowly bounded local adapter: AdversaryFlow owns the
 The local workflow includes an ephemeral loopback sink bound to `127.0.0.1` only. It accepts a fixed synthetic marker, records the request for telemetry validation, and shuts down when the run completes. No external network connection is used.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for Windows, Linux/Kali, and Docker setup. `doctor` is the first troubleshooting command, and `support-bundle` creates a redacted diagnostics archive.
+
+Compatibility at a glance: Windows, Debian, Ubuntu, and Kali are supported by `doctor` and CI. macOS catalogs are packaged but remain experimental and are not accepted by the supported-platform check. No PyPI distribution is planned; GitHub Releases and source checkouts are the supported distribution paths.
 
 Maintainers can use the [release checklist](docs/RELEASE_CHECKLIST.md) before creating a release tag.
 

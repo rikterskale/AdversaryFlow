@@ -11,7 +11,7 @@ SUPPORTED_SHELLS = ("bash", "zsh", "fish", "powershell")
 
 # Top-level subcommands offered for completion.
 TOP_COMMANDS = (
-    "validate", "plan", "intel-sync", "draft", "demo", "doctor", "support-bundle",
+    "validate", "plan", "intel-sync", "draft", "demo", "doctor", "quickstart", "support-bundle",
     "capabilities", "adapter", "guide", "provider", "campaign", "telemetry",
     "detection", "coverage", "manager", "completion", "explain",
 )

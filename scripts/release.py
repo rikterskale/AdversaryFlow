@@ -54,7 +54,7 @@ def build_release(output: str | Path = "artifacts/release") -> Path:
         record["path"] = path.relative_to(ROOT).as_posix()
         catalog_records.append(record)
     (destination / "catalog-manifest.json").write_text(json.dumps({"format": CATALOG_MANIFEST_FORMAT, "catalogs": catalog_records}, indent=2), encoding="utf-8")
-    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": project_version()}}, "components": [{"type": "library", "name": "PyYAML", "version": ">=6.0"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
+    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "metadata": {"component": {"type": "application", "name": "adversaryflow", "version": project_version()}}, "components": [{"type": "library", "name": "PyYAML", "version": "6.0.3"}, {"type": "library", "name": "pytest", "version": ">=8.0", "scope": "development"}]}
     (destination / "sbom.cdx.json").write_text(json.dumps(sbom, indent=2), encoding="utf-8")
     artifacts = sorted(path for path in destination.iterdir() if path.is_file())
     manifest = {"format": "ADVERSARYFLOW-RELEASE-MANIFEST-1", "created_at": datetime.now(timezone.utc).isoformat(), "catalog_manifest": "catalog-manifest.json", "sbom": "sbom.cdx.json", "artifacts": [{"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size} for path in artifacts]}

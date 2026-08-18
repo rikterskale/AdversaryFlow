@@ -267,6 +267,43 @@ def campaign_guide(actor: str, target: str, objective: str, interactive: bool) -
     ])
 
 
+def quickstart_payload(*, fix: bool = False) -> dict:
+    """Return a no-network first-run readiness guide and diagnostic result."""
+    doctor = run_doctor(fix=fix)
+    return {
+        "product": "AdversaryFlow",
+        "ready": bool(doctor["passed"]),
+        "doctor": doctor,
+        "next_steps": [
+            "adversaryflow demo",
+            "adversaryflow guide",
+            "adversaryflow manager --open",
+            'adversaryflow campaign --actor APT29 --objective "validate endpoint process visibility"',
+        ],
+        "offline_default": True,
+        "api_key_required": False,
+        "external_target_contacted": False,
+    }
+
+
+def quickstart_human(payload: dict, *, no_color: bool = False) -> str:
+    status = severity("READY" if payload["ready"] else "NOT READY", "local runtime checks passed" if payload["ready"] else "run the guided fixes below", "ok" if payload["ready"] else "fail", enabled=supports_color(no_color=no_color))
+    return "\n".join([
+        status,
+        "",
+        "AdversaryFlow starts offline and needs no API key or external target.",
+        "",
+        "Next steps:",
+        "  1. adversaryflow demo",
+        "  2. adversaryflow guide",
+        "  3. adversaryflow manager --open",
+        '  4. adversaryflow campaign --actor APT29 --objective "validate endpoint process visibility"',
+        "",
+        "Troubleshooting: adversaryflow doctor --fix --json",
+        "Support: adversaryflow support-bundle",
+    ])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="adversaryflow", description="Scoped purple-team campaign planning", epilog="Quick start: doctor --json, guide, campaign --actor APT29 --objective \"validate endpoint process visibility\", then campaign inspect --campaign-id ID.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -323,6 +360,8 @@ def main() -> None:
     demo.add_argument("--catalog", default="content/abilities/catalog.json")
     demo.add_argument("--output", default="artifacts/runs")
     demo.add_argument("--adapter", choices=("local-synthetic", "local-behavioral", "idpt-local"), default="local-synthetic")
+    quickstart = sub.add_parser("quickstart", parents=[io_parent], help="check readiness and show the canonical first-run path")
+    quickstart.add_argument("--fix", action="store_true", help="apply safe local artifact-folder fixes before checking readiness")
     doctor = sub.add_parser("doctor", parents=[io_parent], help="diagnose installation and local runtime")
     doctor.add_argument("--roe", default="examples/roe.yaml")
     doctor.add_argument("--catalog", default="content/abilities/catalog.json")
@@ -529,6 +568,11 @@ def main() -> None:
             payload = {"code": args.code, "meaning": meaning}
             human = severity(str(args.code), meaning, "info", enabled=supports_color(no_color=args.no_color))
         respond(args, payload, human)
+        return
+
+    if args.command == "quickstart":
+        payload = quickstart_payload(fix=args.fix)
+        respond(args, payload, quickstart_human(payload, no_color=args.no_color), exit_code=ExitCode.OK if payload["ready"] else ExitCode.ERROR)
         return
 
     if args.command == "validate":

@@ -24,6 +24,10 @@ No. Resumption checks the stored draft, RoE, and catalog hashes. Create a new re
 
 Campaign drafts use `artifacts/campaigns` by default; local synthetic runs use `artifacts/runs`; support bundles use `artifacts/support`. Commands expose options to choose these roots where applicable.
 
+## Is Docker supported?
+
+Yes. Build the image with `docker build -t adversaryflow .`, verify it with `docker run --rm adversaryflow doctor --json`, and run the offline demo with an `artifacts/` volume. Docker is optional; the platform installers are the canonical local path.
+
 ## How do I stop a campaign?
 
 Use `campaign cancel --campaign-id campaign-... --reason "Operator requested stop"` for an incomplete campaign. Completed campaigns cannot be cancelled. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

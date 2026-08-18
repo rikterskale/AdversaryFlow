@@ -83,3 +83,11 @@ adversaryflow manager --open
 ```
 
 The manager is loopback-only. It can approve and run a reviewed campaign only through the fixed `local-synthetic` adapter after the named RoE approver enters the exact confirmation; `local-behavioral` and `idpt-local` execution remain CLI-only.
+## First-run readiness
+
+```bash
+adversaryflow quickstart
+adversaryflow quickstart --fix
+```
+
+The command runs the safe local readiness checks and prints the canonical next steps. It does not contact a provider or external target.

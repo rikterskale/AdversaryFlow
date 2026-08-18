@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 
-from adversaryflow.cli import completion_script
+from adversaryflow.cli import completion_script, quickstart_human, quickstart_payload
 
 
 def test_campaign_guide_explains_safe_campaign_lifecycle():
@@ -20,3 +20,14 @@ def test_completion_scripts_cover_supported_shells():
     assert "#compdef" in completion_script("zsh")
     assert "complete -c" in completion_script("fish")
     assert "Register-ArgumentCompleter" in completion_script("powershell")
+
+
+def test_quickstart_is_offline_and_points_to_safe_next_steps():
+    payload = quickstart_payload()
+    assert payload["ready"] is True
+    assert payload["offline_default"] is True
+    assert payload["api_key_required"] is False
+    assert "adversaryflow demo" in payload["next_steps"]
+    text = quickstart_human(payload)
+    assert "AdversaryFlow starts offline" in text
+    assert "doctor --fix --json" in text

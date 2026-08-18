@@ -52,6 +52,7 @@ Every command accepts the same output flags (place them after the command name, 
 | Command | Purpose |
 |---|---|
 | `doctor [--roe examples/roe.yaml] [--catalog content/abilities/catalog.json] [--json] [--fix]` | Check platform, Python, PyYAML, RoE, catalog, execution-adapter readiness, loopback, and offline mode. `--fix` creates local artifact folders only. |
+| `quickstart [--json] [--fix]` | Run the canonical first-user readiness check and print safe next steps. `--fix` creates local artifact folders only; no target or provider is contacted. |
 | `support-bundle [--output artifacts/support] [--roe examples/roe.yaml]` | Create a redacted diagnostics ZIP. |
 | `demo [--roe examples/roe.yaml] [--actor APT29] [--objective TEXT] [--platform linux] [--approver NAME] [--catalog PATH] [--output artifacts/runs] [--adapter NAME]` | Run the complete approved local workflow with the selected fixed adapter. |
 
@@ -96,3 +97,13 @@ The workspace includes local provider-profile and policy setup (without credenti
 See [USAGE.md](USAGE.md) for a safe end-to-end flow.
 
 Versioned output and input schemas are listed in [SCHEMAS.md](SCHEMAS.md).
+# `quickstart`
+
+Run the canonical first-user readiness flow:
+
+```bash
+adversaryflow quickstart
+adversaryflow quickstart --fix
+```
+
+The command runs `doctor`, reports whether the local runtime is ready, and prints safe next steps. It never contacts a target or hosted provider. `--fix` only creates local artifact directories.

@@ -8,6 +8,8 @@ adversaryflow doctor --fix --json
 adversaryflow support-bundle
 ```
 
+For a newcomer-oriented readiness summary, run `adversaryflow quickstart`. It combines the local checks with the canonical next-step commands; add `--fix` to create only the safe local artifact folders.
+
 `doctor --fix` creates missing local `artifacts/`, `artifacts/runs`, `artifacts/campaigns`, and `artifacts/support` directories. It does not alter system configuration or send a provider request.
 
 ## Installation and platform checks

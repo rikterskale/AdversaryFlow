@@ -2,7 +2,7 @@
 
 ## Safe offline campaign flow
 
-1. Check the local environment: `adversaryflow doctor --json`.
+1. Check the local environment: `adversaryflow quickstart` or `adversaryflow doctor --json`.
 2. Generate a reviewable draft: `adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"`.
 3. Inspect the returned campaign ID: `adversaryflow campaign inspect --campaign-id campaign-...`.
 4. The RoE-named approver may authorize local synthetic emulation in the manager or with: `adversaryflow campaign --campaign-id campaign-... --approve --approver "manager@example.test"`.
