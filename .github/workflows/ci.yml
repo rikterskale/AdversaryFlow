@@ -64,6 +64,7 @@ jobs:
       - name: Run offline demo
         run: |
           mkdir -p artifacts/docker
+          chmod 777 artifacts/docker
           docker run --rm -v "$PWD/artifacts/docker:/app/artifacts" adversaryflow:ci demo
 
   documentation:
