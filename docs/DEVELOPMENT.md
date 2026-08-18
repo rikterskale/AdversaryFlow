@@ -2,7 +2,7 @@
 
 ## Environment
 
-The project requires Python 3.11 or newer and uses setuptools. Install the development dependencies with the platform-specific installer:
+The project supports Python 3.11 through 3.14 and uses setuptools. Install the development dependencies with the platform-specific installer:
 
 ```powershell
 ./scripts/install.ps1 -Dev
@@ -29,7 +29,7 @@ python -m pytest -q --basetemp .pytest-tmp --cov=adversaryflow --cov-branch --co
 
 The directory is local test output; remove it after the run if it is not needed.
 
-The CI workflow runs tests on Windows and Ubuntu with Python 3.11 and 3.12, plus release-readiness and security jobs. The current suite meets the configured 95% combined line-and-branch coverage threshold.
+The CI workflow runs the source suite on every supported Python minor from 3.11 through 3.14, with Windows coverage at the minimum and maximum versions. Separate jobs exercise the documented Windows, Debian, Ubuntu, and Kali installers twice, run clean wheel/sdist/source-ZIP release journeys, and enforce documentation and security gates. The current suite meets the configured 95% combined line-and-branch coverage threshold.
 
 ## Release artifacts
 

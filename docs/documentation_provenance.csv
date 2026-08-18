@@ -3,5 +3,5 @@ PROV-001,docs/CLI_REFERENCE.md,plan command,source,src/adversaryflow/cli.py,buil
 PROV-002,docs/modules/local-manager.md,Local API surface,source,src/adversaryflow/manager.py,make_handler,Loopback route dispatch is authoritative
 PROV-003,docs/modules/providers.md,Configuration precedence,source,src/adversaryflow/provider.py,load_provider_config,Configuration reads and validation are authoritative
 PROV-004,docs/SCHEMAS.md,Versioned schemas,source,src/adversaryflow/models.py,CampaignPlan,Serialized model definitions are authoritative
-PROV-005,docs/INSTALL.md,Supported platform matrix,test,.github/workflows/ci.yml,tests matrix,CI platform matrix is executable evidence
+PROV-005,docs/INSTALL.md,Supported platform matrix,test,.github/workflows/ci.yml,first-user-windows and first-user-linux,CI invokes each documented installer twice and runs installed entry points
 PROV-006,docs/RELEASE_READINESS.md,CI enforcement,source,.github/workflows/ci.yml,new-user-release-standard,Release-readiness command is executable evidence

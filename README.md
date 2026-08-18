@@ -38,24 +38,25 @@ AdversaryFlow adopts the reference project's useful control-plane patterns: immu
 
 ## Quick start
 
+AdversaryFlow releases are published on GitHub, not PyPI. For the simplest installation, download `adversaryflow-source.zip` from the [latest GitHub release](https://github.com/rikterskale/AdversaryFlow/releases), extract it, and run the installer from the extracted folder.
+
+Windows PowerShell:
+
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-adversaryflow validate examples\roe.yaml
-adversaryflow plan --roe examples\roe.yaml --actor "APT29" --technique T1059.001
-adversaryflow intel-sync --actor "Axiom" --platform windows --output artifacts\intel\axiom
-adversaryflow draft --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
-adversaryflow demo --roe examples\roe.yaml --actor "APT29" --objective "validate endpoint process visibility"
-adversaryflow doctor
-adversaryflow support-bundle
-adversaryflow capabilities
-adversaryflow campaign --actor "APT29" --objective "validate endpoint process visibility"
-adversaryflow adapter status --name local-behavioral --catalog curated-windows
-adversaryflow adapter status --name idpt-local --catalog idpt-windows-collection
-adversaryflow manager --open
-adversaryflow guide --interactive
+.\scripts\install.ps1
+.\.venv\Scripts\adversaryflow.exe doctor
+.\.venv\Scripts\adversaryflow.exe demo
 ```
+
+Debian, Ubuntu, or Kali:
+
+```bash
+bash scripts/install.sh
+.venv/bin/adversaryflow doctor
+.venv/bin/adversaryflow demo
+```
+
+No activation is required. The demo is simulation-only, uses the offline planner, and needs no API key or network connection. The installer can be rerun safely and reuses a compatible `.venv`. See the [installation guide](docs/INSTALL.md) for prerequisites, wheel installation and hash verification, source checkouts, and recovery. Contributors should use [CONTRIBUTING.md](CONTRIBUTING.md), which installs editable source and development tools separately.
 
 The current release supports scoped local synthetic simulation, opt-in fixed read-only Windows/Linux/macOS behaviors, and a reviewed registry-selected pinned IDPT scenario; `local-synthetic` remains simulation-only and there is no arbitrary `--live` command option. See [IDPT local integration](docs/IDPT_INTEGRATION.md) and [detection validation](docs/DETECTION_VALIDATION.md).
 

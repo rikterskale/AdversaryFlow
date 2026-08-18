@@ -7,22 +7,64 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  tests:
+  source-tests:
+    name: Source tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ['3.11', '3.12']
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+          - os: ubuntu-latest
+            python: '3.12'
+          - os: ubuntu-latest
+            python: '3.13'
+          - os: ubuntu-latest
+            python: '3.14'
+          - os: windows-latest
+            python: '3.11'
+          - os: windows-latest
+            python: '3.14'
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e '.[dev]'
-      - run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=95
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install contributor dependencies
+        run: python -m pip install --disable-pip-version-check --editable '.[dev]'
+      - name: Run unit tests and coverage
+        run: python -m pytest -q --cov=adversaryflow --cov-branch --cov-report=term-missing --cov-fail-under=95
+
+  documentation:
+    name: Documentation contracts
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install documentation test dependencies
+        run: python -m pip install --disable-pip-version-check --editable '.[dev]'
       - name: Validate documentation links and required guides
         run: python scripts/validate_documentation.py
       - name: Run documented-gap regression checks
@@ -31,110 +73,197 @@ jobs:
         run: python scripts/source_documentation_contract.py
       - name: Validate high-impact documentation provenance
         run: python scripts/documentation_provenance.py
-      - run: python -m adversaryflow doctor --json
-      - run: python -m adversaryflow demo
+
+  first-user-windows:
+    name: Windows documented installer
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Run documented installer twice from outside the checkout
+        working-directory: ${{ runner.temp }}
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\scripts\install.ps1"
+          & "$env:GITHUB_WORKSPACE\scripts\install.ps1"
+      - name: Run installed console and module entry points
+        working-directory: ${{ runner.temp }}
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\adversaryflow.exe" doctor --json
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\adversaryflow.exe" demo
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -I -m adversaryflow doctor --json
+
+  first-user-linux:
+    name: ${{ matrix.name }} documented installer
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian 12
+            image: debian:12
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+          - name: Kali rolling
+            image: kalilinux/kali-rolling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Run documented installer twice in a clean container
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/workspace:ro"
+          "${{ matrix.image }}"
+          bash -lc "export DEBIAN_FRONTEND=noninteractive;
+          apt-get update;
+          apt-get install -y --no-install-recommends ca-certificates python3 python3-venv python3-pip;
+          cp -a /workspace /tmp/adversaryflow;
+          cd /tmp;
+          bash /tmp/adversaryflow/scripts/install.sh;
+          bash /tmp/adversaryflow/scripts/install.sh;
+          /tmp/adversaryflow/.venv/bin/adversaryflow doctor --json;
+          /tmp/adversaryflow/.venv/bin/adversaryflow demo;
+          /tmp/adversaryflow/.venv/bin/python -I -m adversaryflow doctor --json"
 
   security:
+    name: Code and dependency security
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: github/codeql-action/init@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3.37.6
         with:
           languages: python
-      - uses: github/codeql-action/analyze@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
-      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3.37.6
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         if: github.event_name == 'pull_request'
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: python -m venv .venv-security
-      - run: .venv-security/bin/python -m pip install --upgrade pip
-      - run: .venv-security/bin/python -m pip install bandit pip-audit '.[dev]'
-      - run: .venv-security/bin/bandit -r src -q
-      - run: .venv-security/bin/pip-audit
+      - name: Create security environment
+        run: python -m venv .venv-security
+      - name: Install security tools
+        run: |
+          .venv-security/bin/python -m pip install --disable-pip-version-check --upgrade pip
+          .venv-security/bin/python -m pip install --disable-pip-version-check bandit pip-audit '.[dev]'
+      - name: Run Bandit
+        run: .venv-security/bin/bandit -r src -q
+      - name: Audit dependencies
+        run: .venv-security/bin/pip-audit
 
   workflow-security:
+    name: Workflow security
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.12'
-      - run: python -m pip install zizmor
-      - run: zizmor .github/workflows/ci.yml
+          python-version: '3.14'
+          cache: pip
+      - name: Install zizmor
+        run: python -m pip install --disable-pip-version-check zizmor
+      - name: Audit workflows
+        run: zizmor .github/workflows
 
   sbom-check:
+    name: Release SBOM
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.12'
-      - run: python -m pip install build cyclonedx-bom
-      - run: python scripts/release.py artifacts/release
-      - run: python -c "import json; d=json.load(open('artifacts/release/sbom.cdx.json')); assert d['bomFormat']=='CycloneDX'"
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install release tools
+        run: python -m pip install --disable-pip-version-check build cyclonedx-bom
+      - name: Build release
+        run: python scripts/release.py artifacts/release
+      - name: Validate SBOM
+        run: python -c "import json; d=json.load(open('artifacts/release/sbom.cdx.json')); assert d['bomFormat']=='CycloneDX'"
 
   artifact-check:
+    name: Build and verify release artifacts
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          python-version: '3.12'
-      - run: python -m pip install build
-      - run: python scripts/release.py artifacts/release
-      - run: python -c "from scripts.release import verify_release; assert verify_release('artifacts/release')"
-      - run: python -m pip install artifacts/release/*.whl
-      - run: adversaryflow doctor --json
-      - run: adversaryflow demo
-      - run: python -m pip install artifacts/release/*.tar.gz
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install build tooling
+        run: python -m pip install --disable-pip-version-check build
+      - name: Build release
+        run: python scripts/release.py artifacts/release
+      - name: Verify release inventory and hashes
+        run: python -c "from scripts.release import verify_release; assert verify_release('artifacts/release')"
 
   new-user-release-standard:
+    name: Clean release journey (${{ matrix.os }}, Python ${{ matrix.python }})
+    timeout-minutes: 30
     strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install build
-      - run: python scripts/release.py artifacts/release
-      - run: python scripts/release_readiness.py artifacts/release
-
-  distro-matrix:
-    strategy:
+      fail-fast: false
       matrix:
         include:
-          - name: debian
-            image: debian:12
-          - name: ubuntu
-            image: ubuntu:24.04
-          - name: kali
-            image: kalilinux/kali-rolling
-    runs-on: ubuntu-latest
+          - os: ubuntu-latest
+            python: '3.14'
+          - os: windows-latest
+            python: '3.11'
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - run: >-
-          docker run --rm
-          -v "${{ github.workspace }}:/workspace"
-          -w /workspace
-          "${{ matrix.image }}"
-          bash -lc "apt-get update && apt-get install -y python3 python3-venv python3-pip && python3 -m venv .venv && .venv/bin/python -m pip install --break-system-packages -e '.[dev]' && .venv/bin/python -m adversaryflow doctor --json && .venv/bin/python -m pytest -q && .venv/bin/python -m adversaryflow demo"
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install build tooling
+        run: python -m pip install --disable-pip-version-check build
+      - name: Build release
+        run: python scripts/release.py artifacts/release
+      - name: Run clean wheel, sdist, and source ZIP journeys
+        run: python scripts/release_readiness.py artifacts/release

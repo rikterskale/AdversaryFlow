@@ -4,11 +4,11 @@ AdversaryFlow accepts improvements that preserve its simulation-only, RoE-gated 
 
 ## Local setup
 
-Use Python 3.11 or newer. On Windows, run `./scripts/install.ps1 -Dev`; on Debian, Ubuntu, or Kali, run `bash scripts/install.sh --dev`. Then run:
+Use Python 3.11 through 3.14. Contributor mode installs the checkout in editable mode with the `dev` extras; the normal installer performs a non-editable runtime install. On Windows, run `.\scripts\install.ps1 -Dev`; on Debian, Ubuntu, or Kali, run `bash scripts/install.sh --dev`. Activation is optional; then run:
 
 ```powershell
-python -m pytest -q --cov=adversaryflow --cov-branch --cov-fail-under=95
-python -m adversaryflow doctor --json
+.\.venv\Scripts\python.exe -m pytest -q --cov=adversaryflow --cov-branch --cov-fail-under=95
+.\.venv\Scripts\python.exe -m adversaryflow doctor --json
 ```
 
 ## Change expectations
