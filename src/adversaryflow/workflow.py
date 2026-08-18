@@ -14,6 +14,10 @@ from .emulation import Ability
 from .models import RulesOfEngagement
 from .reports import write_campaign_reports
 from .telemetry import correlate_events, load_telemetry_records, sensor_preflight
+from .finding_workflow import (Finding, FindingSeverity, FindingStatus,
+                                FindingWorkflowEngine, Recommendation,
+                                WorkflowPhase, WorkflowState, WorkflowStep,
+                                default_steps)
 
 
 @dataclass(frozen=True)
