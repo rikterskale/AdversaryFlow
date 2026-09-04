@@ -1,12 +1,20 @@
 # Releasing
 
-1. Ensure `backend.__version__` and `CHANGELOG.md` describe the intended release.
-2. Run `python -m unittest discover --verbose` and all static checks from CI.
-3. Build locally with `python -m build` and test the wheel in a clean virtual environment.
-4. Merge through the required review process.
-5. Create and push a matching annotated tag such as `v0.2.0`.
-6. The release workflow retests, builds the sdist/wheel, and attaches them to a GitHub release.
-7. Smoke-test `adversaryflow --version`, `/`, and `/api/health` from the released wheel.
+1. Update backend.__version__, CHANGELOG.md, schemas, OpenAPI, and docs.
+2. Run the complete local verification suite and build in a clean environment.
+3. Merge only after the Linux, Windows, macOS, package-smoke, CodeQL, and build
+   jobs pass.
+4. Create a reviewed annotated tag matching the package version, such as
+   v0.3.0. Never reuse or move a published tag.
+5. The release workflow verifies tag/version/changelog identity, retests,
+   builds the wheel and sdist, produces CycloneDX SBOM and SHA-256 files, and
+   creates GitHub build-provenance attestations.
+6. The protected release environment should require approval. Set the
+   repository variable PUBLISH_PYPI=true only after PyPI trusted publishing
+   is configured for that environment.
+7. Verify release checksums and attestations, then smoke-test --version,
+   doctor, /, /api/bootstrap, and /api/health from the released wheel.
 
-Do not reuse or move a published version tag. Document supported-version or upgrade-policy changes in the changelog and support policy.
+GitHub Actions are pinned by commit SHA. Dependabot proposes reviewed action
+and Python dependency updates.
 

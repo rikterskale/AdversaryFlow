@@ -44,7 +44,7 @@ PART = {
                     "Locates Group Policy Preferences XML (read-only; cpassword not decrypted).")],
     "T1552.008": [c("cloud", "cmd.exe /c \"echo AF chat-messages-credentials proxy - search your own chat export read-only\"",
                     "Placeholder proxy (read-only).")],
-    "T1555.001": [c("macos", "security list-keychains & echo AF keychain proxy (list only, nothing dumped)",
+    "T1555.001": [c("macos", "security list-keychains && echo 'AF keychain proxy (list only, nothing dumped)'",
                     "Lists keychains (read-only).")],
     "T1555.004": [c("windows", "cmdkey /list & echo AF Windows-Credential-Manager proxy (list only)",
                     "Lists stored credentials (read-only).")],

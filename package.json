@@ -1,0 +1,13 @@
+{
+  "name": "adversaryflow-ui-tests",
+  "private": true,
+  "version": "0.3.0",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.62.1",
+    "ajv": "8.20.0"
+  }
+}

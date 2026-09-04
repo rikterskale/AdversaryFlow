@@ -8,12 +8,21 @@ lab commands.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
+import json
 import os
+import secrets
+import sys
 import sysconfig
+import tempfile
+import threading
+import time
+import uuid
+import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, abort, g, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from . import __version__, attack_data, command_catalog
@@ -33,7 +42,25 @@ def _frontend_dir() -> str:
 FRONTEND_DIR = _frontend_dir()
 
 app = Flask(__name__, static_folder=None)
-_runtime: Dict[str, Any] = {"ready": False, "error": "ATT&CK data has not been loaded"}
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+_runtime: Dict[str, Any] = {
+    "ready": False,
+    "loading": False,
+    "phase": "not_started",
+    "error": "ATT&CK data has not been loaded",
+    "started_at": None,
+    "completed_at": None,
+    "requests_total": 0,
+    "requests_by_status": {},
+}
+_runtime_lock = threading.RLock()
+_refresh_lock = threading.Lock()
+_last_refresh = 0.0
+_csrf_token = secrets.token_urlsafe(32)
+REFRESH_COOLDOWN_SECONDS = 5
+LOG_LEVEL = os.environ.get("ADVERSARYFLOW_LOG_LEVEL", "info").lower()
+REMOTE_MODE = False
+API_TOKEN = ""
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +77,33 @@ def static_files(path: str):
     return send_from_directory(FRONTEND_DIR, path)
 
 
+@app.before_request
+def begin_request() -> None:
+    g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    g.request_started = time.monotonic()
+    if REMOTE_MODE and request.path.startswith("/api/"):
+        supplied = request.headers.get("Authorization", "")
+        expected = f"Bearer {API_TOKEN}"
+        if not secrets.compare_digest(supplied, expected):
+            abort(401, description="A valid bearer token is required for remote API access")
+
+
+@app.after_request
+def secure_response(response):
+    response.headers["X-Request-ID"] = getattr(g, "request_id", "unknown")
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+    with _runtime_lock:
+        _runtime["requests_total"] += 1
+        key = str(response.status_code)
+        _runtime["requests_by_status"][key] = _runtime["requests_by_status"].get(key, 0) + 1
+    _log_event("request", method=request.method, path=request.path, status=response.status_code,
+               duration_ms=round((time.monotonic() - getattr(g, "request_started", time.monotonic())) * 1000, 1))
+    return response
+
+
 # ---------------------------------------------------------------------------
 # API
 # ---------------------------------------------------------------------------
@@ -62,14 +116,35 @@ def health():
         "status": "ready" if ready else "degraded",
         "ready": ready,
         "version": __version__,
+        "loading": bool(_runtime["loading"]),
+        "phase": _runtime["phase"],
         "error": None if ready else _runtime["error"],
         "attack_data": index_status,
+        "service": _runtime_snapshot(),
     }), 200 if ready else 503
+
+
+@app.route("/api/bootstrap", methods=["GET", "POST"])
+def bootstrap():
+    if request.method == "POST":
+        _require_csrf()
+        if not _start_bootstrap():
+            return jsonify({"status": "already_loading", "runtime": _runtime_snapshot()}), 202
+    status = 200 if _runtime["ready"] else 202 if _runtime["loading"] else 503
+    return jsonify({"status": _runtime["phase"], "runtime": _runtime_snapshot(), "cache": attack_data.cache_status()}), status
+
+
+@app.route("/api/session")
+def session():
+    """Issue a same-origin CSRF token for mutating local API operations."""
+    return jsonify({"csrf_token": _csrf_token, "version": __version__})
 
 
 @app.route("/api/actors")
 def actors():
     """List threat-actor groups & campaigns that have techniques mapped."""
+    if _runtime["loading"]:
+        abort(503, description="ATT&CK data is still loading; poll /api/bootstrap")
     domains = _domains_from_request()
     idx = attack_data.get_index(domains)
     _mark_ready()
@@ -84,21 +159,36 @@ def actors():
 @app.route("/api/refresh", methods=["POST"])
 def refresh():
     """Force a re-download of the live ATT&CK STIX feed."""
+    global _last_refresh
+    _require_csrf()
+    if _runtime["loading"]:
+        return jsonify({"error": "bootstrap_in_progress", "message": "Wait for initial ATT&CK setup to finish.", "version": __version__}), 409
+    if time.monotonic() - _last_refresh < REFRESH_COOLDOWN_SECONDS:
+        return jsonify({"error": "refresh_rate_limited", "message": "Wait a few seconds before refreshing again.", "version": __version__}), 429
+    if not _refresh_lock.acquire(blocking=False):
+        return jsonify({"error": "refresh_in_progress", "message": "An ATT&CK refresh is already running.", "version": __version__}), 409
     domains = _domains_from_request()
-    for d in domains:
-        attack_data.load_bundle(d, force_refresh=True)
-    idx = attack_data.get_index(domains, rebuild=True)
-    _mark_ready()
-    return jsonify({
-        "status": "refreshed",
-        "domains": idx.domains,
-        "data_version": idx.data_version,
-    })
+    try:
+        with _runtime_lock:
+            _runtime.update(ready=False, loading=True, phase="refreshing", error=None)
+        idx = attack_data.refresh_index(domains)
+        _mark_ready()
+        _last_refresh = time.monotonic()
+        return jsonify({
+            "status": "refreshed",
+            "domains": idx.domains,
+            "data_version": idx.data_version,
+            "cache": attack_data.cache_status(),
+        })
+    finally:
+        _refresh_lock.release()
 
 
 @app.route("/api/workflow/<stix_id>")
 def workflow(stix_id: str):
     """Build the full attack workflow for one actor."""
+    if _runtime["loading"]:
+        abort(503, description="ATT&CK data is still loading; poll /api/bootstrap")
     domains = _domains_from_request()
     idx = attack_data.get_index(domains)
     _mark_ready()
@@ -195,22 +285,66 @@ def _domains_from_request() -> List[str]:
     if not raw:
         return ["enterprise"]
     values = raw if isinstance(raw, list) else str(raw).split(",")
+    supplied = [str(domain).strip() for domain in values if str(domain).strip()]
     domains = list(dict.fromkeys(
         str(domain).strip()
-        for domain in values
+        for domain in supplied
         if str(domain).strip() in attack_data.STIX_SOURCES
     ))
+    invalid = [domain for domain in supplied if domain not in attack_data.STIX_SOURCES]
+    if invalid:
+        abort(400, description=f"Unknown ATT&CK domain(s): {', '.join(invalid)}")
     return domains or ["enterprise"]
 
 
 def _mark_ready() -> None:
-    _runtime["ready"] = True
-    _runtime["error"] = None
+    with _runtime_lock:
+        _runtime.update(ready=True, loading=False, phase="ready", error=None,
+                        completed_at=time.time())
 
 
 def _mark_error(exc: Exception) -> None:
-    _runtime["ready"] = False
-    _runtime["error"] = str(exc)
+    with _runtime_lock:
+        _runtime.update(ready=False, loading=False, phase="failed", error=str(exc),
+                        completed_at=time.time())
+
+
+def _runtime_snapshot() -> Dict[str, Any]:
+    with _runtime_lock:
+        return dict(_runtime)
+
+
+def _require_csrf() -> None:
+    if not secrets.compare_digest(request.headers.get("X-AdversaryFlow-CSRF", ""), _csrf_token):
+        abort(403, description="Missing or invalid same-origin request token")
+
+
+def _bootstrap_worker() -> None:
+    try:
+        attack_data.get_index(["enterprise"])
+        _mark_ready()
+        _log_event("bootstrap_ready")
+    except Exception as exc:  # noqa: BLE001
+        _mark_error(exc)
+        _log_event("bootstrap_failed", level="error", error=str(exc))
+
+
+def _start_bootstrap() -> bool:
+    with _runtime_lock:
+        if _runtime["loading"]:
+            return False
+        _runtime.update(ready=False, loading=True, phase="loading", error=None,
+                        started_at=time.time(), completed_at=None)
+    threading.Thread(target=_bootstrap_worker, name="attack-bootstrap", daemon=True).start()
+    return True
+
+
+def _log_event(event: str, level: str = "info", **fields: Any) -> None:
+    levels = {"debug": 10, "info": 20, "warning": 30, "error": 40}
+    if levels.get(level, 20) < levels.get(LOG_LEVEL, 20):
+        return
+    record = {"timestamp": time.time(), "level": level, "event": event, **fields}
+    print(json.dumps(record, sort_keys=True), flush=True)
 
 
 @app.errorhandler(Exception)
@@ -230,7 +364,8 @@ def api_error(exc: Exception):
     _mark_error(exc)
     return jsonify({
         "error": "request failed",
-        "message": str(exc),
+        "message": "The request failed. Check the server log with the request ID.",
+        "request_id": getattr(g, "request_id", "unknown"),
         "version": __version__,
     }), 500
 
@@ -240,36 +375,118 @@ def _parser() -> argparse.ArgumentParser:
         prog="adversaryflow",
         description="Guided MITRE ATT&CK adversary-emulation workflow planner",
     )
+    parser.add_argument("command", nargs="?", default="serve",
+                        choices=["serve", "doctor", "cache-status", "cache-refresh", "cache-clear"])
     parser.add_argument("--host", default=os.environ.get("ADVERSARYFLOW_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("ADVERSARYFLOW_PORT", "5000")))
     parser.add_argument("--cache-dir", default=os.environ.get("ADVERSARYFLOW_CACHE_DIR"))
     parser.add_argument("--offline", action="store_true", default=os.environ.get("ADVERSARYFLOW_OFFLINE", "").lower() in {"1", "true", "yes"}, help="use cached ATT&CK data without downloading")
     parser.add_argument("--no-preload", action="store_true", help="start before loading ATT&CK data")
+    parser.add_argument("--open", action="store_true", dest="open_browser", help="open the browser when the service is ready")
+    parser.add_argument("--allow-remote", action="store_true", help="explicitly permit a non-loopback bind address")
+    parser.add_argument("--api-token", default=os.environ.get("ADVERSARYFLOW_API_TOKEN", ""),
+                        help="bearer token required for non-loopback API access (or ADVERSARYFLOW_API_TOKEN)")
+    parser.add_argument("--yes", action="store_true", help="confirm a destructive maintenance operation")
+    parser.add_argument("--domains", default="enterprise", help="comma-separated domains for cache-refresh")
+    parser.add_argument("--log-level", choices=["debug", "info", "warning", "error"],
+                        default=os.environ.get("ADVERSARYFLOW_LOG_LEVEL", "info"))
     parser.add_argument("--version", action="version", version=f"AdversaryFlow {__version__}")
     return parser
 
 
 def main(argv: List[str] | None = None) -> int:
+    global API_TOKEN, LOG_LEVEL, REMOTE_MODE
     args = _parser().parse_args(argv)
+    LOG_LEVEL = args.log_level
     if args.cache_dir:
         attack_data.configure_cache_dir(args.cache_dir)
     attack_data.configure_offline(args.offline)
 
+    if args.command == "doctor":
+        return _doctor()
+    if args.command == "cache-status":
+        print(json.dumps(attack_data.cache_status(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "cache-refresh":
+        domains = [item.strip() for item in args.domains.split(",") if item.strip()]
+        invalid = [item for item in domains if item not in attack_data.STIX_SOURCES]
+        if invalid:
+            print(f"Unknown ATT&CK domain(s): {', '.join(invalid)}")
+            return 2
+        attack_data.refresh_index(domains)
+        print(json.dumps(attack_data.cache_status(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "cache-clear":
+        if not args.yes:
+            print("Refusing to clear the cache without --yes.")
+            return 2
+        print(json.dumps({"removed": attack_data.clear_disk_cache()}, indent=2))
+        return 0
+
+    if not _is_loopback_host(args.host) and not args.allow_remote:
+        print("Refusing a non-loopback bind without --allow-remote. Read docs/OPERATIONS.md first.")
+        return 2
+    if not _is_loopback_host(args.host) and not args.api_token:
+        print("Refusing a non-loopback bind without --api-token or ADVERSARYFLOW_API_TOKEN.")
+        return 2
+
+    REMOTE_MODE = not _is_loopback_host(args.host)
+    API_TOKEN = args.api_token
+
     if not args.no_preload:
-        print("AdversaryFlow: loading MITRE ATT&CK data...")
-        try:
-            attack_data.get_index(["enterprise"])
-            _mark_ready()
-            print("AdversaryFlow: ATT&CK data ready.")
-        except Exception as exc:  # noqa: BLE001
-            _mark_error(exc)
-            print(f"AdversaryFlow: WARNING could not preload ATT&CK data: {exc}")
+        _start_bootstrap()
 
     from waitress import serve
 
-    print(f"AdversaryFlow {__version__}: http://{args.host}:{args.port}")
+    url_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
+    url = f"http://{url_host}:{args.port}"
+    print(f"AdversaryFlow {__version__}: {url}")
+    if not _is_loopback_host(args.host):
+        print("WARNING: remote binding is enabled; every API request requires the configured bearer token.")
+    if args.open_browser:
+        threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
     serve(app, host=args.host, port=args.port)
     return 0
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host.lower() in {"127.0.0.1", "localhost", "::1"}
+
+
+def _open_when_ready(url: str) -> None:
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if _runtime["ready"] or _runtime["phase"] == "failed":
+            webbrowser.open(url)
+            return
+        time.sleep(0.2)
+
+
+def _doctor() -> int:
+    checks: Dict[str, Any] = {
+        "version": __version__,
+        "python": sys.version.split()[0],
+        "frontend_dir": FRONTEND_DIR,
+        "frontend_available": all((Path(FRONTEND_DIR) / name).is_file() for name in ("index.html", "styles.css", "app.js")),
+        "cache": attack_data.cache_status(),
+        "dependencies": {},
+    }
+    for package in ("Flask", "waitress"):
+        try:
+            checks["dependencies"][package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            checks["dependencies"][package] = None
+    try:
+        os.makedirs(attack_data.CACHE_DIR, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=".adversaryflow-doctor-", dir=attack_data.CACHE_DIR):
+            checks["cache_writable"] = True
+    except OSError as exc:
+        checks["cache_writable"] = False
+        checks["cache_error"] = str(exc)
+    ok = checks["frontend_available"] and checks["cache_writable"] and all(checks["dependencies"].values())
+    checks["ok"] = ok
+    print(json.dumps(checks, indent=2, sort_keys=True))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

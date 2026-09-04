@@ -2,6 +2,22 @@
 
 All notable changes to AdversaryFlow are documented here.
 
+## 0.3.0 — 2026-09-04
+
+- Added structured command risk, privilege, network, telemetry, prerequisite,
+  timeout, rollback, and cleanup metadata with explicit high-risk acknowledgment.
+- Added passed/failed/skipped evidence records, operator/target context, cleanup
+  verification, schema 2.0 exports, and safe JSON plan resume.
+- Made first-run ATT&CK bootstrap asynchronous with progress and retry UX.
+- Added bounded, validated, atomic, provenance-recorded cache downloads plus
+  refresh serialization, rate limits, consistency resets, and repair commands.
+- Added CSRF protection, remote-bind opt-in, security headers, request IDs,
+  structured logs, diagnostics, and strict domain validation.
+- Added cross-platform CI/package smoke tests, CodeQL, pinned actions, SBOMs,
+  checksums, provenance attestations, and optional PyPI trusted publishing.
+- Added Apache-2.0 licensing, security policy, NOTICE, and expanded operations,
+  installation, export, and release guidance.
+
 ## 0.2.0 — 2026-09-04
 
 - Added exact-platform command selection and explicit unsupported states.

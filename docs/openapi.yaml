@@ -1,11 +1,40 @@
 openapi: 3.1.0
 info:
   title: AdversaryFlow API
-  version: 0.2.0
-  description: Local API for ATT&CK actors and guided emulation plans.
+  version: 0.3.0
+  description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication.
 servers:
   - url: http://127.0.0.1:5000
 paths:
+  /api/session:
+    get:
+      summary: Issue a same-origin token for mutating local operations
+      responses:
+        "200":
+          description: Browser session token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrf_token, version]
+                properties:
+                  csrf_token: { type: string }
+                  version: { type: string }
+  /api/bootstrap:
+    get:
+      summary: Report background ATT&CK bootstrap progress
+      responses:
+        "200": { description: Data is ready }
+        "202": { description: Bootstrap is running }
+        "503": { description: Bootstrap has not started or failed }
+    post:
+      summary: Start or retry background ATT&CK bootstrap
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200": { description: Data is ready }
+        "202": { description: Bootstrap started or is already running }
+        "403": { $ref: "#/components/responses/Error" }
   /api/health:
     get:
       summary: Report liveness and ATT&CK readiness
@@ -62,6 +91,7 @@ paths:
       summary: Refresh selected ATT&CK domains and rebuild their index
       parameters:
         - $ref: "#/components/parameters/Domains"
+        - $ref: "#/components/parameters/CsrfToken"
       responses:
         "200":
           description: Refreshed data version
@@ -70,9 +100,28 @@ paths:
               schema:
                 type: object
                 required: [status, domains, data_version]
+                properties:
+                  status: { const: refreshed }
+                  domains: { type: array, items: { type: string } }
+                  data_version: { type: string }
+                  cache: { type: object }
         "500": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
 components:
+  securitySchemes:
+    BearerToken:
+      type: http
+      scheme: bearer
+      description: Required on every API route only when non-loopback remote mode is enabled.
   parameters:
+    CsrfToken:
+      name: X-AdversaryFlow-CSRF
+      in: header
+      required: true
+      description: Same-origin token returned by GET /api/session.
+      schema: { type: string }
     Domains:
       name: domains
       in: query
@@ -85,20 +134,44 @@ components:
     Actor:
       type: object
       required: [stix_id, attack_id, name, type, aliases, description, technique_count]
+      properties:
+        stix_id: { type: string }
+        attack_id: { type: string }
+        name: { type: string }
+        type: { enum: [group, campaign] }
+        aliases: { type: array, items: { type: string } }
+        description: { type: string }
+        technique_count: { type: integer, minimum: 0 }
+      additionalProperties: false
     Workflow:
       type: object
       required: [actor, summary, kill_chain, stages, unmapped, metadata]
       properties:
         actor: { type: object }
-        summary: { type: object }
-        kill_chain: { type: array, items: { type: object } }
+        summary:
+          type: object
+          required: [total_techniques, unique_stages, curated_commands, fallback_commands]
+        kill_chain:
+          type: array
+          items:
+            type: object
+            required: [tactic, title]
+            properties:
+              tactic: { type: string }
+              title: { type: string }
         stages:
           type: array
           items: { $ref: "#/components/schemas/Stage" }
         unmapped:
           type: array
           items: { $ref: "#/components/schemas/Technique" }
-        metadata: { type: object }
+        metadata:
+          type: object
+          required: [domains, data_version, version]
+          properties:
+            domains: { type: array, items: { type: string } }
+            data_version: { type: string }
+            version: { type: string }
     Stage:
       type: object
       required: [tactic, title, techniques]
@@ -114,30 +187,59 @@ components:
       properties:
         attack_id: { type: string }
         name: { type: string }
+        stix_id: { type: string }
+        description: { type: string }
+        tactics: { type: array, items: { type: string } }
+        platforms: { type: array, items: { type: string } }
+        is_subtechnique: { type: boolean }
+        data_sources: { type: array, items: { type: string } }
+        detection: { type: string }
+        url: { type: [string, "null"], format: uri }
         commands:
           type: array
           items: { $ref: "#/components/schemas/Command" }
         command_source: { enum: [curated, fallback] }
     Command:
       type: object
-      required: [platform, command, note, cleanup]
+      required: [platform, command, note, cleanup, risk, side_effects, requires_admin, requires_network, network_targets, prerequisites, expected_telemetry, expected_output, timeout_seconds, rollback, cleanup_required, acknowledgment_required]
       properties:
         platform: { type: string }
         command: { type: string }
         note: { type: string }
         cleanup: { type: string }
+        risk: { enum: [low, medium, high] }
+        side_effects: { type: array, items: { type: string } }
+        requires_admin: { type: boolean }
+        requires_network: { type: boolean }
+        network_targets: { type: array, items: { type: string } }
+        prerequisites: { type: array, items: { type: string } }
+        expected_telemetry: { type: string }
+        expected_output: { type: string }
+        timeout_seconds: { type: integer }
+        rollback: { type: string }
+        cleanup_required: { type: boolean }
+        acknowledgment_required: { type: boolean }
+      additionalProperties: false
     Health:
       type: object
-      required: [status, ready, version, error, attack_data]
+      required: [status, ready, loading, phase, version, error, attack_data, service]
       properties:
         status: { enum: [ready, degraded] }
         ready: { type: boolean }
+        loading: { type: boolean }
+        phase: { enum: [not_started, loading, refreshing, ready, failed] }
         version: { type: string }
         error: { type: [string, "null"] }
         attack_data: { type: object }
+        service: { type: object }
     Error:
       type: object
       required: [error, message, version]
+      properties:
+        error: { type: string }
+        message: { type: string }
+        request_id: { type: string }
+        version: { type: string }
   responses:
     Error:
       description: Structured application error

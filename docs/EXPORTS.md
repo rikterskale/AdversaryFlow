@@ -4,23 +4,28 @@ AdversaryFlow exports the current scoped plan in three formats.
 
 ## JSON
 
-JSON exports conform to [`schemas/adversaryflow-plan.schema.json`](../schemas/adversaryflow-plan.schema.json) and include:
+Schema 2.0 JSON exports conform to the checked-in
+schemas/adversaryflow-plan.schema.json contract and include:
 
-- schema, tool, and ATT&CK data versions;
-- selected domains and platform;
-- runnable and unsupported counts;
-- only completion records in the current scope;
-- an explicit `supported` flag for every technique.
-- `command_source` and `command` fields for each exported technique.
+- tool, schema, and ATT&CK data versions;
+- actor, domains, platform, stage, network/admin, and risk scope;
+- structured command safety metadata and exact-platform support;
+- operator and target context;
+- passed, failed, skipped, or not-run outcomes;
+- timestamps, evidence notes, and cleanup verification.
 
-The format is AdversaryFlow-native. Product-specific VECTR or Caldera conversion is not currently included.
+The welcome screen can resume a schema 2.0 export. Imported commands are
+treated as untrusted high-risk content and require acknowledgment before copy.
+The format is AdversaryFlow-native; VECTR and Caldera conversion is not included.
 
 ## Markdown
 
-The Markdown report distinguishes runnable and unsupported techniques and records the selected platform and catalog coverage.
+Markdown includes scope, outcomes, evidence, commands, notes, and cleanup. It
+is intended for human review and ticketing rather than automated ingestion.
 
 ## Runbook
 
-Runbooks use `REM` comments for Windows and `#` comments for Linux/macOS. Downloads retain a `.txt` suffix so they are review artifacts rather than directly executable scripts. Entries with no exact-platform command are emitted as comments only.
-
-Cleanup metadata is emitted as an explicit `MANUAL CLEANUP` comment; AdversaryFlow does not execute it.
+Runbooks use REM comments for Windows and # comments for Linux/macOS.
+Downloads retain a .txt suffix so they are review artifacts rather than
+directly executable scripts. Unsupported or safety-restricted entries are
+comments only. Cleanup remains an explicit manual action.

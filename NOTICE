@@ -1,0 +1,6 @@
+AdversaryFlow
+Copyright 2026 AdversaryFlow contributors
+
+This product can retrieve MITRE ATT&CK data at runtime. MITRE ATT&CK is a
+trademark of The MITRE Corporation. Runtime data is not bundled with the
+AdversaryFlow package and remains subject to its upstream terms.

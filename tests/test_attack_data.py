@@ -1,4 +1,8 @@
 import unittest
+import tempfile
+import hashlib
+import io
+import json
 from unittest.mock import patch
 
 from backend import attack_data
@@ -62,6 +66,44 @@ class DomainIndexTests(unittest.TestCase):
         attack_data.configure_offline(True)
         with self.assertRaisesRegex(RuntimeError, "offline mode requires a cached enterprise"):
             attack_data.load_bundle("enterprise")
+
+    def test_bundle_validation_rejects_unstructured_json(self):
+        with self.assertRaisesRegex(ValueError, "not a STIX bundle"):
+            attack_data._validate_bundle({"objects": []}, "enterprise")
+
+    def test_cache_status_reports_known_domains(self):
+        original = attack_data.CACHE_DIR
+        with tempfile.TemporaryDirectory() as directory:
+            attack_data.configure_cache_dir(directory)
+            status = attack_data.cache_status()
+            self.assertEqual(set(status["domains"]), set(attack_data.STIX_SOURCES))
+            self.assertFalse(status["domains"]["enterprise"]["exists"])
+        attack_data.configure_cache_dir(original)
+
+    def test_download_validates_and_records_provenance(self):
+        original = attack_data.CACHE_DIR
+        payload = json.dumps({
+            "type": "bundle", "id": "bundle--test",
+            "objects": [{"type": "x-mitre-matrix", "id": "x-mitre-matrix--test", "tactic_refs": []}],
+        }).encode()
+        response = io.BytesIO(payload)
+        response.headers = {"Content-Length": str(len(payload)), "ETag": '"fixture"'}
+        with tempfile.TemporaryDirectory() as directory:
+            attack_data.configure_cache_dir(directory)
+            destination = attack_data._cache_path("enterprise")
+            with patch("backend.attack_data.urllib.request.urlopen", return_value=response):
+                metadata = attack_data._download("https://example.test/bundle.json", destination, "enterprise")
+            self.assertEqual(metadata["sha256"], hashlib.sha256(payload).hexdigest())
+            self.assertEqual(attack_data._load_validated(destination, "enterprise")["id"], "bundle--test")
+            self.assertEqual(attack_data._read_metadata("enterprise")["etag"], '"fixture"')
+        attack_data.configure_cache_dir(original)
+
+    @patch("backend.attack_data.load_bundle", side_effect=lambda domain, force_refresh=False: bundle(domain))
+    def test_refresh_invalidates_derived_domain_combinations(self, _load):
+        combined = attack_data.get_index(["enterprise", "ics"])
+        refreshed = attack_data.refresh_index(["enterprise"])
+        self.assertIsNot(combined, refreshed)
+        self.assertIsNot(combined, attack_data.get_index(["enterprise", "ics"]))
 
 
 if __name__ == "__main__":

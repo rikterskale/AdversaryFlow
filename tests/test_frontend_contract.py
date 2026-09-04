@@ -15,7 +15,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('unsupported: true', self.javascript)
 
     def test_run_state_is_versioned(self):
-        self.assertIn('af_run_v2_', self.javascript)
+        self.assertIn('af_run_v3_', self.javascript)
         self.assertIn('state.dataVersion', self.javascript)
         self.assertIn('state.scope.cmdPlatform', self.javascript)
 
@@ -39,6 +39,15 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('aria-live="polite"', self.html)
         self.assertIn('prefers-reduced-motion', self.css)
         self.assertIn('aria-pressed', self.javascript)
+
+    def test_refresh_invalidates_current_workflow(self):
+        self.assertIn('state.workflow = null; state.records = {};', self.javascript)
+        self.assertIn('X-AdversaryFlow-CSRF', self.javascript)
+
+    def test_execution_evidence_and_safety_are_visible(self):
+        self.assertIn('evidence__outcome', self.javascript)
+        self.assertIn('acknowledgment_required', self.javascript)
+        self.assertIn('execution_context', self.javascript)
 
 
 if __name__ == "__main__":

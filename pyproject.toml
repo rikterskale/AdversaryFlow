@@ -9,6 +9,8 @@ description = "Development-lab MITRE ATT&CK adversary-emulation workflow planner
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "AdversaryFlow contributors" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 keywords = ["mitre-attack", "purple-team", "detection-engineering", "adversary-emulation"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -19,13 +21,21 @@ classifiers = [
   "Topic :: Security",
 ]
 dependencies = [
+  "blinker==1.9.0",
+  "click==8.5.0",
   "Flask==3.1.3",
+  "itsdangerous==2.2.0",
+  "Jinja2==3.1.6",
+  "MarkupSafe==3.0.3",
   "waitress==3.0.2",
+  "Werkzeug==3.1.8",
 ]
 
 [project.urls]
 Homepage = "https://github.com/rikterskale/AdversaryFlow"
 Issues = "https://github.com/rikterskale/AdversaryFlow/issues"
+Documentation = "https://github.com/rikterskale/AdversaryFlow/tree/main/docs"
+Changelog = "https://github.com/rikterskale/AdversaryFlow/blob/main/CHANGELOG.md"
 
 [project.scripts]
 adversaryflow = "backend.app:main"

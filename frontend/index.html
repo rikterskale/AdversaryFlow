@@ -76,7 +76,10 @@
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Export</b><span>Markdown, JSON, or runbook.</span></div></div>
         </div>
 
-        <button class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+        <div class="welcome__actions">
+          <button class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+          <label class="btn btn--ghost">Resume JSON plan<input id="importPlan" type="file" accept="application/json,.json" hidden /></label>
+        </div>
         <p class="welcome__foot">Built for disposable development labs. AdversaryFlow creates plans; it does not execute commands.</p>
       </div>
     </section>
@@ -151,6 +154,15 @@
           </div>
 
           <div class="panel">
+            <div class="panel__head"><svg class="icon"><use href="#i-flag"/></svg><h3>Execution record</h3></div>
+            <p class="panel__desc">Optional context included in local progress and exports. Do not enter secrets.</p>
+            <div class="fieldgrid">
+              <label class="field"><span>Operator</span><input id="recordOperator" type="text" maxlength="120" autocomplete="off" placeholder="Team or analyst" /></label>
+              <label class="field"><span>Target</span><input id="recordTarget" type="text" maxlength="200" autocomplete="off" placeholder="Disposable lab identifier" /></label>
+            </div>
+          </div>
+
+          <div class="panel">
             <div class="panel__head"><svg class="icon"><use href="#i-layers"/></svg><h3>Kill-chain stages</h3><button type="button" class="linkbtn" id="stagesAll">Select all</button></div>
             <p class="panel__desc">Include or drop tactics from the plan.</p>
             <div class="tacticgrid" id="tacticGrid" role="group" aria-label="Kill-chain stages"></div>
@@ -167,6 +179,21 @@
               <input type="checkbox" id="optCurated" />
               <span class="toggle__track"><span class="toggle__thumb"></span></span>
               <span class="toggle__text"><b>Curated tests only</b><span>Hide any auto-generated fallback commands.</span></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="optNetwork" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text"><b>Allow network-active commands</b><span>Include commands that contact a host or service.</span></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="optAdmin" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text"><b>Allow administrator commands</b><span>Include commands that require elevated privileges.</span></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="optHighRisk" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text"><b>Allow high-risk commands</b><span>Include commands with disruptive or sensitive side effects.</span></span>
             </label>
           </div>
         </div>
@@ -236,7 +263,7 @@
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
-  <div id="loader" class="loader" role="status" aria-live="polite" aria-busy="true" hidden><div class="loader__spin"></div><p id="loaderText">Working…</p></div>
+  <div id="loader" class="loader" role="status" aria-live="polite" aria-busy="true" hidden><div class="loader__card"><div class="loader__spin"></div><p id="loaderText">Working…</p><p class="loader__detail" id="loaderDetail"></p></div></div>
 
   <script src="app.js"></script>
 </body>

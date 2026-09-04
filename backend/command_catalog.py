@@ -16,9 +16,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from .command_safety import command_record
 
-def _c(platform: str, command: str, note: str = "", cleanup: str = "") -> Dict[str, str]:
-    return {"platform": platform, "command": command, "note": note, "cleanup": cleanup}
+
+def _c(platform: str, command: str, note: str = "", cleanup: str = "", **metadata: Any) -> Dict[str, Any]:
+    return command_record(platform, command, note, cleanup, **metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +121,8 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
                      "sc.exe delete AdversaryFlowLab")],
     "T1546.003": [_c("windows", "powershell -NoProfile -Command \"Get-WmiObject __EventFilter -Namespace root\\subscription | Select Name\"",
                      "Read-only enumeration of WMI event subscriptions.")],
-    "T1136.001": [_c("windows", "net user AdversaryFlowTmp P@ssw0rd!23 /add & echo (requires admin)",
-                     "Creates a lab local account to trip account-creation alerts.",
+    "T1136.001": [_c("windows", "net user AdversaryFlowTmp * /add & echo (requires admin; enter a unique temporary password)",
+                     "Creates a lab local account and prompts for a unique password.",
                      "net user AdversaryFlowTmp /delete")],
     "T1098": [_c("windows", "net user %USERNAME% & echo AdversaryFlow lab account-manipulation proxy (read-only)",
                  "Read-only account inspection as an account-manipulation proxy.")],

@@ -13,10 +13,16 @@ Data source: https://github.com/mitre-attack/attack-stix-data (official).
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
 import os
 import sys
+import tempfile
+import threading
 import time
+import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -60,6 +66,7 @@ STIX_SOURCES: Dict[str, str] = {
 
 # Refresh the on-disk cache when it is older than this many seconds (7 days).
 CACHE_TTL_SECONDS = 7 * 24 * 3600
+MAX_BUNDLE_BYTES = int(os.environ.get("ADVERSARYFLOW_MAX_BUNDLE_BYTES", str(128 * 1024 * 1024)))
 
 # Fallback kill-chain order, used only if the STIX matrix can't be parsed. The
 # authoritative order is derived at runtime from the x-mitre-matrix object, so
@@ -109,10 +116,16 @@ TACTIC_TITLES: Dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 _MEM_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_LOCKS: Dict[str, threading.Lock] = {domain: threading.Lock() for domain in STIX_SOURCES}
+_CACHE_EVENTS: Dict[str, Dict[str, Any]] = {}
 
 
 def _cache_path(domain: str) -> str:
     return os.path.join(CACHE_DIR, f"{domain}-attack.json")
+
+
+def _metadata_path(domain: str) -> str:
+    return os.path.join(CACHE_DIR, f"{domain}-attack.meta.json")
 
 
 def _cache_is_fresh(path: str) -> bool:
@@ -121,15 +134,111 @@ def _cache_is_fresh(path: str) -> bool:
     return (time.time() - os.path.getmtime(path)) < CACHE_TTL_SECONDS
 
 
-def _download(url: str, dest: str) -> None:
+def _read_metadata(domain: str) -> Dict[str, Any]:
+    try:
+        with open(_metadata_path(domain), "r", encoding="utf-8") as fh:
+            value = json.load(fh)
+            return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _validate_bundle(bundle: Any, domain: str) -> Dict[str, Any]:
+    if not isinstance(bundle, dict) or bundle.get("type") != "bundle":
+        raise ValueError(f"downloaded {domain} ATT&CK data is not a STIX bundle")
+    objects = bundle.get("objects")
+    if not isinstance(objects, list) or not objects:
+        raise ValueError(f"downloaded {domain} ATT&CK bundle contains no objects")
+    if not any(isinstance(item, dict) and item.get("type") == "x-mitre-matrix" for item in objects):
+        raise ValueError(f"downloaded {domain} ATT&CK bundle contains no matrix")
+    return bundle
+
+
+def _load_validated(path: str, domain: str, verify_provenance: bool = True) -> Dict[str, Any]:
+    metadata = _read_metadata(domain) if verify_provenance else {}
+    expected = metadata.get("sha256")
+    if expected:
+        digest = hashlib.sha256()
+        with open(path, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if not hmac.compare_digest(digest.hexdigest(), str(expected)):
+            raise ValueError(f"cached {domain} ATT&CK bundle does not match its recorded SHA-256")
+    with open(path, "r", encoding="utf-8") as fh:
+        return _validate_bundle(json.load(fh), domain)
+
+
+def _download(url: str, dest: str, domain: str, conditional: bool = True) -> Dict[str, Any]:
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "AdversaryFlow/1.0"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = resp.read()
-    tmp = dest + ".tmp"
-    with open(tmp, "wb") as fh:
-        fh.write(data)
-    os.replace(tmp, dest)
+    previous = _read_metadata(domain)
+    headers = {"User-Agent": "AdversaryFlow/0.3"}
+    if conditional and previous.get("etag"):
+        headers["If-None-Match"] = str(previous["etag"])
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        response = urllib.request.urlopen(req, timeout=120)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and os.path.exists(dest):
+            os.utime(dest, None)
+            previous.update({"checked_at": datetime.now(timezone.utc).isoformat(), "stale": False})
+            _write_metadata(domain, previous)
+            return previous
+        raise
+
+    digest = hashlib.sha256()
+    total = 0
+    fd, tmp = tempfile.mkstemp(prefix=f".{domain}-attack-", suffix=".tmp", dir=os.path.dirname(dest))
+    try:
+        with response, os.fdopen(fd, "wb") as fh:
+            declared = response.headers.get("Content-Length")
+            if declared and int(declared) > MAX_BUNDLE_BYTES:
+                raise ValueError(f"{domain} ATT&CK bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit")
+            _CACHE_EVENTS[domain] = {"status": "downloading", "bytes_received": 0, "content_length": int(declared) if declared else None}
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_BUNDLE_BYTES:
+                    raise ValueError(f"{domain} ATT&CK bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit")
+                digest.update(chunk)
+                fh.write(chunk)
+                _CACHE_EVENTS[domain].update(bytes_received=total)
+            fh.flush()
+            os.fsync(fh.fileno())
+        _CACHE_EVENTS[domain].update(status="validating", bytes_received=total)
+        _load_validated(tmp, domain, verify_provenance=False)
+        os.replace(tmp, dest)
+        metadata = {
+            "source_url": url,
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "etag": response.headers.get("ETag"),
+            "last_modified": response.headers.get("Last-Modified"),
+            "sha256": digest.hexdigest(),
+            "size_bytes": total,
+            "stale": False,
+        }
+        _write_metadata(domain, metadata)
+        return metadata
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def _write_metadata(domain: str, metadata: Dict[str, Any]) -> None:
+    path = _metadata_path(domain)
+    fd, tmp = tempfile.mkstemp(prefix=f".{domain}-meta-", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(metadata, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def load_bundle(domain: str = "enterprise", force_refresh: bool = False) -> Dict[str, Any]:
@@ -137,28 +246,68 @@ def load_bundle(domain: str = "enterprise", force_refresh: bool = False) -> Dict
     if domain not in STIX_SOURCES:
         raise ValueError(f"Unknown ATT&CK domain: {domain}")
 
-    if not force_refresh and domain in _MEM_CACHE:
-        return _MEM_CACHE[domain]
+    with _CACHE_LOCKS[domain]:
+        if not force_refresh and domain in _MEM_CACHE:
+            return _MEM_CACHE[domain]
 
-    path = _cache_path(domain)
-    needs_download = force_refresh or not _cache_is_fresh(path)
-    if force_refresh and OFFLINE:
-        raise RuntimeError("cannot refresh the ATT&CK feed while offline mode is enabled")
-    if needs_download and OFFLINE and not os.path.exists(path):
-        raise RuntimeError(f"offline mode requires a cached {domain} ATT&CK bundle at {path}")
-    if needs_download and not OFFLINE:
+        path = _cache_path(domain)
+        needs_download = force_refresh or not _cache_is_fresh(path)
+        if force_refresh and OFFLINE:
+            raise RuntimeError("cannot refresh the ATT&CK feed while offline mode is enabled")
+        if needs_download and OFFLINE and not os.path.exists(path):
+            raise RuntimeError(f"offline mode requires a cached {domain} ATT&CK bundle at {path}")
+        if needs_download and not OFFLINE:
+            try:
+                metadata = _download(STIX_SOURCES[domain], path, domain)
+                _CACHE_EVENTS[domain] = {"status": "fresh", **metadata}
+            except Exception as exc:
+                if not os.path.exists(path):
+                    raise
+                metadata = _read_metadata(domain)
+                metadata.update({"stale": True, "refresh_error": str(exc)})
+                _CACHE_EVENTS[domain] = {"status": "stale", **metadata}
+
         try:
-            _download(STIX_SOURCES[domain], path)
+            bundle = _load_validated(path, domain)
         except Exception:
-            # If the download fails but we have *some* cached copy, use it.
-            if not os.path.exists(path):
-                raise
+            if OFFLINE:
+                raise RuntimeError(f"cached {domain} ATT&CK bundle is invalid; reconnect and refresh or clear {path}")
+            _download(STIX_SOURCES[domain], path, domain, conditional=False)
+            bundle = _load_validated(path, domain)
 
-    with open(path, "r", encoding="utf-8") as fh:
-        bundle = json.load(fh)
+        _MEM_CACHE[domain] = bundle
+        return bundle
 
-    _MEM_CACHE[domain] = bundle
-    return bundle
+
+def cache_status() -> Dict[str, Any]:
+    """Return per-domain cache provenance without downloading data."""
+    domains: Dict[str, Any] = {}
+    now = time.time()
+    for domain in STIX_SOURCES:
+        path = _cache_path(domain)
+        exists = os.path.exists(path)
+        age = max(0, now - os.path.getmtime(path)) if exists else None
+        domains[domain] = {
+            "path": path,
+            "exists": exists,
+            "age_seconds": age,
+            "fresh": bool(exists and age is not None and age < CACHE_TTL_SECONDS),
+            "metadata": _CACHE_EVENTS.get(domain) or _read_metadata(domain),
+        }
+    return {"cache_dir": CACHE_DIR, "offline": OFFLINE, "domains": domains}
+
+
+def clear_disk_cache() -> List[str]:
+    """Remove only known AdversaryFlow cache files and return removed paths."""
+    removed: List[str] = []
+    clear_memory_cache()
+    for domain in STIX_SOURCES:
+        with _CACHE_LOCKS[domain]:
+            for path in (_cache_path(domain), _metadata_path(domain)):
+                if os.path.isfile(path):
+                    os.unlink(path)
+                    removed.append(path)
+    return removed
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +476,7 @@ class AttackIndex:
 # ---------------------------------------------------------------------------
 
 _INDEXES: Dict[Tuple[str, ...], AttackIndex] = {}
+_INDEX_LOCK = threading.RLock()
 
 
 def _domain_key(domains: Optional[List[str]]) -> Tuple[str, ...]:
@@ -336,21 +486,38 @@ def _domain_key(domains: Optional[List[str]]) -> Tuple[str, ...]:
 
 def get_index(domains: Optional[List[str]] = None, rebuild: bool = False) -> AttackIndex:
     key = _domain_key(domains)
-    if rebuild or key not in _INDEXES:
-        _INDEXES[key] = AttackIndex(list(key))
-    return _INDEXES[key]
+    with _INDEX_LOCK:
+        if rebuild or key not in _INDEXES:
+            _INDEXES[key] = AttackIndex(list(key))
+        return _INDEXES[key]
+
+
+def refresh_index(domains: Optional[List[str]] = None) -> AttackIndex:
+    """Serialize refresh and invalidate every derived domain combination."""
+    key = _domain_key(domains)
+    with _INDEX_LOCK:
+        for domain in key:
+            load_bundle(domain, force_refresh=True)
+        _INDEXES.clear()
+        index = AttackIndex(list(key))
+        _INDEXES[key] = index
+        return index
 
 
 def loaded_index_status() -> Dict[str, Any]:
     """Return readiness metadata without triggering downloads or parsing."""
-    return {
-        "ready": bool(_INDEXES),
-        "domain_sets": [list(key) for key in _INDEXES],
-        "data_versions": [index.data_version for index in _INDEXES.values()],
-    }
+    with _INDEX_LOCK:
+        return {
+            "ready": bool(_INDEXES),
+            "domain_sets": [list(key) for key in _INDEXES],
+            "data_versions": [index.data_version for index in _INDEXES.values()],
+            "cache": cache_status(),
+        }
 
 
 def clear_memory_cache() -> None:
     """Clear process-local indexes and bundles (primarily for tests/reloads)."""
-    _INDEXES.clear()
-    _MEM_CACHE.clear()
+    with _INDEX_LOCK:
+        _INDEXES.clear()
+        _MEM_CACHE.clear()
+        _CACHE_EVENTS.clear()

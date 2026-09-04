@@ -3,67 +3,133 @@
   "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-plan.schema.json",
   "title": "AdversaryFlow plan export",
   "type": "object",
-  "required": ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "summary", "stages"],
+  "required": ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages"],
   "properties": {
-    "schema_version": { "const": "1.0" },
+    "schema_version": { "const": "2.0" },
     "tool": { "const": "AdversaryFlow" },
-    "tool_version": { "type": "string" },
-    "data_version": { "type": "string" },
-    "domains": {
-      "type": "array",
-      "items": { "enum": ["enterprise", "ics", "mobile"] },
-      "minItems": 1,
-      "uniqueItems": true
-    },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "data_version": { "type": "string", "minLength": 1 },
+    "domains": { "type": "array", "items": { "enum": ["enterprise", "ics", "mobile"] }, "minItems": 1, "uniqueItems": true },
     "generated": { "type": "string", "format": "date-time" },
-    "actor": { "type": "object" },
-    "scope": { "type": "object" },
-    "summary": {
-      "type": "object",
-      "required": ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"]
-    },
-    "stages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["tactic", "title", "techniques"],
-        "properties": {
-          "tactic": { "type": "string" },
-          "title": { "type": "string" },
-          "techniques": {
-            "type": "array",
-            "items": { "$ref": "#/$defs/technique" }
-          }
-        },
-        "additionalProperties": false
-      }
-    }
+    "actor": { "$ref": "#/$defs/actor" },
+    "scope": { "$ref": "#/$defs/scope" },
+    "execution_context": { "$ref": "#/$defs/executionContext" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } }
   },
   "$defs": {
+    "actor": {
+      "type": "object",
+      "required": ["stix_id", "attack_id", "name", "type", "aliases", "description", "technique_count"],
+      "properties": {
+        "stix_id": { "type": "string", "minLength": 1 },
+        "attack_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["group", "campaign"] },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" },
+        "technique_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": ["command_platform", "include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk", "stages"],
+      "properties": {
+        "command_platform": { "enum": ["windows", "linux", "macos"] },
+        "include_pre": { "type": "boolean" },
+        "curated_only": { "type": "boolean" },
+        "allow_network": { "type": "boolean" },
+        "allow_admin": { "type": "boolean" },
+        "allow_high_risk": { "type": "boolean" },
+        "stages": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "additionalProperties": false
+    },
+    "executionContext": {
+      "type": "object",
+      "required": ["operator", "target"],
+      "properties": {
+        "operator": { "type": "string", "maxLength": 120 },
+        "target": { "type": "string", "maxLength": 200 }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"],
+      "properties": {
+        "techniques": { "type": "integer", "minimum": 0 },
+        "runnable": { "type": "integer", "minimum": 0 },
+        "unsupported": { "type": "integer", "minimum": 0 },
+        "stages": { "type": "integer", "minimum": 0 },
+        "curated": { "type": "integer", "minimum": 0 },
+        "fallback": { "type": "integer", "minimum": 0 },
+        "marked_run": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "additionalProperties": false
+    },
+    "stage": {
+      "type": "object",
+      "required": ["tactic", "title", "techniques"],
+      "properties": {
+        "tactic": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "techniques": { "type": "array", "items": { "$ref": "#/$defs/technique" } }
+      },
+      "additionalProperties": false
+    },
     "technique": {
       "type": "object",
-      "required": ["id", "name", "url", "platforms", "command_source", "supported", "command", "run"],
+      "required": ["id", "name", "url", "platforms", "command_source", "supported", "command", "run", "execution"],
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "url": { "type": "string" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
         "platforms": { "type": "array", "items": { "type": "string" } },
         "command_source": { "enum": ["curated", "fallback"] },
         "supported": { "type": "boolean" },
         "command": { "$ref": "#/$defs/command" },
-        "run": { "type": "boolean" }
+        "run": { "type": "boolean" },
+        "execution": { "$ref": "#/$defs/execution" }
       },
       "additionalProperties": false
     },
     "command": {
       "type": "object",
-      "required": ["platform", "command", "note", "cleanup"],
+      "required": ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"],
       "properties": {
         "platform": { "type": "string" },
         "command": { "type": "string" },
         "note": { "type": "string" },
         "cleanup": { "type": "string" },
-        "unsupported": { "type": "boolean" }
+        "risk": { "enum": ["none", "low", "medium", "high"] },
+        "side_effects": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "requires_admin": { "type": "boolean" },
+        "requires_network": { "type": "boolean" },
+        "network_targets": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "prerequisites": { "type": "array", "items": { "type": "string" } },
+        "expected_telemetry": { "type": "string" },
+        "expected_output": { "type": "string" },
+        "timeout_seconds": { "type": "integer", "minimum": 0, "maximum": 3600 },
+        "rollback": { "type": "string" },
+        "cleanup_required": { "type": "boolean" },
+        "acknowledgment_required": { "type": "boolean" },
+        "unsupported": { "type": "boolean" },
+        "restricted": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["outcome"],
+      "properties": {
+        "outcome": { "enum": ["not_run", "passed", "failed", "skipped"] },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "operator": { "type": "string", "maxLength": 120 },
+        "target": { "type": "string", "maxLength": 200 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "cleanup_completed": { "type": "boolean" }
       },
       "additionalProperties": false
     }

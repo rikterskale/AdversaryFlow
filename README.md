@@ -24,10 +24,10 @@ steps are reached:
 2. **Scope the engagement** — pick the command platform (Windows / Linux /
    macOS), toggle kill-chain stages on/off, include or drop pre-compromise
    tactics, and see a live plan preview update as you go.
-3. **Run & track the plan** — the kill chain is laid out stage-by-stage with a
-   left rail, a completion **progress ring**, and a lab command per technique
-   you can copy and **check off as you run it** (progress persists in
-   `localStorage` per actor).
+3. **Run & track the plan** — review structured risk, privilege, network,
+   expected-telemetry, and cleanup metadata before copying a command. Record
+   passed/failed/skipped outcomes, evidence notes, timestamps, target context,
+   and cleanup verification; progress persists locally per versioned plan.
 4. **Export** — download the scoped plan as **Markdown**, schema-versioned
    **JSON**, or a platform-specific commented **runbook**.
 
@@ -38,10 +38,11 @@ Under the hood:
 * **Kill-chain order is derived from the live STIX matrix**, not hardcoded, so
   the tool stays correct as ATT&CK evolves its tactics — including the current
   split of *Defense Evasion* into **Stealth** and **Defense Impairment**.
-* **Lab command per TTP** — a curated library of **530+ precise tests**
+* **Lab command per TTP** — a curated library of **530+ catalog entries**
   covers **every technique used by any of the 227 actors**, so a real actor
-  workflow comes back 100% `curated` with 0 `fallback`. Each test is a
-  technique-specific command with notes and cleanup metadata; a tactic-aware
+  workflow comes back 100% `curated` with 0 `fallback`. Each entry is a
+  technique-specific command with structured safety, prerequisites, expected
+  telemetry, notes, and cleanup metadata; a tactic-aware
   fallback covers any technique a future ATT&CK release
   introduces before its curated test is written.
 
@@ -55,8 +56,8 @@ AdversaryFlow/
 │   ├── command_catalog.py           # curated core library + tactic fallback
 │   ├── command_catalog_extended.py  # auto-merges the ext_part* files below
 │   ├── ext_helper.py                # shared helper for the part files
-│   ├── ext_part1..14.py             # precise lab tests, one reviewable slice each
-│   └── requirements.txt
+│   ├── command_safety.py             # structured risk and cleanup metadata
+│   └── ext_part1..14.py              # precise lab tests, one reviewable slice each
 ├── frontend/
 │   ├── index.html
 │   ├── styles.css
@@ -77,6 +78,15 @@ Mobile domains are supported via `?domains=enterprise,ics,mobile`.
 
 ## Run it
 
+Recommended after publication to PyPI:
+
+```bash
+pipx install adversaryflow
+adversaryflow --open
+```
+
+From a source checkout:
+
 Linux and macOS:
 
 ```bash
@@ -89,9 +99,10 @@ Windows PowerShell:
 .\run.ps1
 ```
 
-Then open <http://127.0.0.1:5000>. The first enterprise launch currently
-downloads approximately 54 MB of STIX data into the per-user cache. Later
-starts do not reinstall dependencies. Use **↻ Refresh feed** (or
+The launcher opens <http://127.0.0.1:5000> when ready. The first enterprise
+launch downloads and validates approximately 54 MB of STIX data in the
+background while the UI reports progress. Later starts do not reinstall
+dependencies. Use **↻ Refresh feed** (or
 `POST /api/refresh`) to pull the newest ATT&CK release.
 
 Manual setup, if you prefer:
@@ -103,7 +114,11 @@ adversaryflow
 ```
 
 The launcher accepts `--host`, `--port`, `--cache-dir`, `--offline`,
-`--no-preload`, and `--version`. See [installation](docs/INSTALL.md) and
+`--no-preload`, `--open`, `--allow-remote`, `--api-token`, and `--version`.
+Non-loopback binds require both `--allow-remote` and a bearer token; see
+[Operations](docs/OPERATIONS.md). Maintenance
+commands include `doctor`, `cache-status`, `cache-refresh`, and `cache-clear`.
+See [installation](docs/INSTALL.md) and
 [operations](docs/OPERATIONS.md) for supported platforms, cache locations,
 offline use, upgrades, health behavior, and troubleshooting.
 
@@ -116,8 +131,10 @@ offline use, upgrades, health behavior, and troubleshooting.
 | `POST /api/refresh` | Force re-download of the live STIX feed |
 | `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
 
+Mutating endpoints require a same-origin request token, refreshes are
+serialized/rate-limited, and non-loopback binding requires explicit opt-in.
 The complete HTTP contract is checked in as [OpenAPI 3.1](docs/openapi.yaml).
-JSON exports conform to the
+Schema 2.0 JSON exports conform to the
 [AdversaryFlow plan schema](schemas/adversaryflow-plan.schema.json); they are
 AdversaryFlow-native and do not claim direct VECTR or Caldera compatibility.
 
@@ -175,7 +192,11 @@ node --check frontend/app.js
 bash -n install.sh run.sh
 ```
 
-CI tests Python 3.10, 3.12, and 3.14, builds the wheel and source distribution,
-and verifies the command-line entry point. See [CONTRIBUTING.md](CONTRIBUTING.md),
+CI tests Python 3.10–3.14 across Linux, Windows, and macOS, smoke-tests the
+built wheel on all three platforms, scans with CodeQL, and produces checksums
+and a CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md), and
 [the release guide](docs/RELEASING.md).
+
+AdversaryFlow is licensed under [Apache-2.0](LICENSE). Report vulnerabilities
+privately according to [SECURITY.md](SECURITY.md).

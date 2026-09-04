@@ -38,7 +38,9 @@ class FakeIndex:
 class ApiContractTests(unittest.TestCase):
     def setUp(self):
         app_module.app.config.update(TESTING=True)
-        app_module._runtime.update(ready=False, error="ATT&CK data has not been loaded")
+        app_module.REMOTE_MODE = False
+        app_module.API_TOKEN = ""
+        app_module._runtime.update(ready=False, loading=False, phase="not_started", error="ATT&CK data has not been loaded")
         self.client = app_module.app.test_client()
 
     @patch("backend.app.attack_data.loaded_index_status", return_value={"ready": False, "domain_sets": [], "data_versions": []})
@@ -66,6 +68,41 @@ class ApiContractTests(unittest.TestCase):
     def test_json_domain_list_is_accepted_and_deduplicated(self):
         with app_module.app.test_request_context(json={"domains": ["ics", "ics", "mobile"]}):
             self.assertEqual(app_module._domains_from_request(), ["ics", "mobile"])
+
+    def test_invalid_domain_is_rejected(self):
+        response = self.client.get("/api/actors?domains=unknown")
+        self.assertEqual(response.status_code, 400)
+
+    def test_refresh_requires_same_origin_token(self):
+        response = self.client.post("/api/refresh?domains=enterprise")
+        self.assertEqual(response.status_code, 403)
+
+    @patch("backend.app.attack_data.refresh_index", return_value=FakeIndex())
+    def test_refresh_uses_serialized_index_transition(self, refresh_index):
+        app_module._last_refresh = 0
+        response = self.client.post(
+            "/api/refresh?domains=enterprise",
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 200)
+        refresh_index.assert_called_once_with(["enterprise"])
+        self.assertEqual(response.get_json()["data_version"], "enterprise:bundle--test")
+
+    def test_non_loopback_binding_requires_explicit_opt_in(self):
+        self.assertTrue(app_module._is_loopback_host("127.0.0.1"))
+        self.assertFalse(app_module._is_loopback_host("0.0.0.0"))
+        self.assertEqual(app_module.main(["--host", "0.0.0.0", "--no-preload"]), 2)
+        self.assertEqual(app_module.main(["--host", "0.0.0.0", "--allow-remote", "--no-preload"]), 2)
+
+    def test_remote_api_requires_configured_bearer_token(self):
+        app_module.REMOTE_MODE = True
+        app_module.API_TOKEN = "test-secret"
+        self.assertEqual(self.client.get("/api/session").status_code, 401)
+        response = self.client.get("/api/session", headers={"Authorization": "Bearer test-secret"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_cache_refresh_rejects_unknown_cli_domain(self):
+        self.assertEqual(app_module.main(["cache-refresh", "--domains", "unknown"]), 2)
 
     @patch("backend.app.attack_data.get_index", return_value=FakeIndex())
     def test_workflow_response_has_metadata(self, _index):

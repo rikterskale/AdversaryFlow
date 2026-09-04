@@ -15,14 +15,28 @@ class CatalogIntegrityTests(unittest.TestCase):
                 self.assertTrue(technique_id.startswith("T"))
                 self.assertTrue(commands)
                 for command in commands:
-                    self.assertEqual(set(command), {"platform", "command", "note", "cleanup"})
+                    self.assertTrue({
+                        "platform", "command", "note", "cleanup", "risk", "side_effects",
+                        "requires_admin", "requires_network", "network_targets", "prerequisites",
+                        "expected_telemetry", "expected_output", "timeout_seconds", "rollback",
+                        "cleanup_required", "acknowledgment_required",
+                    }.issubset(command))
                     self.assertTrue(command["platform"])
                     self.assertTrue(command["command"])
+                    self.assertIn(command["risk"], {"low", "medium", "high"})
+                    self.assertEqual(command["cleanup_required"], bool(command["cleanup"]))
+
+    def test_high_risk_commands_require_acknowledgment(self):
+        for commands in command_catalog.CURATED.values():
+            for command in commands:
+                if command["risk"] == "high":
+                    self.assertTrue(command["acknowledgment_required"])
 
     def test_missing_technique_uses_explicit_fallback(self):
         result = command_catalog.get_commands("T9999", "Fixture", ["execution"])
         self.assertEqual(result["source"], "fallback")
         self.assertIn("T9999", result["commands"][0]["command"])
+        self.assertIn("risk", result["commands"][0])
 
 
 if __name__ == "__main__":

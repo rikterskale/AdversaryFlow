@@ -9,12 +9,19 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "AdversaryFlow requires Python 3.10 or newer; found $(python3 --version 2>&1)." >&2
+  exit 1
+fi
+
 if [ ! -d .venv ]; then
   python3 -m venv .venv
 fi
 
-.venv/bin/python -m pip install --requirement requirements.lock
-.venv/bin/python -m pip install --no-deps --editable .
+.venv/bin/python -m pip install --require-hashes --requirement requirements.lock
+.venv/bin/python -m pip install --require-hashes --requirement requirements-build.lock
+.venv/bin/python -m pip install --no-build-isolation --no-deps --editable .
 
-echo "AdversaryFlow installed. Start it with ./run.sh"
+.venv/bin/adversaryflow doctor
 
+echo "AdversaryFlow installed and verified. Start it with ./run.sh"

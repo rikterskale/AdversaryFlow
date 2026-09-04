@@ -8,5 +8,5 @@ if [ ! -x .venv/bin/adversaryflow ]; then
   ./install.sh
 fi
 
-echo "[AdversaryFlow] starting on http://127.0.0.1:5000"
-exec .venv/bin/adversaryflow "$@"
+echo "[AdversaryFlow] starting; the browser will open when ATT&CK data is ready"
+exec .venv/bin/adversaryflow --open "$@"

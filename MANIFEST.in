@@ -1,14 +1,22 @@
 include CHANGELOG.md
+include LICENSE
+include NOTICE
+include SECURITY.md
 include CONTRIBUTING.md
 include GOVERNANCE.md
 include SUPPORT.md
 include requirements.lock
+include requirements-build.in
+include requirements-build.lock
 include install.sh
 include install.ps1
 include run.sh
 include run.ps1
+include package.json
+include package-lock.json
+include playwright.config.js
 recursive-include docs *.md *.yaml
 recursive-include schemas *.json
 recursive-include frontend *.html *.css *.js
-recursive-include tests *.py
-
+recursive-include tests *.py *.js
+recursive-include scripts *.py
