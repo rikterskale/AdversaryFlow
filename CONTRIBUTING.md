@@ -11,6 +11,24 @@ node --check frontend/app.js
 bash -n install.sh run.sh
 ```
 
+Browser coverage uses Playwright:
+
+```bash
+npm ci && npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+Lint and type checks are configured in `pyproject.toml` and run as their own
+CI job. Install the pinned tooling, then run both locally:
+
+```bash
+.venv/bin/python -m pip install --require-hashes --requirement requirements-dev.lock
+.venv/bin/ruff check .
+.venv/bin/mypy
+```
+
+Both must report zero findings before a pull request is opened.
+
 On Windows, use `install.ps1` and `.venv\Scripts\python.exe`.
 
 ## Pull requests

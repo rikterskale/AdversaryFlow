@@ -279,7 +279,7 @@ GENERIC_FALLBACK = _c("windows", "cmd.exe /c \"echo AdversaryFlow lab proxy for 
 
 # Merge the large precise-test extension into the curated core. The core wins on
 # any id collision (hand-tuned entries take precedence over the bulk expansion).
-from .command_catalog_extended import EXTENDED as _EXTENDED
+from .command_catalog_extended import EXTENDED as _EXTENDED  # noqa: E402 - must follow CURATED
 
 for _tid, _cmds in _EXTENDED.items():
     CURATED.setdefault(_tid, _cmds)

@@ -165,9 +165,11 @@ def refresh():
         return jsonify({"error": "bootstrap_in_progress", "message": "Wait for initial ATT&CK setup to finish.", "version": __version__}), 409
     if time.monotonic() - _last_refresh < REFRESH_COOLDOWN_SECONDS:
         return jsonify({"error": "refresh_rate_limited", "message": "Wait a few seconds before refreshing again.", "version": __version__}), 429
+    # Validate before taking the lock: aborting inside the guarded block would
+    # skip the release and wedge every later refresh on a 409.
+    domains = _domains_from_request()
     if not _refresh_lock.acquire(blocking=False):
         return jsonify({"error": "refresh_in_progress", "message": "An ATT&CK refresh is already running.", "version": __version__}), 409
-    domains = _domains_from_request()
     try:
         with _runtime_lock:
             _runtime.update(ready=False, loading=True, phase="refreshing", error=None)
@@ -195,7 +197,11 @@ def workflow(stix_id: str):
 
     actor = idx.get_actor(stix_id)
     if not actor:
-        return jsonify({"error": "actor not found"}), 404
+        return jsonify({
+            "error": "actor_not_found",
+            "message": f"No ATT&CK group or campaign matches {stix_id} in the selected domains.",
+            "version": __version__,
+        }), 404
 
     techniques = idx.actor_techniques(stix_id)
 
@@ -207,7 +213,6 @@ def workflow(stix_id: str):
     # Group techniques into kill-chain stages. A technique can appear in more
     # than one tactic, so it can show up in multiple stages of the workflow.
     stages: Dict[str, List[Dict[str, Any]]] = {t: [] for t in tactic_order}
-    unmapped: List[Dict[str, Any]] = []
 
     curated_count = 0
     total_techniques = len(techniques)
@@ -225,13 +230,9 @@ def workflow(stix_id: str):
             "command_source": cmd_result["source"],
         }
 
-        placed = False
         for tac in tech["tactics"]:
             if tac in stages:
                 stages[tac].append(enriched)
-                placed = True
-        if not placed:
-            unmapped.append(enriched)
 
     # Emit stages in kill-chain order, skipping empty ones.
     ordered_stages = []
@@ -265,7 +266,6 @@ def workflow(stix_id: str):
         },
         "kill_chain": [{"tactic": t, "title": tactic_titles.get(t, t)} for t in tactic_order],
         "stages": ordered_stages,
-        "unmapped": unmapped,
         "metadata": {
             "domains": idx.domains,
             "data_version": idx.data_version,
@@ -324,7 +324,9 @@ def _bootstrap_worker() -> None:
         attack_data.get_index(["enterprise"])
         _mark_ready()
         _log_event("bootstrap_ready")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        # The worker owns the whole bootstrap: any failure must become a
+        # reportable phase rather than an unhandled thread exception.
         _mark_error(exc)
         _log_event("bootstrap_failed", level="error", error=str(exc))
 

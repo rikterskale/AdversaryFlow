@@ -8,6 +8,8 @@ include SUPPORT.md
 include requirements.lock
 include requirements-build.in
 include requirements-build.lock
+include requirements-dev.in
+include requirements-dev.lock
 include install.sh
 include install.ps1
 include run.sh

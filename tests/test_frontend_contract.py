@@ -1,8 +1,13 @@
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 
 class FrontendContractTests(unittest.TestCase):
+    javascript: ClassVar[str]
+    html: ClassVar[str]
+    css: ClassVar[str]
+
     @classmethod
     def setUpClass(cls):
         cls.javascript = Path("frontend/app.js").read_text(encoding="utf-8")

@@ -7,8 +7,9 @@
 4. Create a reviewed annotated tag matching the package version, such as
    v0.3.0. Never reuse or move a published tag.
 5. The release workflow verifies tag/version/changelog identity, retests,
-   builds the wheel and sdist, produces CycloneDX SBOM and SHA-256 files, and
-   creates GitHub build-provenance attestations.
+   re-runs the ruff and mypy gates, builds the wheel and sdist, produces
+   CycloneDX SBOM and SHA-256 files, and creates GitHub build-provenance
+   attestations.
 6. The protected release environment should require approval. Set the
    repository variable PUBLISH_PYPI=true only after PyPI trusted publishing
    is configured for that environment.

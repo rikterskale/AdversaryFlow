@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
-
 _NETWORK_MARKERS = (
     "http://", "https://", "invoke-webrequest", "downloadstring", "curl ", "wget ", "nslookup",
     "resolve-dnsname", "test-netconnection", "ping ", "git ls-remote",

@@ -12,9 +12,9 @@ Data source: https://github.com/mitre-attack/attack-stix-data (official).
 
 from __future__ import annotations
 
-import json
 import hashlib
 import hmac
+import json
 import os
 import sys
 import tempfile
@@ -269,9 +269,11 @@ def load_bundle(domain: str = "enterprise", force_refresh: bool = False) -> Dict
 
         try:
             bundle = _load_validated(path, domain)
-        except Exception:
+        except Exception as exc:
             if OFFLINE:
-                raise RuntimeError(f"cached {domain} ATT&CK bundle is invalid; reconnect and refresh or clear {path}")
+                raise RuntimeError(
+                    f"cached {domain} ATT&CK bundle is invalid; reconnect and refresh or clear {path}"
+                ) from exc
             _download(STIX_SOURCES[domain], path, domain, conditional=False)
             bundle = _load_validated(path, domain)
 

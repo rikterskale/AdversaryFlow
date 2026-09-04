@@ -53,3 +53,48 @@ version = { attr = "backend.__version__" }
   "frontend/styles.css",
   "frontend/app.js",
 ]
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+extend-exclude = [".venv", "dist", "build", "data", "node_modules"]
+
+[tool.ruff.lint]
+# Correctness and quality rules. Stylistic modernization (pyupgrade "UP") is
+# deliberately excluded: the codebase targets 3.10+ but keeps explicit typing
+# imports, and rewriting them is churn rather than a defect class.
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RUF", "ARG", "PIE", "RET", "TID"]
+ignore = [
+  # The catalog part files are reviewed as data tables; one entry per line keeps
+  # each ATT&CK technique diffable even when the line runs long.
+  "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Catalog part files are pure data; the merge in command_catalog_extended.py is
+# an intentional import-time side effect.
+"backend/ext_part*.py" = ["E501"]
+# Fakes and mock side_effects must mirror the signature they stand in for, so
+# an unused parameter there is required rather than dead.
+"tests/*" = ["ARG001", "ARG002", "ARG005"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["backend", "scripts", "tests"]
+exclude = "(^|/)(\\.venv|build|dist|node_modules)/"
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# waitress ships no type information; the server import is a thin boundary.
+module = ["waitress", "waitress.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true

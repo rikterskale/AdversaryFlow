@@ -68,6 +68,7 @@ AdversaryFlow/
 ├── tests/                  # unit and contract tests
 ├── pyproject.toml          # package metadata + adversaryflow command
 ├── requirements.lock       # pinned runtime set
+├── requirements-dev.lock   # pinned lint/type tooling
 ├── run.sh / run.ps1        # one-command launchers
 └── README.md
 ```
@@ -190,11 +191,21 @@ Run the local verification suite with:
 .venv/bin/python -m unittest discover --verbose
 node --check frontend/app.js
 bash -n install.sh run.sh
+npm run test:e2e
 ```
 
-CI tests Python 3.10–3.14 across Linux, Windows, and macOS, smoke-tests the
-built wheel on all three platforms, scans with CodeQL, and produces checksums
-and a CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
+Lint and type checks (configured in `pyproject.toml`, tooling pinned in
+`requirements-dev.lock`):
+
+```bash
+.venv/bin/python -m pip install --require-hashes --requirement requirements-dev.lock
+.venv/bin/ruff check .
+.venv/bin/mypy
+```
+
+CI tests Python 3.10–3.14 across Linux, Windows, and macOS, runs Playwright
+browser tests, enforces `ruff` and `mypy`, smoke-tests the built wheel on all
+three platforms, scans with CodeQL, and produces checksums and a CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md), and
 [the release guide](docs/RELEASING.md).
 

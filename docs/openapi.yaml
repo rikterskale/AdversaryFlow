@@ -67,6 +67,8 @@ paths:
                   domains: { type: array, items: { type: string } }
                   data_version: { type: string }
                   version: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /api/workflow/{stix_id}:
     get:
@@ -83,8 +85,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Workflow" }
-        "404":
-          description: Actor not found in the selected domains
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /api/refresh:
     post:
@@ -105,10 +108,11 @@ paths:
                   domains: { type: array, items: { type: string } }
                   data_version: { type: string }
                   cache: { type: object }
-        "500": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     BearerToken:
@@ -145,7 +149,7 @@ components:
       additionalProperties: false
     Workflow:
       type: object
-      required: [actor, summary, kill_chain, stages, unmapped, metadata]
+      required: [actor, summary, kill_chain, stages, metadata]
       properties:
         actor: { type: object }
         summary:
@@ -162,9 +166,6 @@ components:
         stages:
           type: array
           items: { $ref: "#/components/schemas/Stage" }
-        unmapped:
-          type: array
-          items: { $ref: "#/components/schemas/Technique" }
         metadata:
           type: object
           required: [domains, data_version, version]

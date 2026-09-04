@@ -39,6 +39,10 @@ function tacticTitle(tactic) {
 
 const FEATURED = ["G0016", "G0032", "G0007", "G0046", "G1017", "G0096", "G0008", "G1006"];
 
+// Upper bound on the first-run bundle download so a wedged bootstrap surfaces
+// an actionable error instead of spinning forever.
+const BOOTSTRAP_TIMEOUT_MS = 15 * 60 * 1000;
+
 const state = {
   actors: [], filtered: [], selectedId: null, selectedActor: null,
   workflow: null,
@@ -100,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loadRunState();
       renderScope();
     }));
-  el("optPre").addEventListener("change", e => { state.scope.includePre = e.target.checked; syncTacticChips(); renderScope(); });
+  el("optPre").addEventListener("change", e => { state.scope.includePre = e.target.checked; renderScope(); });
   el("optCurated").addEventListener("change", e => { state.scope.curatedOnly = e.target.checked; renderScope(); });
   el("optNetwork").addEventListener("change", e => { state.scope.allowNetwork = e.target.checked; renderScope(); });
   el("optAdmin").addEventListener("change", e => { state.scope.allowAdmin = e.target.checked; renderScope(); });
@@ -143,14 +147,22 @@ async function boot() {
 }
 
 async function waitForBootstrap() {
+  const deadline = Date.now() + BOOTSTRAP_TIMEOUT_MS;
   let status = await fetch("/api/bootstrap", { headers: authHeaders() });
   if (status.status === 503) {
     status = await fetch("/api/bootstrap", { method: "POST", headers: csrfHeaders() });
+    // A rejected start (401/403) never produces progress, so fail loudly here
+    // instead of polling a bootstrap that was never scheduled.
+    if (!status.ok) {
+      const body = await status.json().catch(() => ({}));
+      throw new Error(body.message || body.error || `ATT&CK setup could not be started (${status.status})`);
+    }
   }
   for (;;) {
     const data = await status.json();
     if (data.runtime && data.runtime.ready) return;
     if (data.runtime && data.runtime.phase === "failed") throw new Error(data.runtime.error || "ATT&CK data could not be prepared");
+    if (Date.now() >= deadline) throw new Error("Preparing ATT&CK data timed out. Check the service log, then retry setup.");
     const cache = data.cache && data.cache.domains && data.cache.domains.enterprise;
     const event = cache && cache.metadata;
     const progress = event && event.bytes_received ? ` Downloaded ${(event.bytes_received / 1048576).toFixed(1)} MB${event.content_length ? ` of ${(event.content_length / 1048576).toFixed(1)} MB` : ""}.` : "";
@@ -319,14 +331,30 @@ function updateActionBar() {
 }
 
 function restart() {
+  const domainsWereChanged = state.domains.length !== 1 || state.domains[0] !== "enterprise";
   state.selectedId = null; state.selectedActor = null; state.workflow = null;
   state.run = new Set();
   state.records = {};
+  state.recordContext = { operator: "", target: "" };
   state.maxStep = 0; state.stage = 0;
+  state.typeFilter = "all"; state.sort = "name";
+  state.domains = ["enterprise"];
   state.scope = { cmdPlatform: "windows", tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false };
   el("actorSearch").value = "";
+  el("searchClear").hidden = true;
+  el("sortSel").value = "name";
+  $$("#typeFilter .segmented__btn").forEach(button => {
+    const on = button.dataset.type === "all";
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  syncStaticScopeControls();
   $$(".actorcard").forEach(c => c.classList.remove("is-selected"));
-  applyFilter();
+  if (domainsWereChanged) {
+    state.actors = []; state.filtered = []; state.dataVersion = "unknown";
+    renderFeatured(); renderActorGrid();
+    loadActors();
+  } else applyFilter();
   goTo(0);
 }
 
@@ -346,9 +374,13 @@ async function importPlan(event) {
       cmdPlatform: data.scope.command_platform, tactics: new Set(data.scope.stages),
       includePre: data.scope.include_pre, curatedOnly: data.scope.curated_only,
       allowNetwork: data.scope.allow_network, allowAdmin: data.scope.allow_admin,
-      allowHighRisk: data.scope.allow_high_risk,
+      // Every imported command is re-classified as high risk below, so honouring
+      // the file's own allow_high_risk flag would restrict the whole plan and
+      // hide the very records the operator is resuming. The enforced control for
+      // untrusted commands stays acknowledgment-on-copy, not the scope filter.
+      allowHighRisk: true,
     };
-    state.recordContext = data.execution_context || { operator: "", target: "" };
+    state.recordContext = { operator: data.execution_context.operator, target: data.execution_context.target };
     state.records = {};
     data.stages.forEach(stage => stage.techniques.forEach(technique => {
       state.records[technique.id] = technique.execution || { outcome: technique.run ? "passed" : "not_run" };
@@ -358,9 +390,10 @@ async function importPlan(event) {
       actor: data.actor,
       kill_chain: data.stages.map(stage => ({ tactic: stage.tactic, title: stage.title })),
       stages: data.stages.map(stage => ({ ...stage, techniques: stage.techniques.map(technique => ({
-        attack_id: technique.id, name: technique.name, url: technique.url, platforms: technique.platforms,
+        attack_id: technique.id, name: technique.name, url: technique.url, platforms: technique.platforms || [],
         description: "Imported plan record", is_subtechnique: technique.id.includes("."),
-        command_source: technique.command_source, commands: [normalizeImportedCommand(technique.command)], tactics: [stage.tactic],
+        command_source: technique.command_source === "fallback" ? "fallback" : "curated",
+        commands: [normalizeImportedCommand(technique.command)], tactics: [stage.tactic],
       })) })),
       metadata: { version: data.tool_version, data_version: data.data_version, domains: data.domains },
     };
@@ -369,24 +402,40 @@ async function importPlan(event) {
     saveRunState();
     syncStaticScopeControls();
     goTo(3);
-    toast("Plan imported; verify its data version before execution");
+    toast("Plan imported as high-risk; verify its data version before execution");
   } catch (error) {
     toast(error.message || "Plan import failed", "error");
   }
 }
 
+function nonEmptyString(value) { return typeof value === "string" && value.length > 0; }
+
 function validateImportedPlan(data) {
   const allowedDomains = ["enterprise", "ics", "mobile"];
-  if (!data || data.schema_version !== "2.0" || !data.actor || typeof data.actor.stix_id !== "string" || typeof data.actor.technique_count !== "number") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  if (!data || data.schema_version !== "2.0") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  if (!nonEmptyString(data.tool_version) || !nonEmptyString(data.data_version)) throw new Error("Plan is missing its tool or ATT&CK data version");
+  // The actor drives every later screen and export, so enforce the same shape
+  // the checked-in plan schema requires rather than trusting a partial record.
+  const actor = data.actor;
+  if (!actor || typeof actor !== "object"
+    || !nonEmptyString(actor.stix_id) || !nonEmptyString(actor.attack_id) || !nonEmptyString(actor.name)
+    || !["group", "campaign"].includes(actor.type)
+    || !Array.isArray(actor.aliases) || actor.aliases.some(alias => typeof alias !== "string")
+    || typeof actor.description !== "string"
+    || !Number.isInteger(actor.technique_count) || actor.technique_count < 0) throw new Error("Plan actor record is invalid");
   if (!Array.isArray(data.domains) || !data.domains.length || data.domains.some(domain => !allowedDomains.includes(domain))) throw new Error("Plan contains an invalid ATT&CK domain");
-  if (!data.scope || !["windows", "linux", "macos"].includes(data.scope.command_platform) || !Array.isArray(data.scope.stages) || ["allow_network", "allow_admin", "allow_high_risk"].some(key => typeof data.scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
+  if (!data.scope || !["windows", "linux", "macos"].includes(data.scope.command_platform) || !Array.isArray(data.scope.stages) || data.scope.stages.some(stage => typeof stage !== "string") || ["include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk"].some(key => typeof data.scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
+  const context = data.execution_context;
+  if (!context || typeof context !== "object" || typeof context.operator !== "string" || typeof context.target !== "string") throw new Error("Plan execution context is invalid");
   if (!Array.isArray(data.stages) || data.stages.length > 32) throw new Error("Plan stage count is invalid");
   let techniqueCount = 0;
   data.stages.forEach(stage => {
-    if (!stage || typeof stage.tactic !== "string" || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
+    if (!stage || !nonEmptyString(stage.tactic) || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
     techniqueCount += stage.techniques.length;
     stage.techniques.forEach(technique => {
-      if (!technique || typeof technique.id !== "string" || !technique.command || typeof technique.command.command !== "string" || technique.command.command.length > 10000) throw new Error("Plan contains an invalid command record");
+      if (!technique || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)) throw new Error("Plan contains an invalid technique record");
+      if (technique.platforms !== undefined && !Array.isArray(technique.platforms)) throw new Error("Plan contains an invalid technique record");
+      if (!technique.command || typeof technique.command.command !== "string" || technique.command.command.length > 10000) throw new Error("Plan contains an invalid command record");
     });
   });
   if (techniqueCount > 2000) throw new Error("Plan contains too many technique records");
@@ -592,14 +641,19 @@ function buildTacticGrid() {
     if (state.scope.tactics.has(t)) state.scope.tactics.delete(t); else state.scope.tactics.add(t);
     renderScope();
   }));
+  const selectable = selectableStages();
+  el("stagesAll").textContent =
+    selectable.length && selectable.every(t => state.scope.tactics.has(t)) ? "Clear all" : "Select all";
 }
-function syncTacticChips() { /* re-render handled by renderScope */ }
-function toggleAllStages() {
-  const present = state.workflow.stages.map(s => s.tactic)
+function selectableStages() {
+  if (!state.workflow) return [];
+  return state.workflow.stages.map(s => s.tactic)
     .filter(t => state.scope.includePre || !PRE_TACTICS.includes(t));
-  const allOn = present.every(t => state.scope.tactics.has(t));
+}
+function toggleAllStages() {
+  const present = selectableStages();
+  const allOn = present.length > 0 && present.every(t => state.scope.tactics.has(t));
   present.forEach(t => allOn ? state.scope.tactics.delete(t) : state.scope.tactics.add(t));
-  el("stagesAll").textContent = allOn ? "Select all" : "Clear all";
   renderScope();
 }
 
@@ -643,8 +697,18 @@ function loadRunState() {
   }
   catch { state.run = new Set(); state.records = {}; }
 }
+let runStateWarned = false;
 function saveRunState() {
-  try { localStorage.setItem(runKey(), JSON.stringify({ records: state.records, context: state.recordContext })); } catch {}
+  try {
+    localStorage.setItem(runKey(), JSON.stringify({ records: state.records, context: state.recordContext }));
+  } catch {
+    // Private-browsing modes and full quotas make local storage unavailable.
+    // Saving is best-effort, but the operator must know their evidence is not
+    // being retained rather than discover it after closing the tab.
+    if (runStateWarned) return;
+    runStateWarned = true;
+    toast("Progress can't be saved in this browser — export the plan to keep your records", "error");
+  }
 }
 
 function enterPlan() {
@@ -739,7 +803,7 @@ function renderTech(t) {
         </div>
         <pre class="cmd__code">${escapeHtml(c.command)}</pre>
         ${c.note ? `<p class="cmd__note">${escapeHtml(c.note)}</p>` : ""}
-        ${c.cleanup ? `<p class="cmd__cleanup"><b>cleanup</b> <code>${escapeHtml(c.cleanup)}</code> <button type="button" class="copybtn" data-cmd="${escapeHtml(c.cleanup)}" data-risk="low" data-ack="false"><svg class="icon"><use href="#i-copy"/></svg> Copy cleanup</button></p>` : ""}
+        ${c.cleanup ? `<p class="cmd__cleanup"><b>cleanup</b> <code>${escapeHtml(c.cleanup)}</code> <button type="button" class="copybtn" data-cmd="${escapeHtml(c.cleanup)}" data-risk="low" data-ack="false" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-copy"/></svg> Copy cleanup</button></p>` : ""}
       </div>
       ${unsupported ? "" : `<div class="evidence">
         <select class="evidence__outcome" data-id="${t.attack_id}" aria-label="Outcome for ${t.attack_id}">
