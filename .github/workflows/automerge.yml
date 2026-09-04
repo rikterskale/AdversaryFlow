@@ -1,16 +1,29 @@
 name: Auto-merge
 
 # Turns on auto-merge for the maintainer's own pull requests so they land only
-# after every required check passes, then deletes the merged branch. Admin
-# enforcement is off on main, so this is a guardrail rather than a gate: it
-# makes the verified path the effortless one without removing the ability to
-# override by hand.
-# Note: pull_request_target always runs the workflow from the base branch,
-# so changes here take effect only once merged to main - a pull request that
-# edits this file is still handled by the version already on main.
+# after every required check passes. Admin enforcement is off on main, so this
+# is a guardrail rather than a gate: it makes the verified path the effortless
+# one without removing the ability to override by hand.
+#
+# This workflow deliberately does not delete merged branches, and a job that
+# tries will not work. GitHub does not start a workflow run from an event
+# generated with GITHUB_TOKEN, so the merge queued here produces neither a
+# "closed" pull-request run nor a push run on main - a cleanup job triggered by
+# "closed" never fires. The repository's delete_branch_on_merge setting also
+# left these branches in place. Remove one with:
+#
+#     git push origin --delete <branch>
+#
+# The same rule means merge commits created this way carry no check run of
+# their own. Verification still happens, on the pull request: required checks
+# run there, and strict mode forces the branch up to date first, so a rebase
+# merge lands the exact tree that passed.
+#
+# pull_request_target always runs the workflow from the base branch, so changes
+# here only take effect once merged to main.
 on:
   pull_request_target:
-    types: [opened, reopened, ready_for_review, closed]
+    types: [opened, reopened, ready_for_review]
 
 permissions:
   contents: write
@@ -19,11 +32,9 @@ permissions:
 jobs:
   enable:
     name: Enable auto-merge
-    # Only the maintainer's own pull requests, and never on close: queuing a
-    # merge for an already-closed pull request just fails.
-    if: >-
-      github.event.action != 'closed'
-      && github.event.pull_request.user.login == 'rikterskale'
+    # Only the maintainer's own pull requests. Without this gate an outside
+    # contributor's branch would be queued to merge itself.
+    if: github.event.pull_request.user.login == 'rikterskale'
     runs-on: ubuntu-latest
     steps:
       # pull_request_target runs with write permissions against the base repo,
@@ -33,28 +44,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-
-  cleanup:
-    name: Delete merged branch
-    # Rebase merges rewrite the commits onto main, so the original branch tip
-    # never becomes an ancestor of the base and GitHub's own
-    # delete_branch_on_merge does not fire. Delete the ref explicitly instead
-    # of depending on that behaviour. Head branches living in a fork are not
-    # ours to delete.
-    if: >-
-      github.event.action == 'closed'
-      && github.event.pull_request.merged == true
-      && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete the head ref
-        run: |
-          if gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH" >/dev/null 2>&1; then
-            echo "deleted $BRANCH"
-          else
-            echo "$BRANCH was already gone; nothing to do"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}

@@ -33,6 +33,12 @@ On Windows, use `install.ps1` and `.venv\Scripts\python.exe`.
 
 ## Pull requests
 
+Open a pull request against `main`; do not push to it directly. A workflow
+enables auto-merge on the maintainer's own pull requests, so once every
+required check is green the branch merges itself by rebase. Merged branches are
+not deleted automatically — remove yours with
+`git push origin --delete <branch>`.
+
 - Keep changes focused and explain the user-visible outcome.
 - Add or update tests for behavior changes.
 - Update `README.md`, API/export schemas, and `CHANGELOG.md` when contracts change.
