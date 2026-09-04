@@ -18,3 +18,10 @@ htmlcov/
 node_modules/
 playwright-report/
 test-results/
+
+# Claude Code: ignore the directory contents but keep the shared project
+# permission rules. Excluding ".claude/" outright would stop git descending
+# into it, and a "!" exception cannot re-include a file under an excluded
+# directory — so the contents are excluded instead.
+.claude/*
+!.claude/settings.json
