@@ -1,0 +1,9 @@
+# Cached MITRE ATT&CK STIX bundles (large, re-downloaded on demand)
+data/*.json
+data/*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

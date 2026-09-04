@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AdversaryFlow — Adversary Emulation Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- SVG icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5 15V5a2 2 0 0 1 2-2h10" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-r" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-arrow-l" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 5 5-5M5 21h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.6 4M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 9l3 3-3 3M13 15h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="16" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 7.4-7 8.6C8 19.4 5 16.4 5 12V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4M6 4h11l-2 3 2 3H6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="appbar">
+    <div class="brand" role="button" tabindex="0" id="brandHome" title="Restart">
+      <span class="brand__mark"><svg class="icon"><use href="#i-logo"/></svg></span>
+      <span class="brand__name">Adversary<span class="brand__accent">Flow</span></span>
+    </div>
+
+    <nav class="stepper" id="stepper" aria-label="Progress">
+      <button class="stepper__item" data-goto="1"><span class="stepper__dot">1</span><span class="stepper__label">Threat actor</span></button>
+      <span class="stepper__bar"></span>
+      <button class="stepper__item" data-goto="2"><span class="stepper__dot">2</span><span class="stepper__label">Scope</span></button>
+      <span class="stepper__bar"></span>
+      <button class="stepper__item" data-goto="3"><span class="stepper__dot">3</span><span class="stepper__label">Emulation plan</span></button>
+      <span class="stepper__bar"></span>
+      <button class="stepper__item" data-goto="4"><span class="stepper__dot">4</span><span class="stepper__label">Export</span></button>
+    </nav>
+
+    <div class="appbar__right">
+      <span id="dataStatus" class="chip chip--muted">loading…</span>
+      <button id="refreshBtn" class="iconbtn" title="Refresh the live ATT&CK feed"><svg class="icon"><use href="#i-refresh"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ===================== STAGE ===================== -->
+  <main class="stage" id="stage">
+
+    <!-- STEP 0 — WELCOME -->
+    <section class="screen screen--welcome is-active" data-screen="0">
+      <div class="welcome">
+        <div class="welcome__badge"><svg class="icon"><use href="#i-shield"/></svg> Authorized purple-team tooling</div>
+        <h1 class="welcome__title">Turn a threat actor into a<br/><span class="grad">safe, end-to-end emulation plan</span></h1>
+        <p class="welcome__sub">AdversaryFlow pulls a chosen adversary's TTPs from the live MITRE ATT&CK&reg; feed, orders
+          them into a full kill chain, and hands you a <strong>benign detection-validation command for every technique</strong> —
+          so you can measure coverage without firing a single destructive action.</p>
+
+        <div class="welcome__steps">
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Search 220+ ATT&CK groups &amp; campaigns.</span></div></div>
+          <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-sliders"/></svg></span><div><b>Set scope</b><span>Focus platforms &amp; stages.</span></div></div>
+          <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Run &amp; track</b><span>Benign test per TTP, stage by stage.</span></div></div>
+          <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Export</b><span>Markdown, JSON, or runbook.</span></div></div>
+        </div>
+
+        <button class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+        <p class="welcome__foot">Every emitted command is a harmless proxy. Review each before running in your environment.</p>
+      </div>
+    </section>
+
+    <!-- STEP 1 — SELECT ACTOR -->
+    <section class="screen" data-screen="1">
+      <div class="screen__head">
+        <div>
+          <h2 class="screen__title">Choose a threat actor</h2>
+          <p class="screen__hint">Pick the adversary whose campaign you want to emulate. This drives the entire plan.</p>
+        </div>
+      </div>
+
+      <div class="pickerbar">
+        <div class="searchbox">
+          <svg class="icon searchbox__icon"><use href="#i-search"/></svg>
+          <input id="actorSearch" type="text" placeholder="Search by name, alias, or ATT&CK ID (e.g. APT29, Cozy Bear, G0016)" autocomplete="off" />
+          <button class="searchbox__clear" id="searchClear" title="Clear" hidden><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="segmented" id="typeFilter" role="tablist">
+          <button class="segmented__btn is-on" data-type="all">All</button>
+          <button class="segmented__btn" data-type="group">Groups</button>
+          <button class="segmented__btn" data-type="campaign">Campaigns</button>
+        </div>
+        <div class="select">
+          <label for="sortSel">Sort</label>
+          <select id="sortSel">
+            <option value="name">Name (A–Z)</option>
+            <option value="ttps">Most TTPs</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="featured" id="featured">
+        <span class="featured__label">Popular:</span>
+        <div class="featured__chips" id="featuredChips"></div>
+      </div>
+
+      <div class="actorgrid" id="actorGrid"></div>
+      <div class="emptystate" id="actorEmpty" hidden>No actors match your search.</div>
+    </section>
+
+    <!-- STEP 2 — SCOPE -->
+    <section class="screen" data-screen="2">
+      <div class="screen__head">
+        <div>
+          <h2 class="screen__title">Scope the engagement</h2>
+          <p class="screen__hint">Tailor the plan to what you actually want to exercise. Everything updates live.</p>
+        </div>
+      </div>
+
+      <div class="scope">
+        <div class="scope__main">
+          <div class="panel">
+            <div class="panel__head"><svg class="icon"><use href="#i-terminal"/></svg><h3>Command platform</h3></div>
+            <p class="panel__desc">Which OS should the benign test commands target first?</p>
+            <div class="segmented segmented--wide" id="cmdPlatform">
+              <button class="segmented__btn is-on" data-plat="windows">Windows</button>
+              <button class="segmented__btn" data-plat="linux">Linux</button>
+              <button class="segmented__btn" data-plat="macos">macOS</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__head"><svg class="icon"><use href="#i-layers"/></svg><h3>Kill-chain stages</h3><button class="linkbtn" id="stagesAll">Select all</button></div>
+            <p class="panel__desc">Include or drop tactics from the plan.</p>
+            <div class="tacticgrid" id="tacticGrid"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__head"><svg class="icon"><use href="#i-shield"/></svg><h3>Options</h3></div>
+            <label class="toggle">
+              <input type="checkbox" id="optPre" checked />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text"><b>Include pre-compromise tactics</b><span>Reconnaissance &amp; Resource Development happen off-host and aren't endpoint-detectable.</span></span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="optCurated" />
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text"><b>Curated tests only</b><span>Hide any auto-generated fallback commands.</span></span>
+            </label>
+          </div>
+        </div>
+
+        <aside class="scope__side">
+          <div class="summarycard" id="scopeSummary"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- STEP 3 — PLAN -->
+    <section class="screen screen--plan" data-screen="3">
+      <div class="planhead">
+        <div>
+          <h2 class="screen__title" id="planActorName">Emulation plan</h2>
+          <p class="screen__hint" id="planActorMeta"></p>
+        </div>
+        <div class="planhead__progress">
+          <div class="progressring" id="progressRing"><span id="progressPct">0%</span></div>
+          <div class="planhead__ptext"><b id="progressCount">0 / 0</b><span>techniques run</span></div>
+        </div>
+      </div>
+
+      <div class="plan">
+        <nav class="plan__rail" id="stageRail" aria-label="Kill-chain stages"></nav>
+        <div class="plan__body" id="stageBody"></div>
+      </div>
+    </section>
+
+    <!-- STEP 4 — EXPORT -->
+    <section class="screen screen--export" data-screen="4">
+      <div class="screen__head">
+        <div>
+          <h2 class="screen__title">Your emulation plan is ready</h2>
+          <p class="screen__hint">Take it into your test harness, ticketing, or detection-engineering backlog.</p>
+        </div>
+      </div>
+      <div class="export">
+        <div class="export__summary" id="exportSummary"></div>
+        <div class="export__cards">
+          <button class="expcard" data-export="markdown">
+            <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
+            <b>Markdown report</b><span>Human-readable plan with commands, notes &amp; cleanup.</span>
+          </button>
+          <button class="expcard" data-export="json">
+            <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
+            <b>JSON</b><span>Structured data for pipelines &amp; VECTR/Caldera import.</span>
+          </button>
+          <button class="expcard" data-export="script">
+            <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
+            <b>Runbook</b><span>Commented, sequenced command runbook.</span>
+          </button>
+        </div>
+        <div class="export__foot">
+          <button class="btn btn--ghost" id="restartBtn"><svg class="icon"><use href="#i-refresh"/></svg> Plan another actor</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== FOOTER NAV ===================== -->
+  <footer class="actionbar" id="actionbar" hidden>
+    <button class="btn btn--ghost" id="backBtn"><svg class="icon"><use href="#i-arrow-l"/></svg> Back</button>
+    <div class="actionbar__ctx" id="actionbarCtx"></div>
+    <button class="btn btn--primary" id="nextBtn" disabled>Continue <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="loader" class="loader" hidden><div class="loader__spin"></div><p id="loaderText">Working…</p></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
