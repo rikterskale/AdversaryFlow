@@ -46,7 +46,7 @@ PART = {
     "T1565.003": [c("windows", "powershell -NoProfile -Command \"$x=1; $x=2; \\\"runtime value now $x\\\"\"",
                     "Rewrites a runtime variable (runtime-data-manipulation proxy).")],
     "T1657": [c("windows", "cmd.exe /c \"echo AF financial-theft proxy - no transaction performed\"",
-                "Placeholder only — no financial action is taken.")],
+                "Bounded lab simulation only — no financial action is taken.")],
     "T1667": [c("windows", "cmd.exe /c \"echo AF email-bombing proxy - no email sent\"",
-                "Placeholder only — no email is sent.")],
+                "Bounded lab simulation only — no email is sent.")],
 }

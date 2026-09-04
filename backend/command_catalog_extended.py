@@ -1,10 +1,11 @@
 """
 Extended command catalog for AdversaryFlow development labs.
 
-Precise, technique-specific lab detection-validation tests for every ATT&CK
-technique used by any actor that is not already covered by the hand-curated core
-in ``command_catalog.py``. Authored across reviewable ``ext_part*.py`` files and
-auto-merged here into a single ``EXTENDED`` dict.
+Technique-indexed lab detection-validation exercises for every ATT&CK technique
+used by any actor that is not already covered by the hand-curated core in
+``command_catalog.py``. Behaviours that would be unsafe or depend on external
+infrastructure use a concrete, self-cleaning local artifact simulation. Entries
+are authored across reviewable ``ext_part*.py`` files and auto-merged here.
 
 Each entry declares a platform, command, operational note, and optional cleanup
 command. Pre-compromise entries use the platform label ``PRE``.

@@ -89,9 +89,12 @@ class ServiceUatTests(unittest.TestCase):
     # -- J5 / J6 / J7 -----------------------------------------------------
     def test_j05_the_wizard_page_is_served(self):
         response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("AdversaryFlow — Adversary Emulation Planner",
-                      response.get_data(as_text=True))
+        try:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("AdversaryFlow — Adversary Emulation Planner",
+                          response.get_data(as_text=True))
+        finally:
+            response.close()
 
     def test_j06_every_response_is_hardened(self):
         response = self.client.get("/api/session")

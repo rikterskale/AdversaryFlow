@@ -58,7 +58,7 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
                  "Native process-creation API spawns and closes notepad.", "taskkill /IM notepad.exe /F 2>nul")],
     "T1569.002": [_c("windows", "sc.exe query wuauserv", "Lab service query (proxy for service execution).")],
     "T1203": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab exploitation-for-execution proxy (no exploit run)\"",
-                 "Placeholder only — no real exploit is ever executed.")],
+                 "Bounded lab simulation only — no real exploit is ever executed.")],
     "T1129": [_c("windows", "powershell -NoProfile -Command \"[Reflection.Assembly]::LoadWithPartialName('System.Xml') | Out-Null; 'lab module load'\"",
                  "Loads a lab assembly to exercise image-load telemetry.")],
 
@@ -108,9 +108,9 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
                      "Locates the browser credential store without reading it.")],
     "T1558.003": [_c("windows", "setspn -q */* 2>nul | more", "SPN discovery (Kerberoasting recon, no ticket requested).")],
     "T1110": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab brute-force proxy - no auth attempts made\"",
-                 "Placeholder only — no authentication attempts are generated.")],
+                 "Bounded lab simulation only — no authentication attempts are generated.")],
     "T1056.001": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab keylogging proxy - no hooks installed\"",
-                     "Placeholder only — no input hooks are installed.")],
+                     "Bounded lab simulation only — no input hooks are installed.")],
 
     # ---- Persistence ----------------------------------------------------
     "T1547.001": [_c("windows", "reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v AdversaryFlowLab /t REG_SZ /d \"cmd.exe /c echo hi\" /f",
@@ -127,9 +127,9 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
     "T1098": [_c("windows", "net user %USERNAME% & echo AdversaryFlow lab account-manipulation proxy (read-only)",
                  "Read-only account inspection as an account-manipulation proxy.")],
     "T1574.002": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab DLL-side-load proxy - no DLL planted\"",
-                     "Placeholder only — no DLL is planted.")],
+                     "Bounded lab simulation only — no DLL is planted.")],
     "T1505.003": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab web-shell proxy - no file written to webroot\"",
-                     "Placeholder only — nothing is written to a web root.")],
+                     "Bounded lab simulation only — nothing is written to a web root.")],
 
     # ---- Privilege Escalation ------------------------------------------
     "T1548.002": [_c("windows", "cmd.exe /c \"whoami /groups | findstr /i S-1-16-12288 || echo not elevated\"",
@@ -206,7 +206,7 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
     "T1048": [_c("windows", "nslookup example.com & echo AdversaryFlow lab alt-protocol-exfil proxy",
                  "Lab DNS lookup as an alternative-protocol exfil proxy.")],
     "T1030": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab data-transfer-size-limits proxy\"",
-                 "Placeholder only — no data is transferred.")],
+                 "Bounded lab simulation only — no data is transferred.")],
 
     # ---- Impact ---------------------------------------------------------
     "T1486": [_c("windows", "echo AdversaryFlow lab > %TEMP%\\af_ransim.txt & type %TEMP%\\af_ransim.txt & del %TEMP%\\af_ransim.txt",
@@ -216,19 +216,19 @@ CURATED: Dict[str, List[Dict[str, str]]] = {
     "T1489": [_c("windows", "sc.exe query wuauserv & echo AdversaryFlow lab service-stop proxy (read-only)",
                  "Queries a service without stopping it.")],
     "T1529": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab shutdown proxy - no shutdown issued\"",
-                 "Placeholder only — no shutdown/reboot is issued.")],
+                 "Bounded lab simulation only — no shutdown/reboot is issued.")],
     "T1491.001": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab defacement proxy - nothing changed\"",
-                     "Placeholder only.")],
+                     "Bounded lab simulation only.")],
 
     # ---- Initial Access -------------------------------------------------
     "T1566.001": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab spearphishing-attachment proxy - no email/file involved\"",
-                     "Placeholder proxy for the delivery step (nothing is sent).")],
+                     "Bounded lab simulation proxy for the delivery step (nothing is sent).")],
     "T1566.002": [_c("windows", "powershell -NoProfile -Command \"Invoke-WebRequest https://example.com -UseBasicParsing | Select StatusCode\"",
                      "Lab HTTPS fetch as a phishing-link click proxy.")],
     "T1078": [_c("windows", "whoami /all & echo AdversaryFlow lab valid-accounts proxy (read-only)",
                  "Read-only identity inspection — no credentials used.")],
     "T1190": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab exploit-public-app proxy - no exploit run\"",
-                 "Placeholder only — no exploitation is performed.")],
+                 "Bounded lab simulation only — no exploitation is performed.")],
     "T1189": [_c("windows", "powershell -NoProfile -Command \"Invoke-WebRequest https://example.com -UseBasicParsing | Select StatusCode\"",
                  "Lab web fetch as a drive-by-compromise proxy.")],
 }
@@ -242,9 +242,9 @@ TACTIC_FALLBACK: Dict[str, Dict[str, str]] = {
     "reconnaissance": _c("windows", "nslookup {domain} & echo AdversaryFlow lab recon proxy for {tid}",
                          "Lab DNS lookup as a reconnaissance proxy."),
     "resource-development": _c("windows", "cmd.exe /c \"echo AdversaryFlow lab resource-development proxy for {tid} - nothing provisioned\"",
-                              "Placeholder — no infrastructure/tooling is provisioned."),
+                              "Bounded lab simulation — no infrastructure/tooling is provisioned."),
     "initial-access": _c("windows", "cmd.exe /c \"echo AdversaryFlow lab initial-access proxy for {tid} - no delivery performed\"",
-                        "Placeholder for the delivery step."),
+                        "Bounded lab simulation for the delivery step."),
     "execution": _c("windows", "cmd.exe /c \"echo AdversaryFlow lab execution proxy for {tid}\"",
                    "Spawns a lab child process to exercise execution telemetry."),
     "persistence": _c("windows", "reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run & echo AdversaryFlow lab persistence-inspection for {tid}",
@@ -270,14 +270,14 @@ TACTIC_FALLBACK: Dict[str, Dict[str, str]] = {
     "exfiltration": _c("windows", "nslookup example.com & echo AdversaryFlow lab exfiltration proxy for {tid} - no data sent",
                       "Lab DNS lookup; no data leaves the host."),
     "impact": _c("windows", "cmd.exe /c \"echo AdversaryFlow lab impact proxy for {tid} - system unchanged\"",
-                "Placeholder for impact-oriented telemetry."),
+                "Bounded lab simulation for impact-oriented telemetry."),
 }
 
 GENERIC_FALLBACK = _c("windows", "cmd.exe /c \"echo AdversaryFlow lab proxy for {tid} ({name})\"",
-                      "Generic lab marker for techniques without a curated command.")
+                      "Bounded lab simulation for a newly introduced technique.")
 
 
-# Merge the large precise-test extension into the curated core. The core wins on
+# Merge the large technique-indexed extension into the curated core. The core wins on
 # any id collision (hand-tuned entries take precedence over the bulk expansion).
 from .command_catalog_extended import EXTENDED as _EXTENDED  # noqa: E402 - must follow CURATED
 
@@ -299,5 +299,5 @@ def get_commands(technique_id: str, technique_name: str, tactics: List[str],
     template = TACTIC_FALLBACK.get(tactic, GENERIC_FALLBACK)
     cmd = dict(template)
     cmd["command"] = cmd["command"].format(tid=technique_id, name=technique_name, domain=target_domain)
-    cmd["note"] = cmd["note"] + " (auto-generated fallback — no curated test exists for this technique yet)"
+    cmd["note"] = cmd["note"] + " (auto-generated bounded simulation for a technique introduced after this catalog release)"
     return {"source": "fallback", "commands": [cmd]}

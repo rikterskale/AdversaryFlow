@@ -65,7 +65,7 @@ function workflow(commands = [lowRisk], multiStage = false) {
   };
 }
 
-async function stub(page, { commands = [lowRisk], multiStage = false, actors = ACTORS } = {}) {
+async function interceptApi(page, { commands = [lowRisk], multiStage = false, actors = ACTORS } = {}) {
   await page.route("**/api/session", r => r.fulfill({ json: { csrf_token: "uat-token", version: "0.3.0" } }));
   await page.route("**/api/bootstrap", r => r.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
   await page.route("**/api/actors?*", r => r.fulfill({ json: { actors, domains: ["enterprise"], data_version: "enterprise:bundle--uat", version: "0.3.0" } }));
@@ -73,7 +73,7 @@ async function stub(page, { commands = [lowRisk], multiStage = false, actors = A
 }
 
 async function toScope(page, options) {
-  await stub(page, options);
+  await interceptApi(page, options);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await page.getByRole("button", { name: /UAT Actor/ }).click();
@@ -108,7 +108,7 @@ function validPlan(overrides = {}) {
 /* ---------------------------------------------------------------- */
 
 test("J10 — the welcome screen invites the operator to start", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeEnabled();
@@ -116,13 +116,13 @@ test("J10 — the welcome screen invites the operator to start", async ({ page }
 });
 
 test("J11 — the header reports how much ATT&CK data loaded", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors · Enterprise$/);
 });
 
 test("J13 — selecting an actor enables the next step", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.locator("#actionbarCtx")).toHaveText("Select a threat actor to continue");
@@ -132,7 +132,7 @@ test("J13 — selecting an actor enables the next step", async ({ page }) => {
 });
 
 test("J14 — search narrows the actor gallery", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.locator(".actorcard")).toHaveCount(2);
@@ -144,7 +144,7 @@ test("J14 — search narrows the actor gallery", async ({ page }) => {
 });
 
 test("J15 — a search matching nothing shows the empty state", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await page.locator("#actorSearch").fill("zzzzzz-no-such-actor");
@@ -341,7 +341,7 @@ test("J31 — the runbook export is commented and non-executable", async ({ page
 });
 
 test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan()));
   await expect(page.getByRole("status").filter({ hasText: "Plan imported as high-risk" })).toBeVisible();
@@ -368,7 +368,7 @@ test("J33 — a default-scope export round-trips into a runnable plan", async ({
 });
 
 test("J34 — an incomplete actor record is refused", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan({ actor: { stix_id: "intrusion-set--uat", technique_count: 1 } })));
   await expect(page.getByRole("status").filter({ hasText: "Plan actor record is invalid" })).toBeVisible();
@@ -376,7 +376,7 @@ test("J34 — an incomplete actor record is refused", async ({ page }) => {
 });
 
 test("J35 — a plan from another schema version is refused", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan({ schema_version: "1.0" })));
   await expect(page.getByRole("status").filter({ hasText: "This is not an AdversaryFlow 2.0 plan export" })).toBeVisible();
@@ -384,7 +384,7 @@ test("J35 — a plan from another schema version is refused", async ({ page }) =
 });
 
 test("J36 — planning another actor resets the picker", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await page.getByRole("button", { name: "ICS / OT" }).click();
@@ -444,7 +444,7 @@ test("J38 — a failed setup is reported with a retry", async ({ page }) => {
 /* Boundary inputs accepted or refused by the plan-import contract. Driven
  * against the shipped validator in the loaded page, one case per limit. */
 test("J34/J35 boundaries — the import contract holds at every documented limit", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
 
   const results = await page.evaluate(() => {
@@ -472,24 +472,35 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
     const cases = [
       ["valid plan", base(), null],
       ["schema_version 1.0", base({ schema_version: "1.0" }), "This is not an AdversaryFlow 2.0 plan export"],
+      ["foreign tool", base({ tool: "AnotherTool" }), "This is not an AdversaryFlow 2.0 plan export"],
       ["empty tool_version", base({ tool_version: "" }), "Plan is missing its tool or ATT&CK data version"],
       ["empty data_version", base({ data_version: "" }), "Plan is missing its tool or ATT&CK data version"],
+      ["invalid generated timestamp", base({ generated: "today" }), "Plan generated timestamp is invalid"],
+      ["unknown top-level field", { ...base(), surprise: true }, "Plan contains unknown or missing top-level fields"],
       ["actor without aliases", base({ actor: { ...actor, aliases: undefined } }), "Plan actor record is invalid"],
       ["actor of an unknown type", base({ actor: { ...actor, type: "threat" } }), "Plan actor record is invalid"],
       ["negative technique_count", base({ actor: { ...actor, technique_count: -1 } }), "Plan actor record is invalid"],
+      ["actor with unknown field", base({ actor: { ...actor, surprise: true } }), "Plan actor record is invalid"],
       ["unknown domain", base({ domains: ["galaxy"] }), "Plan contains an invalid ATT&CK domain"],
       ["empty domain list", base({ domains: [] }), "Plan contains an invalid ATT&CK domain"],
+      ["duplicate domains", base({ domains: ["enterprise", "enterprise"] }), "Plan contains an invalid ATT&CK domain"],
       ["unknown platform", base({ scope: scope({ command_platform: "plan9" }) }), "Plan scope is invalid"],
       ["non-boolean safety flag", base({ scope: scope({ allow_high_risk: "yes" }) }), "Plan scope is invalid"],
+      ["duplicate scope stages", base({ scope: scope({ stages: ["execution", "execution"] }) }), "Plan scope is invalid"],
       ["missing execution context", base({ execution_context: undefined }), "Plan execution context is invalid"],
       ["non-string execution context", base({ execution_context: { operator: 1, target: 2 } }), "Plan execution context is invalid"],
+      ["operator over 120 chars", base({ execution_context: { operator: "x".repeat(121), target: "" } }), "Plan execution context is invalid"],
+      ["negative summary count", base({ summary: { ...base().summary, runnable: -1 } }), "Plan summary is invalid"],
       ["32 stages (limit)", base({ stages: manyStages(32) }), null],
       ["33 stages (over)", base({ stages: manyStages(33) }), "Plan stage count is invalid"],
       ["stage without a title", base({ stages: [{ tactic: "execution", techniques: [tech()] }] }), "Plan contains an invalid stage"],
       ["technique without a name", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), name: "" }] }] }), "Plan contains an invalid technique record"],
       ["platforms not an array", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), platforms: "Windows" }] }] }), "Plan contains an invalid technique record"],
+      ["invalid technique URL", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), url: "not a uri" }] }] }), "Plan contains an invalid technique record"],
       ["command of 10000 chars (limit)", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), command: { ...cmd, command: "x".repeat(10000) } }] }] }), null],
       ["command of 10001 chars (over)", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), command: { ...cmd, command: "x".repeat(10001) } }] }] }), "Plan contains an invalid command record"],
+      ["command without risk", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), command: { ...cmd, risk: undefined } }] }] }), "Plan contains an invalid command record"],
+      ["invalid execution outcome", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), execution: { outcome: "maybe" } }] }] }), "Plan execution record is invalid"],
       ["2000 techniques (limit)", base({ stages: manyTechniques(2000) }), null],
       ["2001 techniques (over)", base({ stages: manyTechniques(2001) }), "Plan contains too many technique records"],
     ];
@@ -501,14 +512,14 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
     });
   });
 
-  expect(results).toHaveLength(22);
+  expect(results).toHaveLength(33);
   for (const { name, expected, actual } of results) {
     expect(actual, `boundary case: ${name}`).toBe(expected);
   }
 });
 
 test("J55 — the entry screen has no serious accessibility violations", async ({ page }) => {
-  await stub(page);
+  await interceptApi(page);
   await page.goto("/");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact))).toEqual([]);

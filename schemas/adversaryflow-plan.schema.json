@@ -15,7 +15,7 @@
     "scope": { "$ref": "#/$defs/scope" },
     "execution_context": { "$ref": "#/$defs/executionContext" },
     "summary": { "$ref": "#/$defs/summary" },
-    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } }
+    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" }, "maxItems": 32 }
   },
   "$defs": {
     "actor": {
@@ -75,7 +75,7 @@
       "properties": {
         "tactic": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
-        "techniques": { "type": "array", "items": { "$ref": "#/$defs/technique" } }
+        "techniques": { "type": "array", "items": { "$ref": "#/$defs/technique" }, "maxItems": 2000 }
       },
       "additionalProperties": false
     },
@@ -100,7 +100,7 @@
       "required": ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"],
       "properties": {
         "platform": { "type": "string" },
-        "command": { "type": "string" },
+        "command": { "type": "string", "maxLength": 10000 },
         "note": { "type": "string" },
         "cleanup": { "type": "string" },
         "risk": { "enum": ["none", "low", "medium", "high"] },

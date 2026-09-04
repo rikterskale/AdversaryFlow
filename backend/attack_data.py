@@ -178,12 +178,15 @@ def _download(url: str, dest: str, domain: str, conditional: bool = True) -> Dic
     try:
         response = urllib.request.urlopen(req, timeout=120)
     except urllib.error.HTTPError as exc:
-        if exc.code == 304 and os.path.exists(dest):
-            os.utime(dest, None)
-            previous.update({"checked_at": datetime.now(timezone.utc).isoformat(), "stale": False})
-            _write_metadata(domain, previous)
-            return previous
-        raise
+        try:
+            if exc.code == 304 and os.path.exists(dest):
+                os.utime(dest, None)
+                previous.update({"checked_at": datetime.now(timezone.utc).isoformat(), "stale": False})
+                _write_metadata(domain, previous)
+                return previous
+            raise
+        finally:
+            exc.close()
 
     digest = hashlib.sha256()
     total = 0

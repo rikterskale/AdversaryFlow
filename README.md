@@ -38,11 +38,14 @@ Under the hood:
 * **Kill-chain order is derived from the live STIX matrix**, not hardcoded, so
   the tool stays correct as ATT&CK evolves its tactics — including the current
   split of *Defense Evasion* into **Stealth** and **Defense Impairment**.
-* **Lab command per TTP** — a curated library of **530+ catalog entries**
+* **Lab exercise per TTP** — a curated library of **530+ catalog entries**
   covers **every technique used by any of the 227 actors**, so a real actor
-  workflow comes back 100% `curated` with 0 `fallback`. Each entry is a
-  technique-specific command with structured safety, prerequisites, expected
-  telemetry, notes, and cleanup metadata; a tactic-aware
+  workflow comes back 100% `curated` with 0 `fallback`. Entries use direct
+  technique-specific commands where the behaviour is safe; behaviours that
+  require targeting people, destructive actions, or external adversary
+  infrastructure use an observable, self-cleaning local artifact simulation.
+  Every entry has structured safety, prerequisites, expected telemetry, notes,
+  and cleanup metadata; a tactic-aware
   fallback covers any technique a future ATT&CK release
   introduces before its curated test is written.
 
@@ -57,7 +60,7 @@ AdversaryFlow/
 │   ├── command_catalog_extended.py  # auto-merges the ext_part* files below
 │   ├── ext_helper.py                # shared helper for the part files
 │   ├── command_safety.py             # structured risk and cleanup metadata
-│   └── ext_part1..14.py              # precise lab tests, one reviewable slice each
+│   └── ext_part1..14.py              # technique-indexed lab exercises, one reviewable slice each
 ├── frontend/
 │   ├── index.html
 │   ├── styles.css
@@ -164,7 +167,7 @@ command, operational note, and optional cleanup command:
 
 * `backend/command_catalog.py` — the hand-tuned **core** (`CURATED`) and the
   tactic fallback. Core entries win on any ID collision.
-* `backend/ext_part1..14.py` — the **precise per-technique expansion**, sliced
+* `backend/ext_part1..14.py` — the **per-technique exercise expansion**, sliced
   into reviewable files and auto-merged by `command_catalog_extended.py`.
 
 To add or refine a test, add the ATT&CK ID to `CURATED` (core) or the relevant

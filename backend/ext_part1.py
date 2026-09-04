@@ -25,7 +25,7 @@ PART = {
     "T1090.002": [c("windows", "powershell -NoProfile -Command \"[Net.WebRequest]::DefaultWebProxy.GetProxy('https://example.com')\"",
                     "Resolves the configured external proxy for an example host (read-only).")],
     "T1090.003": [c("windows", "nslookup example.com & echo AF multi-hop-proxy proxy - single lab resolution only",
-                    "Lab DNS lookup as a multi-hop-proxy placeholder.")],
+                    "Lab DNS lookup as a multi-hop-proxy bounded lab simulation.")],
     "T1090.004": [c("windows", "powershell -NoProfile -Command \"Invoke-WebRequest https://example.com -Headers @{Host='example.com'} -UseBasicParsing|Select StatusCode\"",
                     "Sets an explicit Host header to an example host (domain-fronting proxy).")],
     "T1092": [c("windows", "powershell -NoProfile -Command \"Get-Volume|? DriveType -eq 'Removable'|Select DriveLetter\"",

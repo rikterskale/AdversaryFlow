@@ -11,6 +11,9 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("execution_context", schema["required"])
         self.assertIn("execution", schema["$defs"]["technique"]["required"])
         self.assertIn("risk", schema["$defs"]["command"]["required"])
+        self.assertEqual(schema["properties"]["stages"]["maxItems"], 32)
+        self.assertEqual(schema["$defs"]["stage"]["properties"]["techniques"]["maxItems"], 2000)
+        self.assertEqual(schema["$defs"]["command"]["properties"]["command"]["maxLength"], 10000)
 
     def test_openapi_defines_mutation_security_responses(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")

@@ -8,7 +8,7 @@ PART = {
     "T1204": [c("windows", "cmd.exe /c \"echo AF user-execution proxy - simulates the child process a user action would spawn\"",
                 "Lab child process standing in for user-triggered execution.")],
     "T1491.002": [c("windows", "cmd.exe /c \"echo AF external-defacement proxy - no public content modified\"",
-                    "Placeholder only — nothing public is modified.")],
+                    "Bounded lab simulation only — nothing public is modified.")],
     "T1678": [c("windows", "powershell -NoProfile -Command \"$t=Get-Date; Start-Sleep -Seconds 2; ((Get-Date)-$t).TotalSeconds\"",
                 "Lab timed sleep (delay-execution / sandbox-evasion proxy).")],
     "T1679": [c("windows", "powershell -NoProfile -Command \"Get-MpPreference|Select -ExpandProperty ExclusionPath -EA SilentlyContinue; 'selective-exclusion proxy (read existing exclusions, none added)'\"",

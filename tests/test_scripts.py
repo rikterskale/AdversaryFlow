@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -165,6 +167,68 @@ class ShippedReleaseArtifactsTests(unittest.TestCase):
         from backend import __version__
         contract = (ROOT / "docs" / "openapi.yaml").read_text(encoding="utf-8")
         self.assertIn(f"version: {__version__}", contract)
+
+
+class LauncherScriptTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_posix_scripts_are_valid_bash(self):
+        for name in ("install.sh", "run.sh"):
+            result = subprocess.run(
+                ["bash", "-n", str(ROOT / name)], capture_output=True, text=True, check=False
+            )
+            with self.subTest(name=name):
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_run_script_starts_the_installed_command_and_forwards_arguments(self):
+        shutil.copy2(ROOT / "run.sh", self.root / "run.sh")
+        command = self.root / ".venv" / "bin" / "adversaryflow"
+        command.parent.mkdir(parents=True)
+        command.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n', encoding="utf-8")
+        command.chmod(0o755)
+        result = subprocess.run(
+            ["bash", str(self.root / "run.sh"), "--port", "6000"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("[AdversaryFlow] starting", result.stdout)
+        self.assertIn("--open --port 6000", result.stdout)
+
+    def test_install_script_runs_every_locked_install_and_doctor(self):
+        shutil.copy2(ROOT / "install.sh", self.root / "install.sh")
+        venv_bin = self.root / ".venv" / "bin"
+        fake_bin = self.root / "fake-bin"
+        venv_bin.mkdir(parents=True)
+        fake_bin.mkdir()
+        log = self.root / "calls.log"
+        fake = '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AF_LAUNCHER_TEST_LOG"\n'
+        for path in (fake_bin / "python3", venv_bin / "python", venv_bin / "adversaryflow"):
+            path.write_text(fake, encoding="utf-8")
+            path.chmod(0o755)
+        env = {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}", "AF_LAUNCHER_TEST_LOG": str(log)}
+        result = subprocess.run(
+            ["bash", str(self.root / "install.sh")], capture_output=True, text=True, env=env, check=False
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = log.read_text(encoding="utf-8")
+        self.assertIn("--require-hashes --requirement requirements.lock", calls)
+        self.assertIn("--require-hashes --requirement requirements-build.lock", calls)
+        self.assertIn("--no-build-isolation --no-deps --editable .", calls)
+        self.assertIn("doctor", calls)
+
+    def test_powershell_launchers_preserve_install_and_argument_contracts(self):
+        install = (ROOT / "install.ps1").read_text(encoding="utf-8")
+        run = (ROOT / "run.ps1").read_text(encoding="utf-8")
+        self.assertIn("--require-hashes --requirement requirements.lock", install)
+        self.assertIn("--require-hashes --requirement requirements-build.lock", install)
+        self.assertIn("adversaryflow.exe doctor", install)
+        self.assertIn("adversaryflow.exe --open @args", run)
+        self.assertIn("& .\\install.ps1", run)
 
 
 if __name__ == "__main__":

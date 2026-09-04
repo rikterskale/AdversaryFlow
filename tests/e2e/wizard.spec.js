@@ -105,7 +105,7 @@ function writePlan(plan) {
   return file;
 }
 
-async function stubApi(page, commands = [command]) {
+async function interceptApi(page, commands = [command]) {
   await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "test-token", version: "0.3.0" } }));
   await page.route("**/api/bootstrap", route => route.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
   await page.route("**/api/actors?*", route => route.fulfill({ json: {
@@ -124,7 +124,7 @@ async function buildPlan(page) {
 }
 
 test("guided workflow records evidence and exports JSON", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
@@ -147,14 +147,14 @@ test("guided workflow records evidence and exports JSON", async ({ page }) => {
 });
 
 test("welcome screen has no serious accessibility violations", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
 });
 
 test("markdown export carries the scope, outcome and command", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByLabel("Outcome for T1033").selectOption("failed");
@@ -171,7 +171,7 @@ test("markdown export carries the scope, outcome and command", async ({ page }) 
 });
 
 test("runbook export is a commented, non-executable artifact", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
@@ -187,7 +187,7 @@ test("runbook export is a commented, non-executable artifact", async ({ page }) 
 });
 
 test("a saved plan can be resumed from the welcome screen", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
@@ -201,7 +201,7 @@ test("a saved plan can be resumed from the welcome screen", async ({ page }) => 
 });
 
 test("a resumed plan re-exports against the published schema", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
@@ -216,7 +216,7 @@ test("a resumed plan re-exports against the published schema", async ({ page }) 
 });
 
 test("an incomplete actor record is rejected instead of corrupting the session", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   const broken = planFixture({ actor: { stix_id: "intrusion-set--test", technique_count: 1 } });
   await page.setInputFiles("#importPlan", writePlan(broken));
@@ -226,14 +226,14 @@ test("an incomplete actor record is rejected instead of corrupting the session",
 });
 
 test("a plan from another tool version is rejected", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture({ schema_version: "1.0" })));
   await expect(page.getByRole("status").filter({ hasText: "not an AdversaryFlow 2.0 plan export" })).toBeVisible();
 });
 
 test("switching the command platform marks techniques unsupported", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByRole("button", { name: "Linux", exact: true }).click();
   const summary = page.locator("#scopeSummary");
@@ -244,7 +244,7 @@ test("switching the command platform marks techniques unsupported", async ({ pag
 });
 
 test("safety scope blocks a network high-risk command until it is allowed", async ({ page }) => {
-  await stubApi(page, [highRiskCommand]);
+  await interceptApi(page, [highRiskCommand]);
   await buildPlan(page);
   await expect(page.locator("#actionbarCtx")).toContainText("0 runnable");
   await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
@@ -258,7 +258,7 @@ test("safety scope blocks a network high-risk command until it is allowed", asyn
 });
 
 test("deselecting every kill-chain stage empties the plan", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await expect(page.locator("#stagesAll")).toHaveText("Clear all");
   await page.locator("#stagesAll").click();
@@ -270,7 +270,7 @@ test("deselecting every kill-chain stage empties the plan", async ({ page }) => 
 });
 
 test("a plan exported with the default scope resumes as a runnable plan", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
@@ -290,7 +290,7 @@ test("a plan exported with the default scope resumes as a runnable plan", async 
 });
 
 test("a scope-restricted command exposes no copyable cleanup", async ({ page }) => {
-  await stubApi(page, [cleanupCommand]);
+  await interceptApi(page, [cleanupCommand]);
   await buildPlan(page);
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
   await page.getByRole("button", { name: /Build plan/ }).click();
@@ -306,7 +306,7 @@ test("a scope-restricted command exposes no copyable cleanup", async ({ page }) 
 });
 
 test("planning another actor resets the picker filters", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
 
@@ -330,7 +330,7 @@ test("planning another actor resets the picker filters", async ({ page }) => {
 });
 
 test("a new actor starts with an empty execution context", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByLabel("Operator").fill("Purple Team");
   await page.getByLabel("Target").fill("lab-host-01");
@@ -356,7 +356,7 @@ test("unavailable local storage is reported instead of silently losing evidence"
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => { throw new Error("storage is unavailable"); };
   });
-  await stubApi(page);
+  await interceptApi(page);
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByLabel("Outcome for T1033").selectOption("passed");
@@ -389,7 +389,7 @@ test("a failed setup shows an actionable error and can be retried", async ({ pag
 });
 
 test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
-  await stubApi(page);
+  await interceptApi(page);
   await page.route("**/api/workflow/**", route => route.fulfill({ json: multiStageWorkflow() }));
   await buildPlan(page);
   await expect(page.locator("#actionbarCtx")).toContainText("3 runnable");

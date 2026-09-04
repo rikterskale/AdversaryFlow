@@ -313,9 +313,13 @@ class ResponseHardeningTests(unittest.TestCase):
         self.assertGreater(app_module._runtime_snapshot()["requests_total"], before)
 
     def test_frontend_index_and_assets_are_served(self):
-        self.assertEqual(self.client.get("/").status_code, 200)
-        self.assertEqual(self.client.get("/app.js").status_code, 200)
-        self.assertEqual(self.client.get("/styles.css").status_code, 200)
+        for path in ("/", "/app.js", "/styles.css"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                try:
+                    self.assertEqual(response.status_code, 200)
+                finally:
+                    response.close()
 
     def test_missing_frontend_asset_is_not_json(self):
         response = self.client.get("/does-not-exist.js")

@@ -1,7 +1,10 @@
 """Direct cover for the safety metadata derived for every catalog command."""
+import os
+import subprocess
+import tempfile
 import unittest
 
-from backend.command_safety import _network_targets, command_record
+from backend.command_safety import _bounded_simulation, _network_targets, command_record
 
 
 class CommandRecordTests(unittest.TestCase):
@@ -95,6 +98,34 @@ class CommandRecordTests(unittest.TestCase):
         self.assertTrue(command_record("windows", "REG ADD HKCU\\Software\\X")["requires_network"] is False)
         self.assertIn("changes_local_state", command_record("windows", "REG ADD HKCU\\Software\\X")["side_effects"])
         self.assertTrue(command_record("windows", "Invoke-WebRequest HTTPS://EXAMPLE.COM")["requires_network"])
+
+    def test_a_bounded_windows_simulation_creates_observes_and_removes_an_artifact(self):
+        record = command_record(
+            "windows",
+            'cmd.exe /c "echo unsafe-action simulation"',
+            "Bounded lab simulation for a prohibited action.",
+        )
+        self.assertIn("Set-Content", record["command"])
+        self.assertIn("Get-FileHash", record["command"])
+        self.assertIn("Remove-Item", record["command"])
+        self.assertNotIn(" echo ", record["command"].lower())
+        self.assertTrue(record["cleanup_required"])
+        self.assertIn("changes_local_state", record["side_effects"])
+        self.assertFalse(record["requires_network"])
+
+    def test_a_bounded_posix_simulation_is_self_cleaning_and_shell_valid(self):
+        command, cleanup = _bounded_simulation("pre", "unsafe action")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["bash", "-c", command], capture_output=True, text=True, check=False,
+                env={"TMPDIR": directory},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertRegex(result.stdout, r"\d+")
+            self.assertEqual(os.listdir(directory), [])
+            self.assertIn("printf", command)
+            self.assertIn("rm -f", command)
+            self.assertIn("rm -f", cleanup)
 
 
 class NetworkTargetTests(unittest.TestCase):

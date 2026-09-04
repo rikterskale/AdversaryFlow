@@ -1,4 +1,4 @@
-import os
+import shlex
 import shutil
 import subprocess
 import unittest
@@ -32,21 +32,22 @@ class CatalogSafetyTests(unittest.TestCase):
                 if command["cleanup_required"]:
                     self.assertEqual(command["rollback"], command["cleanup"])
 
-    @unittest.skipIf(os.name == "nt", "POSIX command parsing is covered by Linux and macOS jobs")
-    @unittest.skipUnless(shutil.which("bash"), "bash parser is unavailable")
     def test_posix_commands_parse_without_execution(self):
+        bash = shutil.which("bash")
         for technique_id, command in self.commands():
-            if command["platform"] not in {"linux", "macos"}:
+            if command["platform"] not in {"linux", "macos", "pre"}:
                 continue
-            result = subprocess.run(
-                ["bash", "-n", "-c", command["command"]],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-            )
             with self.subTest(technique_id=technique_id, command=command["command"]):
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(shlex.split(command["command"], posix=True))
+                if bash:
+                    result = subprocess.run(
+                        [bash, "-n", "-c", command["command"]],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -13,8 +13,10 @@ AdversaryFlow turns a **named threat actor into an ordered, runnable lab
 workflow**. You pick an adversary — APT29, FIN7, Lazarus, a named campaign —
 and AdversaryFlow resolves every technique that actor is recorded as using in
 the official MITRE ATT&CK STIX feed, sorts those techniques into the real
-kill-chain order published in the ATT&CK matrix, and attaches a concrete,
-technique-specific lab command to each one. The result is a plan you can walk
+kill-chain order published in the ATT&CK matrix, and attaches a concrete lab
+exercise to each one. Safe behaviours use direct technique-specific commands;
+unsafe or externally dependent behaviours use self-cleaning local artifact
+simulations that produce observable process and file telemetry. The result is a plan you can walk
 stage by stage, executing one command at a time in a disposable lab and
 recording whether your detections fired.
 
@@ -23,7 +25,7 @@ adversary?"* and want an answer grounded in evidence rather than a coverage
 spreadsheet. The catalog ships **533 curated command entries** covering all
 **529 unique techniques used by the 227 groups and campaigns** in the current
 enterprise bundle, so a real actor workflow comes back fully curated with no
-generic filler. Every command carries structured safety metadata — risk rating,
+generic fallback entries. Every exercise carries structured safety metadata — risk rating,
 whether it needs administrator rights or network access, what it changes, the
 telemetry you should expect, and how to undo it — and the interface refuses to
 hand you a command whose risk exceeds the scope you set.

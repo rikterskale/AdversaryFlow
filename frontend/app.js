@@ -409,36 +409,84 @@ async function importPlan(event) {
 }
 
 function nonEmptyString(value) { return typeof value === "string" && value.length > 0; }
+function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function onlyKeys(value, required, optional = []) {
+  if (!plainObject(value) || required.some(key => !Object.prototype.hasOwnProperty.call(value, key))) return false;
+  const allowed = new Set([...required, ...optional]);
+  return Object.keys(value).every(key => allowed.has(key));
+}
+function uniqueStrings(value, { nonEmpty = false } = {}) {
+  return Array.isArray(value)
+    && value.every(item => typeof item === "string" && (!nonEmpty || item.length > 0))
+    && new Set(value).size === value.length;
+}
+function stringArray(value) { return Array.isArray(value) && value.every(item => typeof item === "string"); }
+function nonNegativeInteger(value) { return Number.isInteger(value) && value >= 0; }
+function dateTime(value) { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(Date.parse(value)); }
+function uriOrNull(value) {
+  if (value === null) return true;
+  if (typeof value !== "string") return false;
+  try { return Boolean(new URL(value).protocol); } catch { return false; }
+}
 
 function validateImportedPlan(data) {
   const allowedDomains = ["enterprise", "ics", "mobile"];
-  if (!data || data.schema_version !== "2.0") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  const rootKeys = ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages"];
+  if (!plainObject(data) || data.schema_version !== "2.0" || data.tool !== "AdversaryFlow") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  if (!onlyKeys(data, rootKeys)) throw new Error("Plan contains unknown or missing top-level fields");
   if (!nonEmptyString(data.tool_version) || !nonEmptyString(data.data_version)) throw new Error("Plan is missing its tool or ATT&CK data version");
+  if (!dateTime(data.generated)) throw new Error("Plan generated timestamp is invalid");
   // The actor drives every later screen and export, so enforce the same shape
   // the checked-in plan schema requires rather than trusting a partial record.
   const actor = data.actor;
-  if (!actor || typeof actor !== "object"
+  if (!onlyKeys(actor, ["stix_id", "attack_id", "name", "type", "aliases", "description", "technique_count"])
     || !nonEmptyString(actor.stix_id) || !nonEmptyString(actor.attack_id) || !nonEmptyString(actor.name)
     || !["group", "campaign"].includes(actor.type)
-    || !Array.isArray(actor.aliases) || actor.aliases.some(alias => typeof alias !== "string")
+    || !stringArray(actor.aliases)
     || typeof actor.description !== "string"
-    || !Number.isInteger(actor.technique_count) || actor.technique_count < 0) throw new Error("Plan actor record is invalid");
-  if (!Array.isArray(data.domains) || !data.domains.length || data.domains.some(domain => !allowedDomains.includes(domain))) throw new Error("Plan contains an invalid ATT&CK domain");
-  if (!data.scope || !["windows", "linux", "macos"].includes(data.scope.command_platform) || !Array.isArray(data.scope.stages) || data.scope.stages.some(stage => typeof stage !== "string") || ["include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk"].some(key => typeof data.scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
+    || !nonNegativeInteger(actor.technique_count)) throw new Error("Plan actor record is invalid");
+  if (!uniqueStrings(data.domains) || !data.domains.length || data.domains.some(domain => !allowedDomains.includes(domain))) throw new Error("Plan contains an invalid ATT&CK domain");
+  const scopeKeys = ["command_platform", "include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk", "stages"];
+  if (!onlyKeys(data.scope, scopeKeys) || !["windows", "linux", "macos"].includes(data.scope.command_platform)
+    || !uniqueStrings(data.scope.stages) || ["include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk"].some(key => typeof data.scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
   const context = data.execution_context;
-  if (!context || typeof context !== "object" || typeof context.operator !== "string" || typeof context.target !== "string") throw new Error("Plan execution context is invalid");
+  if (!onlyKeys(context, ["operator", "target"]) || typeof context.operator !== "string" || context.operator.length > 120
+    || typeof context.target !== "string" || context.target.length > 200) throw new Error("Plan execution context is invalid");
+  const summaryKeys = ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"];
+  if (!onlyKeys(data.summary, summaryKeys)
+    || summaryKeys.slice(0, 6).some(key => !nonNegativeInteger(data.summary[key]))
+    || !uniqueStrings(data.summary.marked_run)) throw new Error("Plan summary is invalid");
   if (!Array.isArray(data.stages) || data.stages.length > 32) throw new Error("Plan stage count is invalid");
-  let techniqueCount = 0;
   data.stages.forEach(stage => {
-    if (!stage || !nonEmptyString(stage.tactic) || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
-    techniqueCount += stage.techniques.length;
+    if (plainObject(stage) && Array.isArray(stage.techniques) && stage.techniques.length > 2000) throw new Error("Plan contains too many technique records");
+    if (!onlyKeys(stage, ["tactic", "title", "techniques"]) || !nonEmptyString(stage.tactic)
+      || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
     stage.techniques.forEach(technique => {
-      if (!technique || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)) throw new Error("Plan contains an invalid technique record");
-      if (technique.platforms !== undefined && !Array.isArray(technique.platforms)) throw new Error("Plan contains an invalid technique record");
-      if (!technique.command || typeof technique.command.command !== "string" || technique.command.command.length > 10000) throw new Error("Plan contains an invalid command record");
+      const techniqueKeys = ["id", "name", "url", "platforms", "command_source", "supported", "command", "run", "execution"];
+      if (!onlyKeys(technique, techniqueKeys) || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)
+        || !uriOrNull(technique.url) || !stringArray(technique.platforms)
+        || !["curated", "fallback"].includes(technique.command_source)
+        || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean") throw new Error("Plan contains an invalid technique record");
+      const command = technique.command;
+      const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
+      if (!onlyKeys(command, commandKeys, ["unsupported", "restricted"])
+        || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every(key => typeof command[key] === "string")
+        || command.command.length > 10000 || !["none", "low", "medium", "high"].includes(command.risk)
+        || !uniqueStrings(command.side_effects) || !uniqueStrings(command.network_targets) || !stringArray(command.prerequisites)
+        || !["requires_admin", "requires_network", "cleanup_required", "acknowledgment_required"].every(key => typeof command[key] === "boolean")
+        || (command.unsupported !== undefined && typeof command.unsupported !== "boolean")
+        || (command.restricted !== undefined && typeof command.restricted !== "boolean")
+        || !Number.isInteger(command.timeout_seconds) || command.timeout_seconds < 0 || command.timeout_seconds > 3600) throw new Error("Plan contains an invalid command record");
+      const execution = technique.execution;
+      if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed"])
+        || !["not_run", "passed", "failed", "skipped"].includes(execution.outcome)
+        || (execution.updated_at !== undefined && !dateTime(execution.updated_at))
+        || (execution.operator !== undefined && (typeof execution.operator !== "string" || execution.operator.length > 120))
+        || (execution.target !== undefined && (typeof execution.target !== "string" || execution.target.length > 200))
+        || (execution.notes !== undefined && (typeof execution.notes !== "string" || execution.notes.length > 500))
+        || (execution.cleanup_completed !== undefined && typeof execution.cleanup_completed !== "boolean")) throw new Error("Plan execution record is invalid");
     });
   });
-  if (techniqueCount > 2000) throw new Error("Plan contains too many technique records");
 }
 
 function normalizeImportedCommand(command) {
