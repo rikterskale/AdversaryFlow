@@ -8,13 +8,19 @@ import re
 import uuid
 from pathlib import Path
 
-from backend import __version__
-
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _project_version() -> str:
+    source = (ROOT / "backend" / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']$', source, re.MULTILINE)
+    if not match:
+        raise SystemExit("Could not read backend.__version__")
+    return match.group(1)
+
+
 def main() -> int:
+    project_version = _project_version()
     components = []
     for raw in (ROOT / "requirements.lock").read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -41,8 +47,8 @@ def main() -> int:
             "component": {
                 "type": "application",
                 "name": "adversaryflow",
-                "version": __version__,
-                "purl": f"pkg:pypi/adversaryflow@{__version__}",
+                "version": project_version,
+                "purl": f"pkg:pypi/adversaryflow@{project_version}",
             }
         },
         "components": components,
