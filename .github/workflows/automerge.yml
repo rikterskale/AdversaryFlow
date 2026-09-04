@@ -5,6 +5,9 @@ name: Auto-merge
 # enforcement is off on main, so this is a guardrail rather than a gate: it
 # makes the verified path the effortless one without removing the ability to
 # override by hand.
+# Note: pull_request_target always runs the workflow from the base branch,
+# so changes here take effect only once merged to main - a pull request that
+# edits this file is still handled by the version already on main.
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, closed]
