@@ -81,6 +81,13 @@ assets, cache visibility, and cache write access. For a support request attach:
 4. operating system and browser versions;
 5. the affected ATT&CK domain and data version.
 
+For bounded exercise evidence, retain the receipt and independently collected
+endpoint/SIEM export. Use `adversaryflow-telemetry collect` for a read-only native
+log snapshot and `adversaryflow-telemetry correlate` to enforce the technique's
+marker, host, time-window, event-type, and event-count requirements. Collection
+does not enable OS auditing; a missing signal fails the gate. See
+`docs/TELEMETRY.md`.
+
 ## Common failures
 
 - **Setup remains in loading:** inspect download byte progress and JSON logs;

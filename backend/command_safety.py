@@ -10,6 +10,7 @@ import re
 from typing import Any, Dict, List
 
 from .lab_exercises import get_spec
+from .telemetry import acceptance_record
 
 _NETWORK_MARKERS = (
     "http://", "https://", "invoke-webrequest", "downloadstring", "curl ", "wget ", "nslookup",
@@ -117,5 +118,6 @@ def technique_exercise_record(technique_id: str, original: Dict[str, Any]) -> Di
         exercise_kind="technique_relevant_bounded",
         fidelity="bounded_synthetic",
         evidence_source="self_reported_receipt",
+        telemetry_acceptance=acceptance_record(technique_id),
         acknowledgment_required=loopback,
     )

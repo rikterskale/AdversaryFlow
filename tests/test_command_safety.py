@@ -105,6 +105,9 @@ class CommandRecordTests(unittest.TestCase):
         self.assertEqual(record["exercise_kind"], "technique_relevant_bounded")
         self.assertEqual(record["fidelity"], "bounded_synthetic")
         self.assertEqual(record["evidence_source"], "self_reported_receipt")
+        self.assertEqual(record["telemetry_acceptance"]["technique_id"], "T1110")
+        self.assertEqual(record["telemetry_acceptance"]["minimum_activity_events"], 5)
+        self.assertEqual(record["telemetry_acceptance"]["activity_event_types"], ("authentication_failure",))
 
 
 class NetworkTargetTests(unittest.TestCase):

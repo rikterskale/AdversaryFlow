@@ -768,10 +768,37 @@ def run_exercise(technique_id: str) -> Dict[str, Any]:
     error = None
     events: List[Dict[str, Any]] = []
     try:
+        marker = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; print(' '.join(sys.argv[1:]))",
+                "adversaryflow-run-marker",
+                "--run-id",
+                run_id,
+                "--technique-id",
+                technique_id,
+                "--scenario",
+                spec.scenario,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        events.append(
+            {
+                "event": "telemetry_correlation_marker",
+                "run_id": run_id,
+                "child_exit_code": marker.returncode,
+                "marker_emitted": marker.returncode == 0 and run_id in marker.stdout,
+            }
+        )
         with tempfile.TemporaryDirectory(prefix=f"adversaryflow-{technique_id.replace('.', '-')}-") as directory:
             workspace = Path(directory)
-            events = _RUNNERS[spec.scenario](technique_id, workspace)
-            for event in events:
+            scenario_events = _RUNNERS[spec.scenario](technique_id, workspace)
+            events.extend(scenario_events)
+            for event in scenario_events:
                 event.setdefault("technique_id", technique_id)
         cleanup_verified = not workspace.exists()
     except Exception as exc:

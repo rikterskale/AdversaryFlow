@@ -19,6 +19,9 @@ class SchemaTests(unittest.TestCase):
             self.assertIn(field, execution)
         self.assertEqual(execution["receipt_sha256"]["pattern"], "^[a-fA-F0-9]{64}$")
         self.assertIn("siem_verified", execution["evidence_source"]["enum"])
+        acceptance = schema["$defs"]["telemetry_acceptance"]
+        self.assertFalse(acceptance["additionalProperties"])
+        self.assertIn("activity_event_types", acceptance["required"])
 
     def test_openapi_defines_mutation_security_responses(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")

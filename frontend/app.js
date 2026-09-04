@@ -469,7 +469,7 @@ function validateImportedPlan(data) {
         || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean") throw new Error("Plan contains an invalid technique record");
       const command = technique.command;
       const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
-      if (!onlyKeys(command, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source"])
+      if (!onlyKeys(command, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance"])
         || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every(key => typeof command[key] === "string")
         || command.command.length > 10000 || !["none", "low", "medium", "high"].includes(command.risk)
         || !uniqueStrings(command.side_effects) || !uniqueStrings(command.network_targets) || !stringArray(command.prerequisites)
@@ -479,6 +479,14 @@ function validateImportedPlan(data) {
         || (command.exercise_kind !== undefined && command.exercise_kind !== "technique_relevant_bounded")
         || (command.fidelity !== undefined && command.fidelity !== "bounded_synthetic")
         || (command.evidence_source !== undefined && command.evidence_source !== "self_reported_receipt")
+        || (command.telemetry_acceptance !== undefined && (!plainObject(command.telemetry_acceptance)
+          || !onlyKeys(command.telemetry_acceptance, ["technique_id", "scenario", "activity_event_types", "minimum_activity_events", "requirements", "limitation"])
+          || command.telemetry_acceptance.technique_id !== technique.id
+          || !nonEmptyString(command.telemetry_acceptance.scenario)
+          || !uniqueStrings(command.telemetry_acceptance.activity_event_types, { nonEmpty: true })
+          || !nonNegativeInteger(command.telemetry_acceptance.minimum_activity_events) || command.telemetry_acceptance.minimum_activity_events < 1
+          || !uniqueStrings(command.telemetry_acceptance.requirements, { nonEmpty: true })
+          || !nonEmptyString(command.telemetry_acceptance.limitation)))
         || !Number.isInteger(command.timeout_seconds) || command.timeout_seconds < 0 || command.timeout_seconds > 3600) throw new Error("Plan contains an invalid command record");
       const execution = technique.execution;
       if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source"])
@@ -521,6 +529,7 @@ function normalizeImportedCommand(command) {
     ...(command.exercise_kind ? { exercise_kind: command.exercise_kind } : {}),
     ...(command.fidelity ? { fidelity: command.fidelity } : {}),
     ...(command.evidence_source ? { evidence_source: command.evidence_source } : {}),
+    ...(command.telemetry_acceptance ? { telemetry_acceptance: command.telemetry_acceptance } : {}),
   };
 }
 
@@ -879,6 +888,7 @@ function renderTech(t) {
       ${unsupported ? "" : `<div class="safety safety--${risk}">
         <div class="safety__badges"><span class="riskbadge riskbadge--${risk}">${escapeHtml(risk)} risk</span>${c.requires_admin ? '<span class="riskbadge">admin</span>' : ''}${c.requires_network ? '<span class="riskbadge">network</span>' : ''}${c.cleanup_required ? '<span class="riskbadge">cleanup required</span>' : ''}</div>
         <div><b>Effects:</b> ${escapeHtml(effects || "Not classified")} · <b>Expected:</b> ${escapeHtml(c.expected_telemetry || "Verify relevant telemetry")}</div>
+        ${c.telemetry_acceptance ? `<div><b>Independent pass gate:</b> marker + ${c.telemetry_acceptance.minimum_activity_events} ${escapeHtml(c.telemetry_acceptance.activity_event_types.join(" or "))} event(s) on the same host and receipt time window.</div>` : ""}
         ${(c.network_targets || []).length ? `<div><b>Network targets:</b> ${escapeHtml(c.network_targets.join(", "))}</div>` : ""}
       </div>`}
       <div class="cmd">

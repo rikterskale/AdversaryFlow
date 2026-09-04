@@ -49,6 +49,10 @@ Under the hood:
   temporary artifacts, or loopback-only protocol events and emit a
   digest-protected JSON receipt. A receipt is self-reported execution evidence;
   it must be correlated with endpoint or SIEM telemetry for independent proof.
+  A harmless marker child process carries the run ID into process telemetry,
+  and `adversaryflow-telemetry` applies the explicit per-technique pass gate to
+  normalized endpoint/SIEM exports. See
+  [Independent telemetry correlation](docs/TELEMETRY.md).
   Every entry has structured safety, prerequisites, expected telemetry, notes,
   and cleanup metadata; a tactic-aware
   fallback covers any technique a future ATT&CK release

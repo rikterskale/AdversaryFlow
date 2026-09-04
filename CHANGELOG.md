@@ -2,15 +2,23 @@
 
 All notable changes to AdversaryFlow are documented here.
 
-## 0.3.0 — 2026-09-04
+## Unreleased
 
 - Replaced 146 generic temporary-file proxies with explicit, bounded,
   technique-relevant exercises across 25 scenario families, each with a
   digest-protected self-reported execution receipt.
+- Added read-only Windows, Linux, and macOS log collection, normalized endpoint/SIEM
+  correlation, run-ID process markers, and explicit acceptance contracts for all
+  146 bounded techniques.
 - Added run IDs, start/completion timestamps, exit codes, stdout/stderr hashes,
   receipt verification, and endpoint/SIEM references to execution evidence.
 - Made exported runbooks review-only by commenting every command, and added a
   native Windows CI job that executes both PowerShell launchers.
+- Updated artifact upload, download, and build-provenance Actions to their
+  current Node 24-based releases while retaining immutable SHA pins.
+
+## 0.3.0 — 2026-09-04
+
 - Added structured command risk, privilege, network, telemetry, prerequisite,
   timeout, rollback, and cleanup metadata with explicit high-risk acknowledgment.
 - Added passed/failed/skipped evidence records, operator/target context, cleanup

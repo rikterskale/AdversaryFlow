@@ -220,6 +220,22 @@ components:
         rollback: { type: string }
         cleanup_required: { type: boolean }
         acknowledgment_required: { type: boolean }
+        exercise_kind: { enum: [technique_relevant_bounded] }
+        fidelity: { enum: [bounded_synthetic] }
+        evidence_source: { enum: [self_reported_receipt] }
+        unsupported: { type: boolean }
+        restricted: { type: boolean }
+        telemetry_acceptance:
+          type: object
+          required: [technique_id, scenario, activity_event_types, minimum_activity_events, requirements, limitation]
+          properties:
+            technique_id: { type: string }
+            scenario: { type: string }
+            activity_event_types: { type: array, minItems: 1, items: { type: string } }
+            minimum_activity_events: { type: integer, minimum: 1 }
+            requirements: { type: array, minItems: 1, items: { type: string } }
+            limitation: { type: string }
+          additionalProperties: false
       additionalProperties: false
     Health:
       type: object

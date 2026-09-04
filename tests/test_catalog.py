@@ -51,6 +51,7 @@ class CatalogIntegrityTests(unittest.TestCase):
                 self.assertIn("self-reported evidence", command["note"])
                 self.assertFalse(command["requires_admin"])
                 self.assertFalse(command["cleanup_required"])
+                self.assertEqual(command["telemetry_acceptance"]["technique_id"], technique_id)
         self.assertEqual(len(exercises), 146)
         self.assertEqual(set(exercises), set(TECHNIQUE_SCENARIOS))
         self.assertEqual(len({command["command"] for command in exercises.values()}), 146)

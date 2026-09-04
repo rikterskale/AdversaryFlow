@@ -39,6 +39,7 @@ Changelog = "https://github.com/rikterskale/AdversaryFlow/blob/main/CHANGELOG.md
 
 [project.scripts]
 adversaryflow = "backend.app:main"
+adversaryflow-telemetry = "backend.telemetry:main"
 
 [tool.setuptools]
 packages = ["backend"]
