@@ -8,7 +8,7 @@ import os
 import tempfile
 import unittest
 import urllib.error
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 from backend import attack_data
@@ -131,9 +131,23 @@ class DomainIndexTests(unittest.TestCase):
 class DefaultCacheLocationTests(unittest.TestCase):
     """The per-user cache must land outside the installation on every platform."""
 
+    # The only variables _default_cache_dir consults.
+    CACHE_ENV_KEYS: ClassVar[tuple] = ("ADVERSARYFLOW_CACHE_DIR", "LOCALAPPDATA", "XDG_CACHE_HOME")
+
     def resolve(self, platform: str, environ: dict[str, str]) -> str:
+        """Resolve the cache directory with only the cache variables controlled.
+
+        The home-resolution variables are left in place on purpose. Clearing the
+        whole environment stops os.path.expanduser("~") resolving on Windows,
+        which has no pwd-database fallback, so the call under test would return
+        a literal "~" while the expected value — expanded outside the patch —
+        would be fully resolved.
+        """
+        patched = {key: value for key, value in os.environ.items()
+                   if key not in self.CACHE_ENV_KEYS}
+        patched.update(environ)
         with patch.object(attack_data.sys, "platform", platform), \
-                patch.dict(attack_data.os.environ, environ, clear=True):
+                patch.dict(attack_data.os.environ, patched, clear=True):
             return attack_data._default_cache_dir()
 
     def test_an_explicit_override_wins_on_every_platform(self):
