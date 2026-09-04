@@ -50,13 +50,13 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J23 | Plan open | `uat.spec.js` J23 *(auto)* | Risk badge, Effects, Expected telemetry visible | `high risk` badge, `Effects:`, `Expected:`, `cleanup required` all present | **Pass** |
 | J24 | Multi-stage plan | `uat.spec.js` J24 *(auto)* | Forward/back/rail navigation with correct disabled ends | Execution → Persistence → Impact → back to Persistence → rail to Execution; ends disabled correctly | **Pass** |
 | J25 | Risky command in scope | `uat.spec.js` J25 *(auto)* | Confirm dialog, then clipboard + toast | Dialog `This is a high risk lab command.`; toast `Command copied to clipboard`; clipboard held the exact command | **Pass** |
-| J26 | Plan open | `uat.spec.js` J26 *(auto)* | Progress advances with the recorded outcome | `0 / 3` / `0%` → `1 / 3` / `33%`; footer `1 / 3 runnable techniques marked run` | **Pass** |
+| J26 | Plan open | `uat.spec.js` J26 plus receipt-import browser test *(auto)* | Progress advances and structured execution proof persists | `0 / 3` / `0%` → `1 / 3` / `33%`; a valid receipt populated run ID, timestamps, exit code, cleanup and verified digest in the schema-valid JSON export | **Pass** |
 | J28 | Plan walked | `uat.spec.js` J28 *(auto)* | Export screen with four stat tiles | Heading shown; tiles Techniques, Stages, Runnable tests, Marked run; footer `Plan complete ✓` | **Pass** |
 | J29 | On step 4 | `uat.spec.js` J29 *(auto)* | JSON validates against the published schema | `AdversaryFlow_G0001_UAT_Actor.json` valid per Ajv 2020; outcome `passed`, note `Observed` round-tripped | **Pass** |
 | J30 | On step 4 | `uat.spec.js` J30 *(auto)* | Markdown report with heading, technique, outcome, command | `# AdversaryFlow — UAT Actor (G0001)`, `### T1059.001 — PowerShell`, `**Outcome:** failed`, `whoami` | **Pass** |
-| J31 | On step 4 | `uat.spec.js` J31 *(auto)* | `.txt` runbook with commented review metadata and an uncommented selected command | `AdversaryFlow_G0001_UAT_Actor_runbook.cmd.txt` contained `REM AdversaryFlow runbook`, `REM ===== 1. EXECUTION =====`, `REM Outcome: not_run`, and a line exactly equal to `whoami` | **Pass** |
+| J31 | On step 4 | `uat.spec.js` J31 *(auto)* | Non-executable `.txt` runbook with every command commented | `AdversaryFlow_G0001_UAT_Actor_runbook.cmd.txt` contained `REM AdversaryFlow runbook`, `REM ===== 1. EXECUTION =====`, `REM Outcome: not_run`, and `REM COMMAND: whoami`; no line equalled `whoami` | **Pass** |
 | J32 | A saved JSON plan exists | `uat.spec.js` J32 *(auto)* | Plan restored with evidence intact | Toast `Plan imported as high-risk…`; heading `UAT Actor · G0001`; outcome `passed`; note `Script block logging fired` | **Pass** |
-| J54 | Real bundle and catalog available | Resolve every actor-mapped technique and inspect simulation disclosures *(manual plus `test_catalog.py` auto)* | 0 mapped techniques use the runtime fallback; catalog counts and bounded-simulation disclosures match the journey | `actors=227 mapped=529 fallback=0`; `533` technique keys, `556` command records, `146` bounded-simulation technique IDs; every bounded record stated that it does not perform the unsafe ATT&CK action | **Pass** |
+| J54 | Real bundle and catalog available | Resolve every actor-mapped technique, inspect the exercise registry, and execute every bounded exercise *(manual plus `test_catalog.py` / `test_lab_exercises.py` auto)* | 0 mapped techniques use the runtime fallback; every one of the 146 bounded entries has a technique-relevant scenario and valid receipt | `actors=227 mapped=529 fallback=0`; `533` technique keys, `848` command records; `146` exercise IDs each available on Windows/Linux/macOS across `25` scenario families; all 146 passed, cleaned up, and produced a valid SHA-256 receipt | **Pass** |
 
 ---
 
@@ -150,7 +150,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | B39 | Service running | `POST /api/refresh` with a body under the limit | Accepted | HTTP 200 | **Pass** |
 | B40 | Catalog loaded | `get_commands("T9999", …, ["execution"])` | Exactly one fallback command naming the technique | `source = fallback`, 1 command containing `T9999` | **Pass** |
 | B41 | Catalog loaded | `get_commands("T9999", …, [])` | Still returns a runnable command | `source = fallback`, non-empty command | **Pass** |
-| B42 | Catalog loaded | Inspect all 556 command records | Every risk is low/medium/high; medium and high require acknowledgement | All records conform | **Pass** |
+| B42 | Catalog loaded | Inspect all 848 command records | Every risk is low/medium/high; medium and high require acknowledgement | All records conform | **Pass** |
 
 ---
 
@@ -185,22 +185,20 @@ Every journey-map row `J1`–`J55` is covered exactly once across groups A and B
 ### Suites executed
 
 ```text
-$ pytest -q -W error::ResourceWarning
-.................................................................. [ 32%]
-.............................................................................................................. [ 87%]
-......................... [100%]
-201 passed, 2396 subtests passed in 2.36s
+$ python -m unittest discover
+Ran 205 tests in 7.777s
+OK
 
 $ npm run test:e2e -- --reporter=dot
-Running 47 tests using 2 workers
-...............................................
-47 passed (1.0m)
+Running 48 tests using 2 workers
+................................................
+48 passed (1.1m)
 
 $ ruff check .
 All checks passed!
 
 $ mypy backend
-Success: no issues found in 21 source files
+Success: no issues found in 35 source files
 
 $ node --check frontend/app.js tests/e2e/wizard.spec.js tests/e2e/uat.spec.js
 $ bash -n install.sh run.sh
@@ -222,8 +220,8 @@ AdversaryFlow 0.3.0: http://127.0.0.1:5055
 health=ready ready=True phase=ready
 actors=227 contract_violations=0
 APT29: techniques=66 curated=66 fallback=0 stages=13 commands_missing=0
-actors=227 mapped=529 fallback=0 technique_keys=533 command_records=556
-simulation_ids=146 simulation_disclosure=True
+actors=227 mapped=529 fallback=0 technique_keys=533 command_records=848
+exercise_ids=146 scenario_families=25 receipts_valid=146 cleanup_verified=146
 ```
 
 ### Where each case runs

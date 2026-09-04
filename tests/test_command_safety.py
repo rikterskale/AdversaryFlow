@@ -1,10 +1,7 @@
 """Direct cover for the safety metadata derived for every catalog command."""
-import os
-import subprocess
-import tempfile
 import unittest
 
-from backend.command_safety import _bounded_simulation, _network_targets, command_record
+from backend.command_safety import _network_targets, command_record, technique_exercise_record
 
 
 class CommandRecordTests(unittest.TestCase):
@@ -99,33 +96,15 @@ class CommandRecordTests(unittest.TestCase):
         self.assertIn("changes_local_state", command_record("windows", "REG ADD HKCU\\Software\\X")["side_effects"])
         self.assertTrue(command_record("windows", "Invoke-WebRequest HTTPS://EXAMPLE.COM")["requires_network"])
 
-    def test_a_bounded_windows_simulation_creates_observes_and_removes_an_artifact(self):
-        record = command_record(
-            "windows",
-            'cmd.exe /c "echo unsafe-action simulation"',
-            "Bounded lab simulation for a prohibited action.",
-        )
-        self.assertIn("Set-Content", record["command"])
-        self.assertIn("Get-FileHash", record["command"])
-        self.assertIn("Remove-Item", record["command"])
-        self.assertNotIn(" echo ", record["command"].lower())
-        self.assertTrue(record["cleanup_required"])
-        self.assertIn("changes_local_state", record["side_effects"])
-        self.assertFalse(record["requires_network"])
-
-    def test_a_bounded_posix_simulation_is_self_cleaning_and_shell_valid(self):
-        command, cleanup = _bounded_simulation("pre", "unsafe action")
-        with tempfile.TemporaryDirectory() as directory:
-            result = subprocess.run(
-                ["bash", "-c", command], capture_output=True, text=True, check=False,
-                env={"TMPDIR": directory},
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertRegex(result.stdout, r"\d+")
-            self.assertEqual(os.listdir(directory), [])
-            self.assertIn("printf", command)
-            self.assertIn("rm -f", command)
-            self.assertIn("rm -f", cleanup)
+    def test_a_registered_exercise_has_specific_telemetry_and_receipt_metadata(self):
+        record = technique_exercise_record("T1110", {"platform": "windows"})
+        self.assertEqual(record["command"], "python -m backend.lab_exercises T1110")
+        self.assertIn("Five loopback HTTP 401 authentication failures", record["expected_telemetry"])
+        self.assertEqual(record["network_targets"], ["127.0.0.1"])
+        self.assertTrue(record["acknowledgment_required"])
+        self.assertEqual(record["exercise_kind"], "technique_relevant_bounded")
+        self.assertEqual(record["fidelity"], "bounded_synthetic")
+        self.assertEqual(record["evidence_source"], "self_reported_receipt")
 
 
 class NetworkTargetTests(unittest.TestCase):

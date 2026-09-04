@@ -115,6 +115,9 @@
         "rollback": { "type": "string" },
         "cleanup_required": { "type": "boolean" },
         "acknowledgment_required": { "type": "boolean" },
+        "exercise_kind": { "enum": ["technique_relevant_bounded"] },
+        "fidelity": { "enum": ["bounded_synthetic"] },
+        "evidence_source": { "enum": ["self_reported_receipt"] },
         "unsupported": { "type": "boolean" },
         "restricted": { "type": "boolean" }
       },
@@ -129,7 +132,17 @@
         "operator": { "type": "string", "maxLength": 120 },
         "target": { "type": "string", "maxLength": 200 },
         "notes": { "type": "string", "maxLength": 500 },
-        "cleanup_completed": { "type": "boolean" }
+        "cleanup_completed": { "type": "boolean" },
+        "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "exit_code": { "type": "integer", "minimum": -255, "maximum": 65535 },
+        "stdout_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "stderr_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "receipt_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "receipt_verified": { "type": "boolean" },
+        "telemetry_refs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 }, "maxItems": 20, "uniqueItems": true },
+        "evidence_source": { "enum": ["operator_supplied", "exercise_receipt", "endpoint_verified", "siem_verified"] }
       },
       "additionalProperties": false
     }

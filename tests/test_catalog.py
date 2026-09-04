@@ -2,6 +2,7 @@ import unittest
 
 from backend import command_catalog
 from backend.command_catalog_extended import EXTENDED
+from backend.lab_exercises import TECHNIQUE_SCENARIOS
 
 
 class CatalogIntegrityTests(unittest.TestCase):
@@ -38,28 +39,27 @@ class CatalogIntegrityTests(unittest.TestCase):
         self.assertIn("T9999", result["commands"][0]["command"])
         self.assertIn("risk", result["commands"][0])
 
-    def test_bounded_simulations_are_observable_actions_not_no_ops(self):
-        simulations = set()
+    def test_bounded_exercises_are_technique_specific_and_disclosed(self):
+        exercises = {}
         for technique_id, commands in command_catalog.CURATED.items():
             for command in commands:
-                if "bounded lab simulation" not in command["note"].lower():
+                if command.get("exercise_kind") != "technique_relevant_bounded":
                     continue
-                simulations.add(technique_id)
-                self.assertNotIn(" echo ", command["command"].lower())
-                self.assertTrue(command["cleanup_required"])
-                self.assertIn("changes_local_state", command["side_effects"])
-                self.assertIn(
-                    "does not contact a target or perform the unsafe ATT&CK action",
-                    command["note"],
-                )
-                self.assertTrue(
-                    "Set-Content" in command["command"] or "printf" in command["command"],
-                    command["command"],
-                )
-        self.assertEqual(len(simulations), 146)
+                exercises[technique_id] = command
+                self.assertEqual(command["command"].split()[-1], technique_id)
+                self.assertTrue(command["expected_telemetry"])
+                self.assertIn("self-reported evidence", command["note"])
+                self.assertFalse(command["requires_admin"])
+                self.assertFalse(command["cleanup_required"])
+        self.assertEqual(len(exercises), 146)
+        self.assertEqual(set(exercises), set(TECHNIQUE_SCENARIOS))
+        self.assertEqual(len({command["command"] for command in exercises.values()}), 146)
+        for technique_id in exercises:
+            records = [command for command in command_catalog.CURATED[technique_id] if command.get("exercise_kind")]
+            self.assertEqual({command["platform"] for command in records}, {"windows", "linux", "macos"})
 
     def test_catalog_record_counts_are_explicit(self):
-        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 556)
+        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 848)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from .command_safety import command_record
+from .command_safety import command_record, technique_exercise_record
 
 
 def _c(platform: str, command: str, note: str = "", cleanup: str = "", **metadata: Any) -> Dict[str, Any]:
@@ -27,7 +27,7 @@ def _c(platform: str, command: str, note: str = "", cleanup: str = "", **metadat
 # Curated library: ATT&CK technique id -> list of lab proxy commands.
 # ---------------------------------------------------------------------------
 
-CURATED: Dict[str, List[Dict[str, str]]] = {
+CURATED: Dict[str, List[Dict[str, Any]]] = {
     # ---- Execution ------------------------------------------------------
     "T1059.001": [_c("windows", "powershell.exe -NoProfile -Command \"Write-Host 'AdversaryFlow lab PowerShell exec test'\"",
                      "Inline PowerShell to exercise script-block / EDR logging.")],
@@ -283,6 +283,20 @@ from .command_catalog_extended import EXTENDED as _EXTENDED  # noqa: E402 - must
 
 for _tid, _cmds in _EXTENDED.items():
     CURATED.setdefault(_tid, _cmds)
+
+# Generic echo/file proxies are replaced only after the complete catalog is
+# assembled, because the dictionary key is the authoritative technique ID.
+for _tid, _cmds in CURATED.items():
+    _expanded: List[Dict[str, Any]] = []
+    for _command in _cmds:
+        if "bounded lab simulation" in _command["note"].lower():
+            _expanded.extend(
+                technique_exercise_record(_tid, {**_command, "platform": _platform})
+                for _platform in ("windows", "linux", "macos")
+            )
+        else:
+            _expanded.append(_command)
+    CURATED[_tid] = _expanded
 
 
 def get_commands(technique_id: str, technique_name: str, tactics: List[str],

@@ -53,6 +53,10 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('evidence__outcome', self.javascript)
         self.assertIn('acknowledgment_required', self.javascript)
         self.assertIn('execution_context', self.javascript)
+        self.assertIn('receipt_sha256', self.javascript)
+        self.assertIn('telemetry_refs', self.javascript)
+        self.assertIn('Verify and import receipt', self.javascript)
+        self.assertIn('${comment} COMMAND:', self.javascript)
 
 
 if __name__ == "__main__":

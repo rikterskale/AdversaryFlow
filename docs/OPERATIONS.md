@@ -59,8 +59,12 @@ cache-clear removes only known AdversaryFlow bundle and metadata files.
 ## Execution records and recovery
 
 Browser progress is keyed by actor, ATT&CK data version, domains, and command
-platform. Outcomes, timestamps, operator/target context, notes, and cleanup
-verification are stored locally. Export a JSON plan for backup or handoff;
+platform. Outcomes, run IDs, start/completion timestamps, exit codes,
+stdout/stderr hashes, receipt digests, endpoint/SIEM references,
+operator/target context, notes, and cleanup verification are stored locally.
+Exercise receipts are self-reported; correlate their run IDs and timestamps
+with the endpoint or SIEM before treating execution as independently verified.
+Export a JSON plan for backup or handoff;
 the welcome screen can resume a schema 2.0 JSON plan. Imported commands are
 always elevated to high risk and require acknowledgment before copying.
 

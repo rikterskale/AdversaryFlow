@@ -26,8 +26,9 @@ steps are reached:
    tactics, and see a live plan preview update as you go.
 3. **Run & track the plan** — review structured risk, privilege, network,
    expected-telemetry, and cleanup metadata before copying a command. Record
-   passed/failed/skipped outcomes, evidence notes, timestamps, target context,
-   and cleanup verification; progress persists locally per versioned plan.
+   passed/failed/skipped outcomes, evidence notes, run IDs, timestamps, exit
+   codes, output hashes, receipt digests, SIEM/endpoint references, target
+   context, and cleanup verification; progress persists locally per versioned plan.
 4. **Export** — download the scoped plan as **Markdown**, schema-versioned
    **JSON**, or a platform-specific commented **runbook**.
 
@@ -38,12 +39,16 @@ Under the hood:
 * **Kill-chain order is derived from the live STIX matrix**, not hardcoded, so
   the tool stays correct as ATT&CK evolves its tactics — including the current
   split of *Defense Evasion* into **Stealth** and **Defense Impairment**.
-* **Lab exercise per TTP** — a curated library of **530+ catalog entries**
+* **Lab exercise per TTP** — a curated library of **533 technique keys and 848 platform records**
   covers **every technique used by any of the 227 actors**, so a real actor
   workflow comes back 100% `curated` with 0 `fallback`. Entries use direct
   technique-specific commands where the behaviour is safe; behaviours that
   require targeting people, destructive actions, or external adversary
-  infrastructure use an observable, self-cleaning local artifact simulation.
+  infrastructure use one of 25 bounded exercise families. These 146 exercises
+  create technique-relevant synthetic records, child-process activity,
+  temporary artifacts, or loopback-only protocol events and emit a
+  digest-protected JSON receipt. A receipt is self-reported execution evidence;
+  it must be correlated with endpoint or SIEM telemetry for independent proof.
   Every entry has structured safety, prerequisites, expected telemetry, notes,
   and cleanup metadata; a tactic-aware
   fallback covers any technique a future ATT&CK release
@@ -60,6 +65,7 @@ AdversaryFlow/
 │   ├── command_catalog_extended.py  # auto-merges the ext_part* files below
 │   ├── ext_helper.py                # shared helper for the part files
 │   ├── command_safety.py             # structured risk and cleanup metadata
+│   ├── lab_exercises.py              # 146 bounded exercises + evidence receipts
 │   └── ext_part1..14.py              # technique-indexed lab exercises, one reviewable slice each
 ├── frontend/
 │   ├── index.html

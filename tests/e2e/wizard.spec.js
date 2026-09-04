@@ -4,6 +4,7 @@ const Ajv2020 = require("ajv/dist/2020");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const command = {
   platform: "windows",
@@ -183,7 +184,43 @@ test("runbook export is a commented, non-executable artifact", async ({ page }) 
   expect(runbook).toContain("REM AdversaryFlow runbook — Test Actor (G0001)");
   expect(runbook).toContain("REM ===== 1. EXECUTION =====");
   expect(runbook).toContain("REM Outcome: not_run");
-  expect(runbook).toContain("whoami");
+  expect(runbook).toContain("REM COMMAND: whoami");
+  expect(runbook.split(/\r?\n/)).not.toContain("whoami");
+});
+
+test("a bounded exercise receipt is digest-verified and exported as execution proof", async ({ page }) => {
+  const exercise = { ...command, command: "python -m backend.lab_exercises T1033", exercise_kind: "technique_relevant_bounded", fidelity: "bounded_synthetic", evidence_source: "self_reported_receipt" };
+  await interceptApi(page, [exercise]);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const receipt = {
+    attestation: "self-reported",
+    cleanup_verified: true,
+    completed_at: "2026-09-04T12:00:01+00:00",
+    duration_ms: 1000,
+    error: null,
+    events: [{ event: "identity_probe", technique_id: "T1033" }],
+    exercise_summary: "Synthetic identity probe.",
+    exit_code: 0,
+    expected_telemetry: "Process telemetry.",
+    run_id: "550e8400-e29b-41d4-a716-446655440000",
+    scenario: "identity_probe",
+    schema_version: "1.0",
+    started_at: "2026-09-04T12:00:00+00:00",
+    status: "passed",
+    technique_id: "T1033",
+  };
+  receipt.receipt_sha256 = crypto.createHash("sha256").update(JSON.stringify(receipt)).digest("hex");
+  await page.getByText("Execution proof").click();
+  await page.getByLabel("Exercise receipt for T1033").fill(JSON.stringify(receipt));
+  await page.getByRole("button", { name: "Verify and import receipt" }).click();
+  await expect(page.getByText("receipt digest verified (self-reported)")).toBeVisible();
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: /JSON/ }).click();
+  const exported = JSON.parse(fs.readFileSync(await (await download).path(), "utf-8"));
+  const evidence = exported.stages[0].techniques[0].execution;
+  expect(evidence).toMatchObject({ run_id: receipt.run_id, exit_code: 0, receipt_sha256: receipt.receipt_sha256, receipt_verified: true, cleanup_completed: true, evidence_source: "exercise_receipt" });
 });
 
 test("a saved plan can be resumed from the welcome screen", async ({ page }) => {

@@ -469,22 +469,33 @@ function validateImportedPlan(data) {
         || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean") throw new Error("Plan contains an invalid technique record");
       const command = technique.command;
       const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
-      if (!onlyKeys(command, commandKeys, ["unsupported", "restricted"])
+      if (!onlyKeys(command, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source"])
         || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every(key => typeof command[key] === "string")
         || command.command.length > 10000 || !["none", "low", "medium", "high"].includes(command.risk)
         || !uniqueStrings(command.side_effects) || !uniqueStrings(command.network_targets) || !stringArray(command.prerequisites)
         || !["requires_admin", "requires_network", "cleanup_required", "acknowledgment_required"].every(key => typeof command[key] === "boolean")
         || (command.unsupported !== undefined && typeof command.unsupported !== "boolean")
         || (command.restricted !== undefined && typeof command.restricted !== "boolean")
+        || (command.exercise_kind !== undefined && command.exercise_kind !== "technique_relevant_bounded")
+        || (command.fidelity !== undefined && command.fidelity !== "bounded_synthetic")
+        || (command.evidence_source !== undefined && command.evidence_source !== "self_reported_receipt")
         || !Number.isInteger(command.timeout_seconds) || command.timeout_seconds < 0 || command.timeout_seconds > 3600) throw new Error("Plan contains an invalid command record");
       const execution = technique.execution;
-      if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed"])
+      if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source"])
         || !["not_run", "passed", "failed", "skipped"].includes(execution.outcome)
         || (execution.updated_at !== undefined && !dateTime(execution.updated_at))
         || (execution.operator !== undefined && (typeof execution.operator !== "string" || execution.operator.length > 120))
         || (execution.target !== undefined && (typeof execution.target !== "string" || execution.target.length > 200))
         || (execution.notes !== undefined && (typeof execution.notes !== "string" || execution.notes.length > 500))
-        || (execution.cleanup_completed !== undefined && typeof execution.cleanup_completed !== "boolean")) throw new Error("Plan execution record is invalid");
+        || (execution.cleanup_completed !== undefined && typeof execution.cleanup_completed !== "boolean")
+        || (execution.run_id !== undefined && (typeof execution.run_id !== "string" || !execution.run_id.length || execution.run_id.length > 128))
+        || (execution.started_at !== undefined && !dateTime(execution.started_at))
+        || (execution.completed_at !== undefined && !dateTime(execution.completed_at))
+        || (execution.exit_code !== undefined && (!Number.isInteger(execution.exit_code) || execution.exit_code < -255 || execution.exit_code > 65535))
+        || ["stdout_sha256", "stderr_sha256", "receipt_sha256"].some(key => execution[key] !== undefined && (typeof execution[key] !== "string" || !/^[a-fA-F0-9]{64}$/.test(execution[key])))
+        || (execution.receipt_verified !== undefined && typeof execution.receipt_verified !== "boolean")
+        || (execution.telemetry_refs !== undefined && (!uniqueStrings(execution.telemetry_refs, { nonEmpty: true }) || execution.telemetry_refs.length > 20 || execution.telemetry_refs.some(ref => ref.length > 500)))
+        || (execution.evidence_source !== undefined && !["operator_supplied", "exercise_receipt", "endpoint_verified", "siem_verified"].includes(execution.evidence_source))) throw new Error("Plan execution record is invalid");
     });
   });
 }
@@ -507,6 +518,9 @@ function normalizeImportedCommand(command) {
     rollback: typeof command.rollback === "string" ? command.rollback : "Restore the target from a known-good snapshot if cleanup cannot be verified.",
     cleanup_required: command.cleanup_required !== false,
     acknowledgment_required: true,
+    ...(command.exercise_kind ? { exercise_kind: command.exercise_kind } : {}),
+    ...(command.fidelity ? { fidelity: command.fidelity } : {}),
+    ...(command.evidence_source ? { evidence_source: command.evidence_source } : {}),
   };
 }
 
@@ -716,6 +730,15 @@ function setOn(sel, btn) {
 function escapeHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function stripMd(s) { return String(s || "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/<[^>]+>/g, ""); }
 function runbookSafe(s) { return String(s || "").replace(/[\r\n&|<>^]+/g, " ").trim(); }
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (plainObject(value)) return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
 function toast(msg, kind = "success") { const t = el("toast"); t.innerHTML = `<svg class="icon"><use href="#${kind === "error" ? "i-x" : "i-check"}"/></svg>${escapeHtml(msg)}`; t.hidden = false; requestAnimationFrame(() => t.classList.add("is-show")); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("is-show"); t.hidden = true; }, 2600); }
 function showLoader(txt, detail = "") { el("loaderText").textContent = txt || "Working…"; el("loaderDetail").textContent = detail; el("loader").hidden = false; }
 function hideLoader() { el("loader").hidden = true; }
@@ -806,6 +829,20 @@ function renderStage() {
   $$(".evidence__outcome", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { outcome: control.value })));
   $$(".evidence__note", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { notes: control.value.trim() })));
   $$(".evidence__cleanup", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { cleanup_completed: control.checked })));
+  $$(".evidence__field", body).forEach(control => control.addEventListener("change", () => {
+    let value = control.value.trim();
+    if (control.dataset.key === "exit_code") value = value === "" ? undefined : Number(value);
+    if (control.dataset.key === "telemetry_refs") value = [...new Set(value.split(/[,\n]/).map(item => item.trim()).filter(Boolean))];
+    if (["started_at", "completed_at"].includes(control.dataset.key) && value && !dateTime(value)) { toast("Use a valid ISO 8601 timestamp", "error"); return; }
+    if (["stdout_sha256", "stderr_sha256"].includes(control.dataset.key) && value && !/^[a-fA-F0-9]{64}$/.test(value)) { toast("SHA-256 values must contain 64 hexadecimal characters", "error"); return; }
+    if (value === "" && control.dataset.key !== "telemetry_refs") value = undefined;
+    updateEvidence(control.dataset.id, { [control.dataset.key]: value }, false);
+  }));
+  $$(".evidence__source", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { evidence_source: control.value }, false)));
+  $$(".receipt__import", body).forEach(button => button.addEventListener("click", async () => {
+    const receipt = button.closest(".evidenceproof").querySelector(".receipt__json").value;
+    await importExerciseReceipt(button.dataset.id, receipt);
+  }));
   const prev = el("prevStage"), next = el("nextStage");
   if (prev) prev.addEventListener("click", () => { if (state.stage > 0) { state.stage--; renderRail(); renderStage(); scrollPlanTop(); } });
   if (next) next.addEventListener("click", () => { if (state.stage < p.stages.length - 1) { state.stage++; renderRail(); renderStage(); scrollPlanTop(); } });
@@ -859,7 +896,22 @@ function renderTech(t) {
         </select>
         <input class="evidence__note" data-id="${t.attack_id}" maxlength="500" value="${escapeHtml(record.notes || "")}" placeholder="Evidence or observation (no secrets)" aria-label="Evidence note for ${t.attack_id}" />
         <label class="cleanupcheck"><input type="checkbox" class="evidence__cleanup" data-id="${t.attack_id}" ${record.cleanup_completed ? "checked" : ""} ${c.cleanup ? "" : "disabled"}/> cleanup verified</label>
-      </div>`}
+      </div>
+      <details class="evidenceproof">
+        <summary>Execution proof ${record.receipt_verified ? '<span class="proofbadge">receipt digest verified (self-reported)</span>' : ""}</summary>
+        <p>A receipt proves this runner produced the recorded events. Correlate its run ID and timestamps with endpoint or SIEM telemetry for independent proof.</p>
+        <div class="evidenceproof__grid">
+          <label>Run ID<input class="evidence__field" data-id="${t.attack_id}" data-key="run_id" maxlength="128" value="${escapeHtml(record.run_id || "")}" /></label>
+          <label>Exit code<input class="evidence__field" data-id="${t.attack_id}" data-key="exit_code" type="number" min="-255" max="65535" value="${record.exit_code ?? ""}" /></label>
+          <label>Started (ISO 8601)<input class="evidence__field" data-id="${t.attack_id}" data-key="started_at" value="${escapeHtml(record.started_at || "")}" /></label>
+          <label>Completed (ISO 8601)<input class="evidence__field" data-id="${t.attack_id}" data-key="completed_at" value="${escapeHtml(record.completed_at || "")}" /></label>
+          <label>stdout SHA-256<input class="evidence__field" data-id="${t.attack_id}" data-key="stdout_sha256" maxlength="64" value="${escapeHtml(record.stdout_sha256 || "")}" /></label>
+          <label>stderr SHA-256<input class="evidence__field" data-id="${t.attack_id}" data-key="stderr_sha256" maxlength="64" value="${escapeHtml(record.stderr_sha256 || "")}" /></label>
+          <label>Evidence source<select class="evidence__source" data-id="${t.attack_id}" aria-label="Evidence source for ${t.attack_id}">${[["operator_supplied","Operator supplied"],["exercise_receipt","Exercise receipt"],["endpoint_verified","Endpoint verified"],["siem_verified","SIEM verified"]].map(([value,label]) => `<option value="${value}" ${record.evidence_source === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+          <label>Telemetry references<textarea class="evidence__field" data-id="${t.attack_id}" data-key="telemetry_refs" maxlength="10000" placeholder="SIEM event IDs or endpoint links, one per line">${escapeHtml((record.telemetry_refs || []).join("\n"))}</textarea></label>
+        </div>
+        ${c.exercise_kind === "technique_relevant_bounded" ? `<label class="receiptlabel">Exercise receipt JSON<textarea class="receipt__json" aria-label="Exercise receipt for ${t.attack_id}" placeholder="Paste the JSON emitted by the lab command"></textarea></label><button type="button" class="btn btn--ghost receipt__import" data-id="${t.attack_id}">Verify and import receipt</button>` : ""}
+      </details>`}
     </div>
   </div>`;
 }
@@ -878,6 +930,7 @@ function toggleRun(tid) {
 function updateEvidence(tid, changes, rerender = true) {
   const previous = state.records[tid] || {};
   const next = { ...previous, ...changes, updated_at: new Date().toISOString(), operator: state.recordContext.operator, target: state.recordContext.target };
+  Object.entries(changes).forEach(([key, value]) => { if (value === undefined) delete next[key]; });
   if (!next.outcome || next.outcome === "not_run") {
     next.outcome = "not_run";
     state.run.delete(tid);
@@ -887,6 +940,33 @@ function updateEvidence(tid, changes, rerender = true) {
   updateProgress();
   renderRail();
   if (rerender) renderStage();
+}
+async function importExerciseReceipt(tid, source) {
+  try {
+    const receipt = JSON.parse(source);
+    if (!plainObject(receipt) || receipt.technique_id !== tid || typeof receipt.receipt_sha256 !== "string") throw new Error(`Receipt must be for ${tid}`);
+    if (!nonEmptyString(receipt.run_id) || !dateTime(receipt.started_at) || !dateTime(receipt.completed_at)
+      || !Number.isInteger(receipt.exit_code) || typeof receipt.cleanup_verified !== "boolean"
+      || !["passed", "failed"].includes(receipt.status) || !Array.isArray(receipt.events)) throw new Error("Receipt fields are incomplete or invalid");
+    const claimed = receipt.receipt_sha256.toLowerCase();
+    const unsigned = { ...receipt };
+    delete unsigned.receipt_sha256;
+    if (!/^[a-f0-9]{64}$/.test(claimed) || await sha256Hex(canonicalJson(unsigned)) !== claimed) throw new Error("Receipt digest does not match its contents");
+    updateEvidence(tid, {
+      outcome: receipt.status,
+      run_id: receipt.run_id,
+      started_at: receipt.started_at,
+      completed_at: receipt.completed_at,
+      exit_code: receipt.exit_code,
+      cleanup_completed: receipt.cleanup_verified,
+      receipt_sha256: claimed,
+      receipt_verified: true,
+      evidence_source: "exercise_receipt",
+    });
+    toast(`Verified and imported ${tid} receipt`);
+  } catch (error) {
+    toast(error.message || "Receipt import failed", "error");
+  }
 }
 function copyCmd(btn) {
   if (btn.dataset.ack === "true" && !window.confirm(`This is a ${btn.dataset.risk} risk lab command. Review prerequisites, side effects, and cleanup before copying. Continue?`)) return;
@@ -983,6 +1063,10 @@ function toMarkdown(p) {
       md += `### ${t.attack_id} — ${t.name}${state.run.has(t.attack_id) ? " ✅" : ""}\n\n`;
       const record = state.records[t.attack_id] || { outcome: "not_run" };
       md += `**Outcome:** ${record.outcome}${record.updated_at ? ` · ${record.updated_at}` : ""}${record.notes ? ` · ${record.notes}` : ""}\n\n`;
+      if (record.run_id) md += `**Execution proof:** run ID \`${record.run_id}\`${record.started_at ? ` · started ${record.started_at}` : ""}${record.completed_at ? ` · completed ${record.completed_at}` : ""}${record.exit_code !== undefined ? ` · exit ${record.exit_code}` : ""}\n\n`;
+      if (record.receipt_sha256) md += `**Receipt SHA-256:** \`${record.receipt_sha256}\` (${record.receipt_verified ? "digest verified; self-reported" : "not verified"})\n\n`;
+      if (record.stdout_sha256 || record.stderr_sha256) md += `**Captured output hashes:** stdout \`${record.stdout_sha256 || "not recorded"}\` · stderr \`${record.stderr_sha256 || "not recorded"}\`\n\n`;
+      if ((record.telemetry_refs || []).length) md += `**Independent telemetry:** ${record.telemetry_refs.join(", ")}\n\n`;
       if (t.description) md += `${stripMd(t.description)}\n\n`;
       if (c.unsupported) {
         md += `**Unsupported on ${titleCase(state.scope.cmdPlatform)}.** ${c.note}\n\n`;
@@ -1012,12 +1096,15 @@ function toRunbook(p) {
       const record = state.records[t.attack_id] || { outcome: "not_run" };
       out += `${comment} Outcome: ${record.outcome}${record.updated_at ? ` at ${record.updated_at}` : ""}\n`;
       if (record.notes) out += `${comment} Evidence: ${runbookSafe(record.notes)}\n`;
+      if (record.run_id) out += `${comment} Run ID: ${runbookSafe(record.run_id)}\n`;
+      if (record.receipt_sha256) out += `${comment} Receipt SHA-256: ${runbookSafe(record.receipt_sha256)} (${record.receipt_verified ? "digest verified; self-reported" : "not verified"})\n`;
+      (record.telemetry_refs || []).forEach(ref => { out += `${comment} Telemetry: ${runbookSafe(ref)}\n`; });
       if (c.unsupported) {
         out += `${comment} UNSUPPORTED: ${c.note}\n`;
         return;
       }
       if (c.note) out += `${comment}   ${c.note}\n`;
-      out += `${c.command}\n`;
+      out += `${comment} COMMAND: ${runbookSafe(c.command)}\n`;
       if (c.cleanup) out += `${comment} MANUAL CLEANUP: ${c.cleanup}\n`;
     });
   });

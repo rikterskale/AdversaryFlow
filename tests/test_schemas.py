@@ -14,6 +14,11 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(schema["properties"]["stages"]["maxItems"], 32)
         self.assertEqual(schema["$defs"]["stage"]["properties"]["techniques"]["maxItems"], 2000)
         self.assertEqual(schema["$defs"]["command"]["properties"]["command"]["maxLength"], 10000)
+        execution = schema["$defs"]["execution"]["properties"]
+        for field in ("run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source"):
+            self.assertIn(field, execution)
+        self.assertEqual(execution["receipt_sha256"]["pattern"], "^[a-fA-F0-9]{64}$")
+        self.assertIn("siem_verified", execution["evidence_source"]["enum"])
 
     def test_openapi_defines_mutation_security_responses(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")

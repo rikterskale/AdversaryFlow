@@ -6,9 +6,10 @@ by passing keyword arguments through the catalog helpers.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 from typing import Any, Dict, List
+
+from .lab_exercises import get_spec
 
 _NETWORK_MARKERS = (
     "http://", "https://", "invoke-webrequest", "downloadstring", "curl ", "wget ", "nslookup",
@@ -26,39 +27,6 @@ _HIGH_RISK_MARKERS = (
 )
 
 
-def _bounded_simulation(platform: str, description: str) -> tuple[str, str]:
-    """Build an observable, self-cleaning lab action for unsafe techniques.
-
-    Some ATT&CK behaviours cannot be reproduced responsibly (for example,
-    phishing a person or acquiring criminal infrastructure).  Their catalog
-    records still need executable behaviour rather than an ``echo`` no-op.
-    These simulations create, hash/read, and remove a uniquely named local
-    exercise artifact.  That produces real process and file telemetry while
-    keeping the action bounded to the disposable lab host.
-    """
-    token = hashlib.sha256(description.encode("utf-8")).hexdigest()[:12]
-    label = re.sub(r"[^A-Za-z0-9 ._()-]", " ", description)
-    label = re.sub(r"\becho\b", "", label, flags=re.IGNORECASE)
-    label = re.sub(r"\s+", " ", label).strip()[:180]
-    if platform == "windows":
-        filename = f"adversaryflow-{token}.txt"
-        command = (
-            "powershell -NoProfile -Command \"$p=Join-Path $env:TEMP '" + filename + "'; "
-            "Set-Content -LiteralPath $p -Value '" + label.replace("'", "''") + "'; "
-            "Get-FileHash -Algorithm SHA256 -LiteralPath $p | Select-Object Path,Hash; "
-            "Remove-Item -Force -LiteralPath $p\""
-        )
-        cleanup = f'del "%TEMP%\\adversaryflow-{token}.txt" 2>nul'
-    else:
-        path = f"${{TMPDIR:-/tmp}}/adversaryflow-{token}.txt"
-        command = (
-            f"sh -c 'p=\"{path}\"; printf \"%s\" \"{label}\" > \"$p\"; "
-            "wc -c \"$p\"; rm -f \"$p\"'"
-        )
-        cleanup = f'rm -f "{path}"'
-    return command, cleanup
-
-
 def _network_targets(command: str) -> List[str]:
     targets = re.findall(r"https?://([^/\s'\"]+)", command, flags=re.IGNORECASE)
     if "example.com" in command.lower() and "example.com" not in targets:
@@ -74,14 +42,6 @@ def command_record(
     **overrides: Any,
 ) -> Dict[str, Any]:
     """Return a command with conservative, machine-readable safety metadata."""
-    bounded_simulation = "bounded lab simulation" in note.lower()
-    if bounded_simulation:
-        command, generated_cleanup = _bounded_simulation(platform, command)
-        cleanup = cleanup or generated_cleanup
-        note = (
-            f"{note} Creates, observes, and removes one uniquely named temporary "
-            "artifact; it does not contact a target or perform the unsafe ATT&CK action."
-        )
     text = f"{command} {note}".lower()
     requires_network = any(marker in text for marker in _NETWORK_MARKERS)
     writes_state = any(marker in text for marker in _WRITE_MARKERS)
@@ -114,11 +74,7 @@ def command_record(
         "requires_network": requires_network,
         "network_targets": _network_targets(command),
         "prerequisites": [f"{platform} command environment", "authorized disposable lab"],
-        "expected_telemetry": (
-            "Process creation plus temporary-file create, read/hash, and delete telemetry for the bounded simulation."
-            if bounded_simulation
-            else "Process and command-line telemetry aligned to the selected ATT&CK technique."
-        ),
+        "expected_telemetry": "Process and command-line telemetry aligned to the selected ATT&CK technique.",
         "expected_output": note or "Command-specific output; verify the expected telemetry in the detection platform.",
         "timeout_seconds": 60,
         "rollback": cleanup,
@@ -127,3 +83,39 @@ def command_record(
     }
     record.update(overrides)
     return record
+
+
+def technique_exercise_record(technique_id: str, original: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace a generic proxy with its registered technique-relevant exercise."""
+    spec = get_spec(technique_id)
+    interpreter = "python3" if original["platform"] in {"linux", "macos"} else "python"
+    loopback = spec.scenario in {"mock_authentication", "loopback_transfer", "loopback_proxy"}
+    effects = ["temporary_local_artifacts", "child_process_activity"]
+    if loopback:
+        effects.append("loopback_network_activity")
+    return command_record(
+        original["platform"],
+        f"{interpreter} -m backend.lab_exercises {technique_id}",
+        (
+            f"Technique-relevant bounded exercise — {spec.summary} Uses synthetic data and "
+            "local or loopback-only resources. The JSON receipt is self-reported evidence, "
+            "not independent endpoint or SIEM attestation."
+        ),
+        "",
+        risk="medium" if loopback else "low",
+        side_effects=effects,
+        requires_admin=False,
+        requires_network=loopback,
+        network_targets=["127.0.0.1"] if loopback else [],
+        expected_telemetry=spec.expected_telemetry,
+        expected_output=(
+            "JSON receipt with run_id, timestamps, scenario events, exit_code, cleanup_verified, "
+            "and receipt_sha256."
+        ),
+        cleanup_required=False,
+        rollback="Temporary exercise workspace is removed automatically before the receipt is emitted.",
+        exercise_kind="technique_relevant_bounded",
+        fidelity="bounded_synthetic",
+        evidence_source="self_reported_receipt",
+        acknowledgment_required=loopback,
+    )
