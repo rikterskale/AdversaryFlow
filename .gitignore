@@ -19,6 +19,10 @@ node_modules/
 playwright-report/
 test-results/
 
+# Lint and type-checker caches (both tools also self-ignore, but be explicit)
+.mypy_cache/
+.ruff_cache/
+
 # Claude Code: ignore the directory contents but keep the shared project
 # permission rules. Excluding ".claude/" outright would stop git descending
 # into it, and a "!" exception cannot re-include a file under an excluded
