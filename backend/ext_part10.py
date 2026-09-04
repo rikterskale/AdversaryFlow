@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 10: Persistence."""
-from ext_helper import c
+"""Extended lab commands — Part 10: Persistence."""
+from .ext_helper import c
 
 PART = {
     "T1037": [c("windows", "reg query \"HKCU\\Environment\" /v UserInitMprLogonScript 2>nul & echo AF logon-init-scripts proxy (read-only)",
@@ -23,7 +23,7 @@ PART = {
     "T1133": [c("windows", "powershell -NoProfile -Command \"Get-Service TermService,SSHD -EA SilentlyContinue|Select Name,Status\"",
                 "Enumerates remote-access services (external-remote-services proxy; read-only).")],
     "T1136": [c("windows", "net user AdversaryFlowTmp P@ss!23 /add & echo AF create-account proxy (requires admin)",
-                "Creates a benign local account.", "net user AdversaryFlowTmp /delete")],
+                "Creates a lab local account.", "net user AdversaryFlowTmp /delete")],
     "T1136.002": [c("windows", "cmd.exe /c \"echo AF create-domain-account proxy - no domain account created\"",
                     "Placeholder only (avoids creating a domain account).")],
     "T1136.003": [c("cloud", "cmd.exe /c \"echo AF create-cloud-account proxy - no cloud account created\"",

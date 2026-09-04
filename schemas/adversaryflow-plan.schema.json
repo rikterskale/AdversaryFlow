@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-plan.schema.json",
+  "title": "AdversaryFlow plan export",
+  "type": "object",
+  "required": ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "summary", "stages"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "const": "AdversaryFlow" },
+    "tool_version": { "type": "string" },
+    "data_version": { "type": "string" },
+    "domains": {
+      "type": "array",
+      "items": { "enum": ["enterprise", "ics", "mobile"] },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "generated": { "type": "string", "format": "date-time" },
+    "actor": { "type": "object" },
+    "scope": { "type": "object" },
+    "summary": {
+      "type": "object",
+      "required": ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"]
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tactic", "title", "techniques"],
+        "properties": {
+          "tactic": { "type": "string" },
+          "title": { "type": "string" },
+          "techniques": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/technique" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "technique": {
+      "type": "object",
+      "required": ["id", "name", "url", "platforms", "command_source", "supported", "command", "run"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "platforms": { "type": "array", "items": { "type": "string" } },
+        "command_source": { "enum": ["curated", "fallback"] },
+        "supported": { "type": "boolean" },
+        "command": { "$ref": "#/$defs/command" },
+        "run": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "required": ["platform", "command", "note", "cleanup"],
+      "properties": {
+        "platform": { "type": "string" },
+        "command": { "type": "string" },
+        "note": { "type": "string" },
+        "cleanup": { "type": "string" },
+        "unsupported": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

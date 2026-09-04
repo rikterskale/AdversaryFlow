@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 5: Credential Access (locate/enumerate only, no secrets read)."""
-from ext_helper import c
+"""Extended lab commands — Part 5: Credential Access (locate/enumerate only, no secrets read)."""
+from .ext_helper import c
 
 PART = {
     "T1003": [c("windows", "tasklist | findstr /i lsass & echo AF OS-credential-dumping proxy (locate only, no memory read)",

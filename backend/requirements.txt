@@ -1,1 +1,1 @@
-Flask>=3.0
+-r ../requirements.lock

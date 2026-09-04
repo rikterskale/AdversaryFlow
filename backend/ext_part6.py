@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 6: Defense Evasion — obfuscation & masquerading."""
-from ext_helper import c
+"""Extended lab commands — Part 6: Defense Evasion — obfuscation & masquerading."""
+from .ext_helper import c
 
 PART = {
     "T1006": [c("windows", "fsutil fsinfo ntfsinfo C: 2>nul | more & echo AF direct-volume-access proxy (read-only volume info)",
@@ -19,7 +19,7 @@ PART = {
     "T1027.005": [c("windows", "cmd.exe /c \"echo AF indicator-removal-from-tools proxy - no tool modified\"",
                     "Placeholder only.")],
     "T1027.006": [c("windows", "powershell -NoProfile -Command \"Set-Content $env:TEMP\\af.html '<script>var b=atob(\\\"QUY=\\\")</script>'; 'HTML-smuggling proxy file written'\"",
-                    "Writes a benign HTML file with base64 (HTML-smuggling proxy).", "del %TEMP%\\af.html 2>nul")],
+                    "Writes a lab HTML file with base64 (HTML-smuggling proxy).", "del %TEMP%\\af.html 2>nul")],
     "T1027.007": [c("windows", "powershell -NoProfile -Command \"[Runtime.InteropServices.Marshal].GetMethod('GetProcAddress') -ne $null\"",
                     "References dynamic-resolution API by reflection (dynamic-API-resolution proxy).")],
     "T1027.009": [c("windows", "powershell -NoProfile -Command \"$p=[Convert]::FromBase64String('QUY='); $p.Length\"",
@@ -27,13 +27,13 @@ PART = {
     "T1027.010": [c("windows", "cmd.exe /c \"set x=who&&set y=ami&&call echo %x%%y%\"",
                     "Splits a command via env vars (command-obfuscation proxy).")],
     "T1027.011": [c("windows", "reg add HKCU\\Software\\AdversaryFlow /v blob /t REG_SZ /d QUY= /f & echo AF fileless-storage proxy",
-                    "Stores a benign blob in the registry (fileless-storage proxy).", "reg delete HKCU\\Software\\AdversaryFlow /f")],
+                    "Stores a lab blob in the registry (fileless-storage proxy).", "reg delete HKCU\\Software\\AdversaryFlow /f")],
     "T1027.012": [c("windows", "cmd.exe /c \"echo AF LNK-icon-smuggling proxy - no shortcut crafted\"",
                     "Placeholder only.")],
     "T1027.013": [c("windows", "certutil -encode %WINDIR%\\win.ini %TEMP%\\af_enc.b64 & echo AF encrypted/encoded-file proxy",
-                    "Encodes a benign file (encrypted/encoded-file proxy).", "del %TEMP%\\af_enc.b64 2>nul")],
+                    "Encodes a lab file (encrypted/encoded-file proxy).", "del %TEMP%\\af_enc.b64 2>nul")],
     "T1027.015": [c("windows", "powershell -NoProfile -Command \"Compress-Archive $env:WINDIR\\win.ini $env:TEMP\\af_c.zip -Force; 'compressed'\"",
-                    "Compresses a benign file (compression proxy).", "del %TEMP%\\af_c.zip 2>nul")],
+                    "Compresses a lab file (compression proxy).", "del %TEMP%\\af_c.zip 2>nul")],
     "T1027.016": [c("windows", "cmd.exe /c \"echo AF junk-code-insertion proxy - no binary modified\"",
                     "Placeholder only.")],
     "T1036.001": [c("windows", "powershell -NoProfile -Command \"Get-AuthenticodeSignature $env:WINDIR\\System32\\calc.exe|Select Status\"",
@@ -41,9 +41,9 @@ PART = {
     "T1036.002": [c("windows", "powershell -NoProfile -Command \"'exe' + [char]0x202E + 'cod.'\"",
                     "Builds a string with the RTL-override char (right-to-left-override proxy; no file created).")],
     "T1036.003": [c("windows", "copy %WINDIR%\\System32\\cmd.exe %TEMP%\\af_totally_legit.exe & echo AF rename-legitimate-utility proxy",
-                    "Copies cmd.exe under a benign new name (rename-utility proxy).", "del %TEMP%\\af_totally_legit.exe 2>nul")],
+                    "Copies cmd.exe under a lab new name (rename-utility proxy).", "del %TEMP%\\af_totally_legit.exe 2>nul")],
     "T1036.004": [c("windows", "sc.exe create AdversaryFlowSvc binPath= \"cmd /c echo hi\" DisplayName= \"Windows Update Helper\" start= demand & echo (requires admin)",
-                    "Creates a benign service with a masquerading display name.", "sc.exe delete AdversaryFlowSvc")],
+                    "Creates a lab service with a masquerading display name.", "sc.exe delete AdversaryFlowSvc")],
     "T1036.005": [c("windows", "copy %WINDIR%\\System32\\calc.exe %TEMP%\\svchost.exe & echo AF match-legitimate-name proxy",
                     "Copies calc under a legitimate-looking name (masquerade proxy).", "del %TEMP%\\svchost.exe 2>nul")],
     "T1036.006": [c("linux", "touch '/tmp/af_report.pdf ' && ls -la /tmp/ | grep af_report && rm -f '/tmp/af_report.pdf '",
@@ -53,7 +53,7 @@ PART = {
     "T1036.008": [c("windows", "echo MZ-not-really > %TEMP%\\af_doc.pdf & echo AF masquerade-file-type proxy & del %TEMP%\\af_doc.pdf",
                     "Writes mismatched content/extension (masquerade-file-type proxy).")],
     "T1036.010": [c("windows", "net user AdversaryFlowAdmin P@ss!23 /add & echo AF masquerade-account-name proxy (requires admin)",
-                    "Creates a benign look-alike admin account name.", "net user AdversaryFlowAdmin /delete")],
+                    "Creates a lab look-alike admin account name.", "net user AdversaryFlowAdmin /delete")],
     "T1211": [c("windows", "cmd.exe /c \"echo AF exploitation-for-defense-evasion proxy - no exploit run\"",
                 "Placeholder only.")],
     "T1620": [c("windows", "powershell -NoProfile -Command \"[Reflection.Assembly]::Load([IO.File]::ReadAllBytes($env:WINDIR+'\\System32\\mscorlib.dll')).FullName -ne $null 2>$null; 'reflective-load proxy'\"",

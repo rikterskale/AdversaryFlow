@@ -14,15 +14,42 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+def _default_cache_dir() -> str:
+    configured = os.environ.get("ADVERSARYFLOW_CACHE_DIR")
+    if configured:
+        return os.path.abspath(os.path.expanduser(configured))
+    if sys.platform == "win32":
+        root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        return os.path.join(root, "AdversaryFlow", "Cache")
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Caches/AdversaryFlow")
+    root = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(root, "adversaryflow")
+
+
+CACHE_DIR = _default_cache_dir()
+OFFLINE = os.environ.get("ADVERSARYFLOW_OFFLINE", "").lower() in {"1", "true", "yes"}
+
+
+def configure_cache_dir(path: str) -> None:
+    """Override the process-local cache directory before loading a bundle."""
+    global CACHE_DIR
+    CACHE_DIR = os.path.abspath(os.path.expanduser(path))
+
+
+def configure_offline(enabled: bool) -> None:
+    """Control whether bundle loading may contact the upstream feed."""
+    global OFFLINE
+    OFFLINE = enabled
 
 # Official ATT&CK STIX 2.1 bundles, "master" always tracks the latest release.
 STIX_SOURCES: Dict[str, str] = {
@@ -114,7 +141,12 @@ def load_bundle(domain: str = "enterprise", force_refresh: bool = False) -> Dict
         return _MEM_CACHE[domain]
 
     path = _cache_path(domain)
-    if force_refresh or not _cache_is_fresh(path):
+    needs_download = force_refresh or not _cache_is_fresh(path)
+    if force_refresh and OFFLINE:
+        raise RuntimeError("cannot refresh the ATT&CK feed while offline mode is enabled")
+    if needs_download and OFFLINE and not os.path.exists(path):
+        raise RuntimeError(f"offline mode requires a cached {domain} ATT&CK bundle at {path}")
+    if needs_download and not OFFLINE:
         try:
             _download(STIX_SOURCES[domain], path)
         except Exception:
@@ -139,6 +171,7 @@ class AttackIndex:
 
     def __init__(self, domains: List[str]):
         self.domains = domains
+        self.bundle_ids: Dict[str, str] = {}
         self.objects_by_id: Dict[str, Dict[str, Any]] = {}
         # actor stix id -> list of technique stix ids (via 'uses' relationships)
         self.actor_uses: Dict[str, List[str]] = {}
@@ -151,6 +184,7 @@ class AttackIndex:
     def _build(self) -> None:
         for domain in self.domains:
             bundle = load_bundle(domain)
+            self.bundle_ids[domain] = str(bundle.get("id") or "unknown")
             for obj in bundle.get("objects", []):
                 oid = obj.get("id")
                 if not oid:
@@ -283,16 +317,40 @@ class AttackIndex:
                 out.append(t)
         return out
 
+    @property
+    def data_version(self) -> str:
+        return "|".join(f"{domain}:{self.bundle_ids.get(domain, 'unknown')}" for domain in self.domains)
+
 
 # ---------------------------------------------------------------------------
 # Singleton accessor
 # ---------------------------------------------------------------------------
 
-_INDEX: Optional[AttackIndex] = None
+_INDEXES: Dict[Tuple[str, ...], AttackIndex] = {}
+
+
+def _domain_key(domains: Optional[List[str]]) -> Tuple[str, ...]:
+    requested = domains or ["enterprise"]
+    return tuple(dict.fromkeys(requested))
 
 
 def get_index(domains: Optional[List[str]] = None, rebuild: bool = False) -> AttackIndex:
-    global _INDEX
-    if _INDEX is None or rebuild:
-        _INDEX = AttackIndex(domains or ["enterprise"])
-    return _INDEX
+    key = _domain_key(domains)
+    if rebuild or key not in _INDEXES:
+        _INDEXES[key] = AttackIndex(list(key))
+    return _INDEXES[key]
+
+
+def loaded_index_status() -> Dict[str, Any]:
+    """Return readiness metadata without triggering downloads or parsing."""
+    return {
+        "ready": bool(_INDEXES),
+        "domain_sets": [list(key) for key in _INDEXES],
+        "data_versions": [index.data_version for index in _INDEXES.values()],
+    }
+
+
+def clear_memory_cache() -> None:
+    """Clear process-local indexes and bundles (primarily for tests/reloads)."""
+    _INDEXES.clear()
+    _MEM_CACHE.clear()

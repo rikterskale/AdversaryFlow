@@ -1,7 +1,7 @@
-"""Extended benign commands — Part 8: Defense Evasion — proxy execution, injection, tokens, hijack flow."""
-from ext_helper import c
+"""Extended lab commands — Part 8: Defense Evasion — proxy execution, injection, tokens, hijack flow."""
+from .ext_helper import c
 
-_NP = "spawns+kills notepad as a benign process-interaction proxy — no injection."
+_NP = "spawns+kills notepad as a lab process-interaction proxy — no injection."
 _KILL = "taskkill /IM notepad.exe /F 2>nul"
 
 PART = {
@@ -26,8 +26,8 @@ PART = {
     "T1134.003": [c("windows", "whoami /groups | more & echo AF make-and-impersonate-token proxy (read-only)",
                     "Reads token groups (make/impersonate-token proxy; read-only).")],
     # ---- System binary proxy execution (LOLBins) ----
-    "T1218": [c("windows", "rundll32.exe user32.dll,LockWorkStation & echo AF system-binary-proxy-exec (benign documented export)",
-                "Uses rundll32 to call a benign export (system-binary-proxy-execution).")],
+    "T1218": [c("windows", "rundll32.exe user32.dll,LockWorkStation & echo AF system-binary-proxy-exec (lab documented export)",
+                "Uses rundll32 to call a lab export (system-binary-proxy-execution).")],
     "T1218.001": [c("windows", "hh.exe about: & echo AF compiled-HTML-file (hh.exe) proxy & timeout 1 >nul & taskkill /IM hh.exe /F 2>nul",
                     "Launches the CHM host against a blank page (compiled-HTML-file proxy).")],
     "T1218.003": [c("windows", "cmd.exe /c \"echo AF CMSTP proxy - no INF supplied\"", "Placeholder only — no INF is processed.")],
@@ -52,7 +52,7 @@ PART = {
     "T1127.001": [c("windows", "where msbuild.exe 2>nul & echo AF MSBuild proxy (locate only, no project built)",
                     "Locates MSBuild (proxy; nothing built).")],
     "T1202": [c("windows", "forfiles /p %WINDIR% /m notepad.exe /c \"cmd /c echo AF indirect-command-execution proxy\" 2>nul",
-                "Uses forfiles to run a benign echo (indirect-command-execution proxy).")],
+                "Uses forfiles to run a lab echo (indirect-command-execution proxy).")],
     # ---- Elevation / alternate auth ----
     "T1548": [c("windows", "whoami /groups | findstr /i S-1-16 & echo AF abuse-elevation-control proxy (read integrity level)",
                 "Reads integrity level (abuse-elevation-control proxy; read-only).")],

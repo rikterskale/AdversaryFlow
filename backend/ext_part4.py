@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 4: Collection (all read-only / temp-only)."""
-from ext_helper import c
+"""Extended lab commands — Part 4: Collection (all read-only / temp-only)."""
+from .ext_helper import c
 
 PART = {
     "T1025": [c("windows", "powershell -NoProfile -Command \"Get-Volume|? DriveType -eq 'Removable'|%{Get-ChildItem $_.DriveLetter':\\' -EA SilentlyContinue}|Select Name\"",
@@ -13,9 +13,9 @@ PART = {
     "T1056.004": [c("windows", "cmd.exe /c \"echo AF credential-API-hooking proxy - no API hooked\"",
                     "Placeholder only — no API is hooked.")],
     "T1074": [c("windows", "mkdir %TEMP%\\af_stage 2>nul & echo staged > %TEMP%\\af_stage\\d.txt & dir %TEMP%\\af_stage",
-                "Creates a benign staging dir (data-staged proxy).", "rmdir /s /q %TEMP%\\af_stage 2>nul")],
+                "Creates a lab staging dir (data-staged proxy).", "rmdir /s /q %TEMP%\\af_stage 2>nul")],
     "T1074.001": [c("windows", "copy %WINDIR%\\win.ini %TEMP%\\af_local_stage.dat & dir %TEMP%\\af_local_stage.dat",
-                    "Copies a benign file to a local staging path (local-data-staging proxy).", "del %TEMP%\\af_local_stage.dat 2>nul")],
+                    "Copies a lab file to a local staging path (local-data-staging proxy).", "del %TEMP%\\af_local_stage.dat 2>nul")],
     "T1074.002": [c("windows", "net use \\\\localhost\\IPC$ & echo AF remote-data-staging proxy (loopback only)",
                     "Loopback IPC session as a remote-staging proxy.", "net use \\\\localhost\\IPC$ /delete 2>nul")],
     "T1114": [c("windows", "dir /s /b \"%LocalAppData%\\Microsoft\\Outlook\\*.ost\" 2>nul & echo AF email-collection proxy (read-only)",
@@ -39,10 +39,10 @@ PART = {
     "T1213.001": [c("cloud", "cmd.exe /c \"echo AF Confluence-collection proxy - read a page via API read-only\"", "Placeholder proxy (read-only).")],
     "T1213.002": [c("windows", "cmd.exe /c \"echo AF SharePoint-collection proxy - read a doc library read-only\"", "Placeholder proxy (read-only).")],
     "T1213.003": [c("cloud", "git ls-remote https://github.com/mitre-attack/attack-stix-data 2>nul | head -1 & echo AF code-repo-collection proxy",
-                    "Benign read-only remote-repo listing (code-repositories proxy).")],
+                    "Lab read-only remote-repo listing (code-repositories proxy).")],
     "T1213.004": [c("cloud", "cmd.exe /c \"echo AF CRM-collection proxy - read a CRM record read-only\"", "Placeholder proxy (read-only).")],
     "T1213.005": [c("cloud", "cmd.exe /c \"echo AF messaging-app-collection proxy - read a channel read-only\"", "Placeholder proxy (read-only).")],
-    "T1213.006": [c("windows", "cmd.exe /c \"echo AF database-collection proxy - run a benign SELECT 1 read-only\"", "Placeholder proxy (read-only).")],
+    "T1213.006": [c("windows", "cmd.exe /c \"echo AF database-collection proxy - run a lab SELECT 1 read-only\"", "Placeholder proxy (read-only).")],
     "T1530": [c("cloud", "aws s3 ls 2>nul || az storage account list -o table 2>nul & echo AF data-from-cloud-storage proxy (read-only)",
                 "Cloud-storage listing (read-only; requires cloud CLI auth).")],
     "T1557": [c("windows", "arp -a & echo AF adversary-in-the-middle proxy (read-only ARP table)",
@@ -53,11 +53,11 @@ PART = {
                     "Reads ARP cache (ARP-poisoning proxy; nothing written).")],
     "T1557.004": [c("net", "cmd.exe /c \"echo AF evil-twin proxy - no rogue AP created\"", "Placeholder only — no rogue access point is created.")],
     "T1560": [c("windows", "powershell -NoProfile -Command \"Compress-Archive -Path $env:WINDIR\\win.ini -DestinationPath $env:TEMP\\af_arc.zip -Force; (Get-Item $env:TEMP\\af_arc.zip).Length\"",
-                "Archives a benign file (archive-collected-data proxy).", "del %TEMP%\\af_arc.zip 2>nul")],
+                "Archives a lab file (archive-collected-data proxy).", "del %TEMP%\\af_arc.zip 2>nul")],
     "T1560.002": [c("windows", "powershell -NoProfile -Command \"Add-Type -A System.IO.Compression.FileSystem; 'compression library loaded (archive-via-library proxy)'\"",
                     "Loads a compression library (archive-via-library proxy).")],
     "T1560.003": [c("windows", "certutil -encode %WINDIR%\\win.ini %TEMP%\\af_custom.b64 & echo (archive-via-custom-method proxy)",
-                    "Uses certutil to encode a benign file (archive-via-custom-method proxy).", "del %TEMP%\\af_custom.b64 2>nul")],
+                    "Uses certutil to encode a lab file (archive-via-custom-method proxy).", "del %TEMP%\\af_custom.b64 2>nul")],
     "T1602.002": [c("net", "cmd.exe /c \"echo AF network-device-config-dump proxy - run 'show running-config' read-only on your own device\"",
                     "Placeholder — read your own device config read-only.")],
 }

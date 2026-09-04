@@ -1,10 +1,10 @@
-"""Extended benign commands — Part 13: Resource Development (PRE).
+"""Extended lab commands — Part 13: Resource Development (PRE).
 
 PRE-compromise infrastructure/capability development performed on the
 adversary's own side. Not endpoint-detectable — every entry is an honest,
-host-benign planning proxy that provisions/creates nothing.
+host-lab planning proxy that provisions/creates nothing.
 """
-from ext_helper import c
+from .ext_helper import c
 
 _PRE = " (pre-compromise: adversary-side planning step, not an endpoint detection test)"
 
@@ -41,9 +41,9 @@ PART = {
     "T1587": r("echo 'AF develop-capabilities proxy - nothing developed'", "Placeholder only."),
     "T1587.001": r("echo 'AF develop-malware proxy - nothing developed'", "Placeholder only."),
     "T1587.002": r("powershell -NoProfile -Command \"New-SelfSignedCertificate -Type CodeSigning -Subject 'CN=AF-Test' -CertStoreLocation Cert:\\CurrentUser\\My -EA SilentlyContinue|Select Thumbprint\"",
-                   "Creates a benign self-signed code-signing cert in your own user store (develop-code-signing-certs proxy)."),
+                   "Creates a lab self-signed code-signing cert in your own user store (develop-code-signing-certs proxy)."),
     "T1587.003": r("powershell -NoProfile -Command \"New-SelfSignedCertificate -Subject 'CN=AF-Test' -CertStoreLocation Cert:\\CurrentUser\\My -EA SilentlyContinue|Select Thumbprint\"",
-                   "Creates a benign self-signed cert in your own user store (develop-digital-certs proxy)."),
+                   "Creates a lab self-signed cert in your own user store (develop-digital-certs proxy)."),
     "T1587.004": r("echo 'AF develop-exploits proxy - nothing developed'", "Placeholder only."),
     "T1588": r("echo 'AF obtain-capabilities proxy - nothing obtained'", "Placeholder only."),
     "T1588.001": r("echo 'AF obtain-malware proxy - nothing obtained'", "Placeholder only."),
@@ -52,11 +52,11 @@ PART = {
     "T1588.004": r("echo 'AF obtain-digital-certs proxy - nothing obtained'", "Placeholder only."),
     "T1588.005": r("echo 'AF obtain-exploits proxy - nothing obtained'", "Placeholder only."),
     "T1588.006": r("echo 'AF obtain-vulnerabilities proxy - review public CVE data only'", "Placeholder — review public CVE data."),
-    "T1588.007": r("echo 'AF obtain-AI-capabilities proxy - benign only'", "Placeholder only."),
+    "T1588.007": r("echo 'AF obtain-AI-capabilities proxy - lab only'", "Placeholder only."),
     "T1650": r("echo 'AF acquire-access proxy - no access broker engaged'", "Placeholder only."),
-    "T1683": r("echo 'AF generate-content proxy - benign content only'", "Placeholder only."),
-    "T1683.001": r("echo 'AF generate-written-content proxy - benign content only'", "Placeholder only."),
-    "T1683.002": r("echo 'AF generate-audio-visual-content proxy - benign content only'", "Placeholder only."),
+    "T1683": r("echo 'AF generate-content proxy - lab content only'", "Placeholder only."),
+    "T1683.001": r("echo 'AF generate-written-content proxy - lab content only'", "Placeholder only."),
+    "T1683.002": r("echo 'AF generate-audio-visual-content proxy - lab content only'", "Placeholder only."),
     # ---- Stage Capabilities ----
     "T1608": r("echo 'AF stage-capabilities proxy - nothing staged'", "Placeholder only."),
     "T1608.001": r("echo 'AF upload-malware proxy - nothing uploaded'", "Placeholder only."),

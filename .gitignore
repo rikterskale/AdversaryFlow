@@ -7,3 +7,11 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Build and test output
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+.pytest_cache/

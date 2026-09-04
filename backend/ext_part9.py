@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 9: Execution."""
-from ext_helper import c
+"""Extended lab commands — Part 9: Execution."""
+from .ext_helper import c
 
 PART = {
     "T1053": [c("windows", "schtasks /Query /FO LIST /TN \\Microsoft\\Windows\\* 2>nul | more & echo AF scheduled-task/job proxy (list only)",
@@ -20,18 +20,18 @@ PART = {
                     "Read-only container runtime version (container-CLI proxy).")],
     "T1072": [c("windows", "powershell -NoProfile -Command \"Get-Service|? {$_.DisplayName -match 'SCCM|BigFix|Intune|Tanium'}|Select Name,Status\"",
                 "Enumerates deployment-tool agents (software-deployment-tools proxy; read-only).")],
-    "T1204.001": [c("windows", "powershell -NoProfile -Command \"Start-Process 'https://example.com'\" & echo AF malicious-link proxy (opens safe URL)",
-                    "Opens a safe URL in the default handler (malicious-link proxy).")],
+    "T1204.001": [c("windows", "powershell -NoProfile -Command \"Start-Process 'https://example.com'\" & echo AF malicious-link proxy (opens example URL)",
+                    "Opens an example URL in the default handler (malicious-link proxy).")],
     "T1204.003": [c("cloud", "docker images 2>/dev/null; echo AF malicious-image proxy (list local images read-only)",
                     "Lists local container images (malicious-image proxy; read-only).")],
     "T1204.004": [c("windows", "powershell -NoProfile -Command \"Set-Clipboard 'echo AF malicious-copy-paste proxy'; Get-Clipboard\"",
-                    "Round-trips a benign string through the clipboard (copy-paste proxy).")],
+                    "Round-trips a lab string through the clipboard (copy-paste proxy).")],
     "T1204.005": [c("windows", "cmd.exe /c \"echo AF malicious-library proxy - no library loaded\"",
                     "Placeholder only.")],
     "T1559": [c("windows", "powershell -NoProfile -Command \"[Type]::GetTypeFromProgID('Shell.Application') -ne $null\"",
                 "References a COM/IPC endpoint (inter-process-communication proxy).")],
     "T1559.001": [c("windows", "powershell -NoProfile -Command \"$s=New-Object -ComObject Shell.Application; $s.GetType().Name; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($s)\"",
-                    "Creates+releases a benign COM object (component-object-model proxy).")],
+                    "Creates+releases a lab COM object (component-object-model proxy).")],
     "T1559.002": [c("windows", "cmd.exe /c \"echo AF dynamic-data-exchange (DDE) proxy - no document/DDE field created\"",
                     "Placeholder only.")],
     "T1609": [c("other", "kubectl version --client 2>/dev/null; docker version 2>/dev/null; echo AF container-administration-command proxy (read-only)",

@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 3: Discovery (all read-only)."""
-from ext_helper import c
+"""Extended lab commands — Part 3: Discovery (all read-only)."""
+from .ext_helper import c
 
 PART = {
     "T1016.001": [c("windows", "powershell -NoProfile -Command \"(Invoke-WebRequest https://ifconfig.me/ip -UseBasicParsing).Content\"",

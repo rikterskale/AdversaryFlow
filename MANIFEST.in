@@ -1,0 +1,14 @@
+include CHANGELOG.md
+include CONTRIBUTING.md
+include GOVERNANCE.md
+include SUPPORT.md
+include requirements.lock
+include install.sh
+include install.ps1
+include run.sh
+include run.ps1
+recursive-include docs *.md *.yaml
+recursive-include schemas *.json
+recursive-include frontend *.html *.css *.js
+recursive-include tests *.py
+

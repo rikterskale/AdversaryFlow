@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adversaryflow"
+dynamic = ["version"]
+description = "Development-lab MITRE ATT&CK adversary-emulation workflow planner"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AdversaryFlow contributors" }]
+keywords = ["mitre-attack", "purple-team", "detection-engineering", "adversary-emulation"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Security",
+]
+dependencies = [
+  "Flask==3.1.3",
+  "waitress==3.0.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/rikterskale/AdversaryFlow"
+Issues = "https://github.com/rikterskale/AdversaryFlow/issues"
+
+[project.scripts]
+adversaryflow = "backend.app:main"
+
+[tool.setuptools]
+packages = ["backend"]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = { attr = "backend.__version__" }
+
+[tool.setuptools.data-files]
+"share/adversaryflow/frontend" = [
+  "frontend/index.html",
+  "frontend/styles.css",
+  "frontend/app.js",
+]

@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: AdversaryFlow API
+  version: 0.2.0
+  description: Local API for ATT&CK actors and guided emulation plans.
+servers:
+  - url: http://127.0.0.1:5000
+paths:
+  /api/health:
+    get:
+      summary: Report liveness and ATT&CK readiness
+      responses:
+        "200":
+          description: ATT&CK data is ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Process is live but ATT&CK data is not ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /api/actors:
+    get:
+      summary: List groups and campaigns with mapped techniques
+      parameters:
+        - $ref: "#/components/parameters/Domains"
+      responses:
+        "200":
+          description: Actor collection and data version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [actors, domains, data_version, version]
+                properties:
+                  actors: { type: array, items: { $ref: "#/components/schemas/Actor" } }
+                  domains: { type: array, items: { type: string } }
+                  data_version: { type: string }
+                  version: { type: string }
+        "500": { $ref: "#/components/responses/Error" }
+  /api/workflow/{stix_id}:
+    get:
+      summary: Build a versioned workflow for one actor
+      parameters:
+        - name: stix_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/Domains"
+      responses:
+        "200":
+          description: Ordered workflow with commands and metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workflow" }
+        "404":
+          description: Actor not found in the selected domains
+        "500": { $ref: "#/components/responses/Error" }
+  /api/refresh:
+    post:
+      summary: Refresh selected ATT&CK domains and rebuild their index
+      parameters:
+        - $ref: "#/components/parameters/Domains"
+      responses:
+        "200":
+          description: Refreshed data version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, domains, data_version]
+        "500": { $ref: "#/components/responses/Error" }
+components:
+  parameters:
+    Domains:
+      name: domains
+      in: query
+      description: Comma-separated ATT&CK domains.
+      schema:
+        type: string
+        default: enterprise
+        examples: [enterprise, "enterprise,ics,mobile"]
+  schemas:
+    Actor:
+      type: object
+      required: [stix_id, attack_id, name, type, aliases, description, technique_count]
+    Workflow:
+      type: object
+      required: [actor, summary, kill_chain, stages, unmapped, metadata]
+      properties:
+        actor: { type: object }
+        summary: { type: object }
+        kill_chain: { type: array, items: { type: object } }
+        stages:
+          type: array
+          items: { $ref: "#/components/schemas/Stage" }
+        unmapped:
+          type: array
+          items: { $ref: "#/components/schemas/Technique" }
+        metadata: { type: object }
+    Stage:
+      type: object
+      required: [tactic, title, techniques]
+      properties:
+        tactic: { type: string }
+        title: { type: string }
+        techniques:
+          type: array
+          items: { $ref: "#/components/schemas/Technique" }
+    Technique:
+      type: object
+      required: [attack_id, name, commands, command_source]
+      properties:
+        attack_id: { type: string }
+        name: { type: string }
+        commands:
+          type: array
+          items: { $ref: "#/components/schemas/Command" }
+        command_source: { enum: [curated, fallback] }
+    Command:
+      type: object
+      required: [platform, command, note, cleanup]
+      properties:
+        platform: { type: string }
+        command: { type: string }
+        note: { type: string }
+        cleanup: { type: string }
+    Health:
+      type: object
+      required: [status, ready, version, error, attack_data]
+      properties:
+        status: { enum: [ready, degraded] }
+        ready: { type: boolean }
+        version: { type: string }
+        error: { type: [string, "null"] }
+        attack_data: { type: object }
+    Error:
+      type: object
+      required: [error, message, version]
+  responses:
+    Error:
+      description: Structured application error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Build guided MITRE ATT&CK adversary-emulation plans for detection validation." />
+  <meta name="theme-color" content="#0a0d14" />
   <title>AdversaryFlow — Adversary Emulation Planner</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -34,24 +33,24 @@
 
   <!-- ===================== HEADER ===================== -->
   <header class="appbar">
-    <div class="brand" role="button" tabindex="0" id="brandHome" title="Restart">
+    <button type="button" class="brand" id="brandHome" title="Restart" aria-label="Restart AdversaryFlow">
       <span class="brand__mark"><svg class="icon"><use href="#i-logo"/></svg></span>
       <span class="brand__name">Adversary<span class="brand__accent">Flow</span></span>
-    </div>
+    </button>
 
     <nav class="stepper" id="stepper" aria-label="Progress">
-      <button class="stepper__item" data-goto="1"><span class="stepper__dot">1</span><span class="stepper__label">Threat actor</span></button>
+      <button type="button" class="stepper__item" data-goto="1"><span class="stepper__dot">1</span><span class="stepper__label">Threat actor</span></button>
       <span class="stepper__bar"></span>
-      <button class="stepper__item" data-goto="2"><span class="stepper__dot">2</span><span class="stepper__label">Scope</span></button>
+      <button type="button" class="stepper__item" data-goto="2"><span class="stepper__dot">2</span><span class="stepper__label">Scope</span></button>
       <span class="stepper__bar"></span>
-      <button class="stepper__item" data-goto="3"><span class="stepper__dot">3</span><span class="stepper__label">Emulation plan</span></button>
+      <button type="button" class="stepper__item" data-goto="3"><span class="stepper__dot">3</span><span class="stepper__label">Emulation plan</span></button>
       <span class="stepper__bar"></span>
-      <button class="stepper__item" data-goto="4"><span class="stepper__dot">4</span><span class="stepper__label">Export</span></button>
+      <button type="button" class="stepper__item" data-goto="4"><span class="stepper__dot">4</span><span class="stepper__label">Export</span></button>
     </nav>
 
     <div class="appbar__right">
       <span id="dataStatus" class="chip chip--muted">loading…</span>
-      <button id="refreshBtn" class="iconbtn" title="Refresh the live ATT&CK feed"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button type="button" id="refreshBtn" class="iconbtn" title="Refresh the live ATT&CK feed" aria-label="Refresh the live ATT&CK feed"><svg class="icon"><use href="#i-refresh"/></svg></button>
     </div>
   </header>
 
@@ -61,24 +60,24 @@
     <!-- STEP 0 — WELCOME -->
     <section class="screen screen--welcome is-active" data-screen="0">
       <div class="welcome">
-        <div class="welcome__badge"><svg class="icon"><use href="#i-shield"/></svg> Authorized purple-team tooling</div>
-        <h1 class="welcome__title">Turn a threat actor into a<br/><span class="grad">safe, end-to-end emulation plan</span></h1>
+        <div class="welcome__badge"><svg class="icon"><use href="#i-shield"/></svg> Development-lab ATT&amp;CK planner</div>
+        <h1 class="welcome__title" tabindex="-1">Turn a threat actor into an<br/><span class="grad">end-to-end emulation plan</span></h1>
         <p class="welcome__sub">AdversaryFlow pulls a chosen adversary's TTPs from the live MITRE ATT&CK&reg; feed, orders
-          them into a full kill chain, and hands you a <strong>benign detection-validation command for every technique</strong> —
-          so you can measure coverage without firing a single destructive action.</p>
+          them into a full kill chain, and attaches an <strong>ATT&amp;CK-aligned lab command to every technique</strong> —
+          so you can exercise and measure detection coverage.</p>
 
         <div class="welcome__steps">
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Search 220+ ATT&CK groups &amp; campaigns.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-sliders"/></svg></span><div><b>Set scope</b><span>Focus platforms &amp; stages.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Run &amp; track</b><span>Benign test per TTP, stage by stage.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Run &amp; track</b><span>Lab command per TTP, stage by stage.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Export</b><span>Markdown, JSON, or runbook.</span></div></div>
         </div>
 
         <button class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
-        <p class="welcome__foot">Every emitted command is a harmless proxy. Review each before running in your environment.</p>
+        <p class="welcome__foot">Built for disposable development labs. AdversaryFlow creates plans; it does not execute commands.</p>
       </div>
     </section>
 
@@ -86,7 +85,7 @@
     <section class="screen" data-screen="1">
       <div class="screen__head">
         <div>
-          <h2 class="screen__title">Choose a threat actor</h2>
+          <h2 class="screen__title" tabindex="-1">Choose a threat actor</h2>
           <p class="screen__hint">Pick the adversary whose campaign you want to emulate. This drives the entire plan.</p>
         </div>
       </div>
@@ -95,12 +94,12 @@
         <div class="searchbox">
           <svg class="icon searchbox__icon"><use href="#i-search"/></svg>
           <input id="actorSearch" type="text" placeholder="Search by name, alias, or ATT&CK ID (e.g. APT29, Cozy Bear, G0016)" autocomplete="off" />
-          <button class="searchbox__clear" id="searchClear" title="Clear" hidden><svg class="icon"><use href="#i-x"/></svg></button>
+          <button type="button" class="searchbox__clear" id="searchClear" title="Clear" aria-label="Clear actor search" hidden><svg class="icon"><use href="#i-x"/></svg></button>
         </div>
-        <div class="segmented" id="typeFilter" role="tablist">
-          <button class="segmented__btn is-on" data-type="all">All</button>
-          <button class="segmented__btn" data-type="group">Groups</button>
-          <button class="segmented__btn" data-type="campaign">Campaigns</button>
+        <div class="segmented" id="typeFilter" role="group" aria-label="Actor type">
+          <button type="button" class="segmented__btn is-on" data-type="all" aria-pressed="true">All</button>
+          <button type="button" class="segmented__btn" data-type="group" aria-pressed="false">Groups</button>
+          <button type="button" class="segmented__btn" data-type="campaign" aria-pressed="false">Campaigns</button>
         </div>
         <div class="select">
           <label for="sortSel">Sort</label>
@@ -109,6 +108,16 @@
             <option value="ttps">Most TTPs</option>
           </select>
         </div>
+      </div>
+
+      <div class="domainbar">
+        <span class="domainbar__label">ATT&amp;CK domains</span>
+        <div class="segmented" id="domainFilter" role="group" aria-label="ATT&CK domains">
+          <button type="button" class="segmented__btn is-on" data-domain="enterprise" aria-pressed="true">Enterprise</button>
+          <button type="button" class="segmented__btn" data-domain="ics" aria-pressed="false">ICS / OT</button>
+          <button type="button" class="segmented__btn" data-domain="mobile" aria-pressed="false">Mobile</button>
+        </div>
+        <span class="domainbar__hint">Choose one or combine domains.</span>
       </div>
 
       <div class="featured" id="featured">
@@ -124,7 +133,7 @@
     <section class="screen" data-screen="2">
       <div class="screen__head">
         <div>
-          <h2 class="screen__title">Scope the engagement</h2>
+          <h2 class="screen__title" tabindex="-1">Scope the engagement</h2>
           <p class="screen__hint">Tailor the plan to what you actually want to exercise. Everything updates live.</p>
         </div>
       </div>
@@ -133,18 +142,18 @@
         <div class="scope__main">
           <div class="panel">
             <div class="panel__head"><svg class="icon"><use href="#i-terminal"/></svg><h3>Command platform</h3></div>
-            <p class="panel__desc">Which OS should the benign test commands target first?</p>
-            <div class="segmented segmented--wide" id="cmdPlatform">
-              <button class="segmented__btn is-on" data-plat="windows">Windows</button>
-              <button class="segmented__btn" data-plat="linux">Linux</button>
-              <button class="segmented__btn" data-plat="macos">macOS</button>
+            <p class="panel__desc">Which OS should the lab commands target?</p>
+            <div class="segmented segmented--wide" id="cmdPlatform" role="group" aria-label="Command platform">
+              <button type="button" class="segmented__btn is-on" data-plat="windows" aria-pressed="true">Windows</button>
+              <button type="button" class="segmented__btn" data-plat="linux" aria-pressed="false">Linux</button>
+              <button type="button" class="segmented__btn" data-plat="macos" aria-pressed="false">macOS</button>
             </div>
           </div>
 
           <div class="panel">
-            <div class="panel__head"><svg class="icon"><use href="#i-layers"/></svg><h3>Kill-chain stages</h3><button class="linkbtn" id="stagesAll">Select all</button></div>
+            <div class="panel__head"><svg class="icon"><use href="#i-layers"/></svg><h3>Kill-chain stages</h3><button type="button" class="linkbtn" id="stagesAll">Select all</button></div>
             <p class="panel__desc">Include or drop tactics from the plan.</p>
-            <div class="tacticgrid" id="tacticGrid"></div>
+            <div class="tacticgrid" id="tacticGrid" role="group" aria-label="Kill-chain stages"></div>
           </div>
 
           <div class="panel">
@@ -172,11 +181,11 @@
     <section class="screen screen--plan" data-screen="3">
       <div class="planhead">
         <div>
-          <h2 class="screen__title" id="planActorName">Emulation plan</h2>
+          <h2 class="screen__title" id="planActorName" tabindex="-1">Emulation plan</h2>
           <p class="screen__hint" id="planActorMeta"></p>
         </div>
         <div class="planhead__progress">
-          <div class="progressring" id="progressRing"><span id="progressPct">0%</span></div>
+          <div class="progressring" id="progressRing" role="progressbar" aria-label="Runnable technique progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progressPct">0%</span></div>
           <div class="planhead__ptext"><b id="progressCount">0 / 0</b><span>techniques run</span></div>
         </div>
       </div>
@@ -191,7 +200,7 @@
     <section class="screen screen--export" data-screen="4">
       <div class="screen__head">
         <div>
-          <h2 class="screen__title">Your emulation plan is ready</h2>
+          <h2 class="screen__title" tabindex="-1">Your emulation plan is ready</h2>
           <p class="screen__hint">Take it into your test harness, ticketing, or detection-engineering backlog.</p>
         </div>
       </div>
@@ -204,7 +213,7 @@
           </button>
           <button class="expcard" data-export="json">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
-            <b>JSON</b><span>Structured data for pipelines &amp; VECTR/Caldera import.</span>
+            <b>JSON</b><span>Versioned structured data for pipelines and custom integrations.</span>
           </button>
           <button class="expcard" data-export="script">
             <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
@@ -226,8 +235,8 @@
     <button class="btn btn--primary" id="nextBtn" disabled>Continue <svg class="icon"><use href="#i-arrow-r"/></svg></button>
   </footer>
 
-  <div id="toast" class="toast" hidden></div>
-  <div id="loader" class="loader" hidden><div class="loader__spin"></div><p id="loaderText">Working…</p></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <div id="loader" class="loader" role="status" aria-live="polite" aria-busy="true" hidden><div class="loader__spin"></div><p id="loaderText">Working…</p></div>
 
   <script src="app.js"></script>
 </body>

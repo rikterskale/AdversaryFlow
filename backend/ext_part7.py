@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 7: Defense Evasion — indicator removal, impairment, hidden artifacts."""
-from ext_helper import c
+"""Extended lab commands — Part 7: Defense Evasion — indicator removal, impairment, hidden artifacts."""
+from .ext_helper import c
 
 PART = {
     # ---- Indicator removal (read/echo only — nothing is actually cleared) ----
@@ -50,7 +50,7 @@ PART = {
     "T1564.002": [c("windows", "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\SpecialAccounts\\UserList\" 2>nul & echo AF hidden-users proxy (read-only)",
                     "Reads the hidden-users registry path (read-only).")],
     "T1564.003": [c("windows", "powershell -NoProfile -WindowStyle Hidden -Command \"'AF hidden-window proxy ran'\"",
-                    "Runs a benign command in a hidden window (hidden-window proxy).")],
+                    "Runs a lab command in a hidden window (hidden-window proxy).")],
     "T1564.004": [c("windows", "echo AF > %TEMP%\\af_host.txt & echo hidden > %TEMP%\\af_host.txt:secret & dir /r %TEMP%\\af_host.txt & del %TEMP%\\af_host.txt",
                     "Writes/reads an NTFS alternate data stream (NTFS-file-attributes proxy).")],
     "T1564.005": [c("windows", "mountvol & echo AF hidden-file-system proxy (list volumes read-only)",
@@ -65,11 +65,11 @@ PART = {
                     "Lists mounts (read-only).")],
     # ---- Guardrails / permissions / GPO ----
     "T1480": [c("windows", "powershell -NoProfile -Command \"if($env:COMPUTERNAME){'guardrail check passed (proxy)'}\"",
-                "Benign environment check (execution-guardrails proxy).")],
+                "Lab environment check (execution-guardrails proxy).")],
     "T1480.001": [c("windows", "powershell -NoProfile -Command \"$env:USERDOMAIN\"",
                     "Reads a domain value used for keying (environmental-keying proxy).")],
     "T1480.002": [c("windows", "powershell -NoProfile -Command \"$m=New-Object Threading.Mutex($false,'AF_mutex'); $m.Close(); 'mutex created/closed (proxy)'\"",
-                    "Creates/closes a benign mutex (mutual-exclusion proxy).")],
+                    "Creates/closes a lab mutex (mutual-exclusion proxy).")],
     "T1484.001": [c("windows", "gpresult /scope computer /r 2>nul | more & echo AF group-policy-modification proxy (read-only)",
                     "Reads applied GPOs (read-only; nothing modified).")],
     "T1484.002": [c("windows", "nltest /domain_trusts 2>nul & echo AF domain-trust-modification proxy (read-only)",

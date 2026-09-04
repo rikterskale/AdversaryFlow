@@ -1,5 +1,5 @@
-"""Extended benign commands — Part 11: Initial Access, Lateral Movement, misc Privilege Escalation."""
-from ext_helper import c
+"""Extended lab commands — Part 11: Initial Access, Lateral Movement, misc Privilege Escalation."""
+from .ext_helper import c
 
 PART = {
     # ---- Initial Access ----
@@ -45,8 +45,8 @@ PART = {
                     "Read-only cloud identity call (cloud-services lateral proxy).")],
     "T1080": [c("windows", "net share & echo AF taint-shared-content proxy (list shares read-only, nothing written)",
                 "Lists shares (taint-shared-content proxy; nothing written).")],
-    "T1210": [c("windows", "powershell -NoProfile -Command \"Test-NetConnection localhost -Port 445|Select TcpTestSucceeded\" & echo AF exploitation-of-remote-services proxy (benign port check, no exploit)",
-                "Single benign local port check (exploitation-of-remote-services proxy; no exploit).")],
+    "T1210": [c("windows", "powershell -NoProfile -Command \"Test-NetConnection localhost -Port 445|Select TcpTestSucceeded\" & echo AF exploitation-of-remote-services proxy (lab port check, no exploit)",
+                "Single lab local port check (exploitation-of-remote-services proxy; no exploit).")],
     "T1534": [c("windows", "cmd.exe /c \"echo AF internal-spearphishing proxy - no internal message sent\"",
                 "Placeholder only.")],
     "T1563.002": [c("windows", "query session 2>nul & echo AF RDP-hijacking proxy (list sessions read-only, nothing hijacked)",

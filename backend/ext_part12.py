@@ -1,11 +1,11 @@
-"""Extended benign commands — Part 12: Reconnaissance (PRE).
+"""Extended lab commands — Part 12: Reconnaissance (PRE).
 
 These are PRE-compromise techniques an adversary performs on their own
 infrastructure / OSINT sources. They do NOT fire endpoint detections, so every
-entry is an honest, host-benign OSINT/planning proxy the operator runs against
+entry is an honest, host-lab OSINT/planning proxy the operator runs against
 targets they own or public data — clearly labelled as pre-compromise.
 """
-from ext_helper import c
+from .ext_helper import c
 
 _PRE = " (pre-compromise: OSINT/planning step, not an endpoint detection test)"
 
@@ -33,12 +33,12 @@ PART = {
     "T1592.004": r("powershell -NoProfile -Command \"(Invoke-WebRequest https://example.com -UseBasicParsing).Headers.Keys\"", "Reads client-configuration hints from a host you own."),
     "T1593": r("echo 'AF search-open-websites/domains proxy - Google-dork your own domain'", "Placeholder — search public data about your own domain."),
     "T1593.001": r("echo 'AF search-social-media proxy - review your own org social presence'", "Placeholder — review your own social presence."),
-    "T1593.002": r("echo 'AF search-engines proxy - run a benign search for your own org'", "Placeholder — search engines for your own org."),
+    "T1593.002": r("echo 'AF search-engines proxy - run a lab search for your own org'", "Placeholder — search engines for your own org."),
     "T1593.003": r("git ls-remote https://github.com/mitre-attack/attack-stix-data 2>nul | head -1", "Lists a public repo (search-code-repositories proxy)."),
     "T1594": r("powershell -NoProfile -Command \"(Invoke-WebRequest https://example.com/robots.txt -UseBasicParsing).StatusCode\"", "Reads robots.txt from a website you own (search-victim-owned-websites)."),
-    "T1595": r("powershell -NoProfile -Command \"Test-NetConnection example.com -Port 443|Select TcpTestSucceeded\"", "Single benign connectivity check to a host you own (active-scanning)."),
-    "T1595.001": r("ping -n 1 example.com", "Single benign ping to a host you own (scanning-IP-blocks proxy; no sweep)."),
-    "T1595.002": r("powershell -NoProfile -Command \"Test-NetConnection example.com -Port 80|Select TcpTestSucceeded\"", "Single benign port check on a host you own (vulnerability-scanning proxy; no scan)."),
+    "T1595": r("powershell -NoProfile -Command \"Test-NetConnection example.com -Port 443|Select TcpTestSucceeded\"", "Single lab connectivity check to a host you own (active-scanning)."),
+    "T1595.001": r("ping -n 1 example.com", "Single lab ping to a host you own (scanning-IP-blocks proxy; no sweep)."),
+    "T1595.002": r("powershell -NoProfile -Command \"Test-NetConnection example.com -Port 80|Select TcpTestSucceeded\"", "Single lab port check on a host you own (vulnerability-scanning proxy; no scan)."),
     "T1595.003": r("echo 'AF wordlist-scanning proxy - fuzz only your own test endpoint'", "Placeholder — content-discovery only on your own endpoint."),
     "T1596": r("nslookup -type=MX example.com", "Queries an open technical database (DNS MX) for a domain you own."),
     "T1596.005": r("echo 'AF scan-databases proxy - review your own Shodan/Censys inventory'", "Placeholder — review your own external inventory."),
@@ -50,5 +50,5 @@ PART = {
     "T1598.003": r("echo 'AF spearphishing-link (for info) proxy - no message sent'", "Placeholder only."),
     "T1598.004": r("echo 'AF spearphishing-voice (for info) proxy - no call placed'", "Placeholder only."),
     "T1681": r("echo 'AF search-threat-vendor-data proxy - review your own threat-intel subscriptions'", "Placeholder — review your own threat-intel."),
-    "T1682": r("echo 'AF query-public-AI-services proxy - benign OSINT query only'", "Placeholder — benign OSINT query."),
+    "T1682": r("echo 'AF query-public-AI-services proxy - lab OSINT query only'", "Placeholder — lab OSINT query."),
 }

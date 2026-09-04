@@ -1,4 +1,4 @@
-"""Shared helpers for the extended benign-command part files."""
+"""Shared helpers for the extended lab-command part files."""
 from __future__ import annotations
 from typing import Dict
 
@@ -7,5 +7,5 @@ def c(platform: str, command: str, note: str = "", cleanup: str = "") -> Dict[st
     return {"platform": platform, "command": command, "note": note, "cleanup": cleanup}
 
 
-# Operator should repoint this at infrastructure they own before running.
-SAFE_HOST = "example.com"
+# Default example target used by catalog entries.
+EXAMPLE_HOST = "example.com"

@@ -42,6 +42,7 @@ const FEATURED = ["G0016", "G0032", "G0007", "G0046", "G1017", "G0096", "G0008",
 const state = {
   actors: [], filtered: [], selectedId: null, selectedActor: null,
   workflow: null,
+  domains: ["enterprise"], dataVersion: "unknown",
   scope: { cmdPlatform: "windows", tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false },
   run: new Set(),
   step: 0, stage: 0, maxStep: 0,
@@ -68,7 +69,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   el("startBtn").addEventListener("click", () => goTo(1));
   el("brandHome").addEventListener("click", restart);
-  el("brandHome").addEventListener("keydown", (e) => { if (e.key === "Enter") restart(); });
   el("refreshBtn").addEventListener("click", refreshFeed);
   el("backBtn").addEventListener("click", () => goTo(state.step - 1));
   el("nextBtn").addEventListener("click", onNext);
@@ -83,11 +83,18 @@ document.addEventListener("DOMContentLoaded", () => {
   el("searchClear").addEventListener("click", () => { el("actorSearch").value = ""; onSearch(); el("actorSearch").focus(); });
   $$("#typeFilter .segmented__btn").forEach(b =>
     b.addEventListener("click", () => { state.typeFilter = b.dataset.type; setOn("#typeFilter", b); applyFilter(); }));
+  $$("#domainFilter .segmented__btn").forEach(b =>
+    b.addEventListener("click", () => toggleDomain(b.dataset.domain)));
   el("sortSel").addEventListener("change", e => { state.sort = e.target.value; applyFilter(); });
 
   // Step 2 controls
   $$("#cmdPlatform .segmented__btn").forEach(b =>
-    b.addEventListener("click", () => { state.scope.cmdPlatform = b.dataset.plat; setOn("#cmdPlatform", b); renderScope(); }));
+    b.addEventListener("click", () => {
+      state.scope.cmdPlatform = b.dataset.plat;
+      setOn("#cmdPlatform", b);
+      loadRunState();
+      renderScope();
+    }));
   el("optPre").addEventListener("change", e => { state.scope.includePre = e.target.checked; syncTacticChips(); renderScope(); });
   el("optCurated").addEventListener("change", e => { state.scope.curatedOnly = e.target.checked; renderScope(); });
   el("stagesAll").addEventListener("click", toggleAllStages);
@@ -108,22 +115,55 @@ document.addEventListener("DOMContentLoaded", () => {
 async function loadActors() {
   setStatus("loading ATT&CK…", "");
   try {
-    const res = await fetch("/api/actors");
-    const data = await res.json();
+    const data = await apiJson(`/api/actors?${domainQuery()}`);
+    if (!Array.isArray(data.actors)) throw new Error("Actor response is missing its actors array");
     state.actors = data.actors;
+    state.dataVersion = data.data_version || "unknown";
     renderFeatured();
     applyFilter();
-    setStatus(`${data.actors.length} actors · ATT&CK live`, "ok");
+    setStatus(`${data.actors.length} actors · ${state.domains.map(titleCase).join(" + ")}`, "ok");
   } catch (e) {
     setStatus("backend offline", "err");
-    el("actorGrid").innerHTML = `<div class="emptystate">Couldn't reach the backend. Is <code>app.py</code> running?</div>`;
+    el("actorGrid").innerHTML = `<div class="emptystate">${escapeHtml(e.message || "Couldn't reach the backend")}. Check the launcher output and retry.</div>`;
   }
 }
 async function refreshFeed() {
   showLoader("Re-downloading the live ATT&CK STIX feed…");
-  try { await fetch("/api/refresh", { method: "POST" }); await loadActors(); toast("ATT&CK feed refreshed"); }
-  catch { setStatus("refresh failed", "err"); }
+  try {
+    await apiJson(`/api/refresh?${domainQuery()}`, { method: "POST" });
+    await loadActors();
+    toast("ATT&CK feed refreshed");
+  }
+  catch (e) { setStatus("refresh failed", "err"); toast(e.message || "Refresh failed"); }
   finally { hideLoader(); }
+}
+async function apiJson(url, options) {
+  const res = await fetch(url, options);
+  let data;
+  try { data = await res.json(); }
+  catch { throw new Error(`Backend returned an unreadable response (${res.status})`); }
+  if (!res.ok) throw new Error(data.message || data.error || `Request failed (${res.status})`);
+  return data;
+}
+function domainQuery() {
+  return new URLSearchParams({ domains: state.domains.join(",") }).toString();
+}
+function toggleDomain(domain) {
+  const next = new Set(state.domains);
+  if (next.has(domain)) next.delete(domain); else next.add(domain);
+  if (!next.size) { toast("Keep at least one ATT&CK domain selected"); return; }
+  const order = ["enterprise", "ics", "mobile"];
+  state.domains = order.filter(item => next.has(item));
+  $$("#domainFilter .segmented__btn").forEach(button => {
+    const on = state.domains.includes(button.dataset.domain);
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  state.selectedId = null; state.selectedActor = null; state.workflow = null;
+  state.run = new Set(); state.maxStep = 1; state.stage = 0;
+  state.actors = []; state.filtered = []; state.dataVersion = "unknown";
+  renderFeatured(); renderActorGrid(); updateStepper(); updateActionBar();
+  loadActors();
 }
 function setStatus(text, cls) {
   const s = el("dataStatus");
@@ -150,11 +190,15 @@ function goTo(step) {
   if (step === 2) renderScope();
   if (step === 3) enterPlan();
   if (step === 4) renderExport();
+  requestAnimationFrame(() => {
+    const heading = document.querySelector(`.screen[data-screen="${step}"] h1, .screen[data-screen="${step}"] h2`);
+    if (heading) heading.focus({ preventScroll: true });
+  });
 }
 
 function onNext() {
   if (state.step === 1) { if (!state.selectedId) return; goTo(2); }
-  else if (state.step === 2) { if (filteredPlan().total === 0) return; goTo(3); }
+  else if (state.step === 2) { if (filteredPlan().runnable === 0) return; goTo(3); }
   else if (state.step === 3) { goTo(4); }
 }
 
@@ -165,6 +209,7 @@ function updateStepper() {
     item.classList.toggle("is-done", n < state.step && state.step > 0);
     // allow jumping to any step already reached this session
     item.disabled = n > Math.max(state.maxStep, state.selectedId ? 1 : 0);
+    if (n === state.step) item.setAttribute("aria-current", "step"); else item.removeAttribute("aria-current");
   });
 }
 
@@ -184,15 +229,16 @@ function updateActionBar() {
   } else if (state.step === 2) {
     const p = filteredPlan();
     next.hidden = false;
-    next.disabled = p.total === 0;
+    next.disabled = p.runnable === 0;
     next.innerHTML = 'Build plan <svg class="icon"><use href="#i-arrow-r"/></svg>';
-    ctx.innerHTML = p.total ? `<b>${p.total}</b> techniques across <b>${p.stages.length}</b> stages` : "No techniques in scope — enable a stage";
+    ctx.innerHTML = p.total ? `<b>${p.runnable}</b> runnable · <b>${p.unsupported}</b> unsupported across <b>${p.stages.length}</b> stages` : "No techniques in scope — enable a stage";
   } else if (state.step === 3) {
     next.hidden = false;
     next.disabled = false;
     next.innerHTML = 'Finish & export <svg class="icon"><use href="#i-arrow-r"/></svg>';
     const p = filteredPlan();
-    ctx.innerHTML = `<b>${state.run.size}</b> / ${p.total} techniques marked run`;
+    const done = [...state.run].filter(id => p.runnableIds.has(id)).length;
+    ctx.innerHTML = `<b>${done}</b> / ${p.runnable} runnable techniques marked run`;
   } else if (state.step === 4) {
     next.hidden = true;
     ctx.innerHTML = "Plan complete ✓";
@@ -231,14 +277,14 @@ function applyFilter() {
 function renderFeatured() {
   const wrap = el("featuredChips");
   const chips = FEATURED.map(id => state.actors.find(a => a.attack_id === id)).filter(Boolean);
-  wrap.innerHTML = chips.map(a => `<button class="fchip" data-id="${a.stix_id}">${escapeHtml(a.name)}</button>`).join("");
+  wrap.innerHTML = chips.map(a => `<button type="button" class="fchip" data-id="${a.stix_id}">${escapeHtml(a.name)}</button>`).join("");
   $$(".fchip", wrap).forEach(c => c.addEventListener("click", () => { selectActor(c.dataset.id); }));
 }
 function renderActorGrid() {
   const grid = el("actorGrid");
   el("actorEmpty").hidden = state.filtered.length > 0;
   grid.innerHTML = state.filtered.map(a => `
-    <button class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${a.stix_id}">
+    <button type="button" class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${a.stix_id}" aria-pressed="${state.selectedId === a.stix_id}">
       <div class="actorcard__top">
         <div>
           <div class="actorcard__name">${escapeHtml(a.name)}</div>
@@ -272,11 +318,15 @@ function selectActor(id) {
 async function loadWorkflowThen(cb) {
   showLoader(`Pulling ${state.selectedActor.name}'s TTPs from MITRE ATT&CK…`);
   try {
-    const res = await fetch(`/api/workflow/${state.selectedId}`);
-    state.workflow = await res.json();
+    const data = await apiJson(`/api/workflow/${encodeURIComponent(state.selectedId)}?${domainQuery()}`);
+    if (!Array.isArray(data.stages) || !data.metadata) throw new Error("Workflow response is incomplete");
+    state.workflow = data;
+    state.dataVersion = data.metadata.data_version || state.dataVersion;
+    TACTIC_ORDER = data.kill_chain.map(item => item.tactic);
+    state.scope.tactics = new Set(TACTIC_ORDER);
     loadRunState();
     cb && cb();
-  } catch (e) { toast("Failed to build workflow"); }
+  } catch (e) { toast(e.message || "Failed to build workflow"); }
   finally { hideLoader(); }
 }
 
@@ -285,31 +335,40 @@ async function loadWorkflowThen(cb) {
    ============================================================ */
 function filteredPlan() {
   const wf = state.workflow;
-  if (!wf) return { stages: [], total: 0, curated: 0, fallback: 0, ids: new Set() };
+  if (!wf) return { stages: [], total: 0, runnable: 0, unsupported: 0, curated: 0, fallback: 0, ids: new Set(), runnableIds: new Set() };
   const sc = state.scope;
   const stages = [];
   // Unique-technique accounting (a technique can serve several tactics).
-  const ids = new Set(), curatedIds = new Set();
+  const ids = new Set(), runnableIds = new Set(), curatedIds = new Set();
   wf.stages.forEach(stage => {
     if (!sc.tactics.has(stage.tactic)) return;
     if (!sc.includePre && PRE_TACTICS.includes(stage.tactic)) return;
     const techs = [];
     stage.techniques.forEach(t => {
-      if (sc.curatedOnly && t.benign_source === "fallback") return;
-      techs.push({ ...t, _cmd: pickCommand(t, sc.cmdPlatform) });
+      if (sc.curatedOnly && t.command_source === "fallback") return;
+      const selected = { ...t, _cmd: pickCommand(t, sc.cmdPlatform) };
+      techs.push(selected);
       ids.add(t.attack_id);
-      if (t.benign_source === "curated") curatedIds.add(t.attack_id);
+      if (!selected._cmd.unsupported) runnableIds.add(t.attack_id);
+      if (t.command_source === "curated") curatedIds.add(t.attack_id);
     });
     if (techs.length) stages.push({ ...stage, techniques: techs });
   });
-  return { stages, total: ids.size, curated: curatedIds.size, fallback: ids.size - curatedIds.size, ids };
+  return {
+    stages, total: ids.size, runnable: runnableIds.size, unsupported: ids.size - runnableIds.size,
+    curated: curatedIds.size, fallback: ids.size - curatedIds.size, ids, runnableIds,
+  };
 }
 function pickCommand(t, plat) {
-  const list = t.benign || [];
+  const list = t.commands || [];
   return list.find(c => c.platform === plat)
-    || list.find(c => c.platform === "pre")
-    || list.find(c => c.platform === "windows")
-    || list[0] || { platform: "n/a", command: "(no command)", note: "", cleanup: "" };
+    || {
+      platform: plat,
+      command: `No ${titleCase(plat)} test is available for this technique.`,
+      note: "Choose another platform or contribute an exact-platform test.",
+      cleanup: "",
+      unsupported: true,
+    };
 }
 
 function renderScope() {
@@ -320,13 +379,15 @@ function renderScope() {
     <h4>Plan preview</h4>
     <div class="sumrow"><span class="k">Actor</span><span class="v">${escapeHtml(state.selectedActor.name)}</span></div>
     <div class="sumrow"><span class="k">Techniques</span><span class="v big">${p.total}</span></div>
+    <div class="sumrow"><span class="k">Runnable on ${titleCase(sc.cmdPlatform)}</span><span class="v">${p.runnable}</span></div>
+    <div class="sumrow"><span class="k">Unsupported</span><span class="v">${p.unsupported}</span></div>
     <div class="sumrow"><span class="k">Kill-chain stages</span><span class="v">${p.stages.length}</span></div>
     <div class="sumrow"><span class="k">Command target</span><span class="v">${titleCase(sc.cmdPlatform)}</span></div>
     <div class="sumbar">
-      <span class="sumbar__seg" style="width:${p.total ? p.curated / p.total * 100 : 0}%;background:var(--safe)"></span>
+      <span class="sumbar__seg" style="width:${p.total ? p.curated / p.total * 100 : 0}%;background:var(--success)"></span>
       <span class="sumbar__seg" style="width:${p.total ? p.fallback / p.total * 100 : 0}%;background:var(--warn)"></span>
     </div>
-    <div class="sumrow" style="border:0"><span class="k" style="color:var(--safe)">${p.curated} curated</span><span class="k" style="color:var(--warn)">${p.fallback} fallback</span></div>`;
+    <div class="sumrow" style="border:0"><span class="k" style="color:var(--success)">${p.curated} curated</span><span class="k" style="color:var(--warn)">${p.fallback} fallback</span></div>`;
   updateActionBar();
 }
 function buildTacticGrid() {
@@ -337,12 +398,12 @@ function buildTacticGrid() {
     const stage = wf.stages.find(s => s.tactic === t);
     const on = state.scope.tactics.has(t);
     const disabled = !state.scope.includePre && PRE_TACTICS.includes(t);
-    return `<div class="tacticchip ${on && !disabled ? "is-on" : "is-off"}" data-tactic="${t}" ${disabled ? 'style="pointer-events:none"' : ""}>
+    return `<button type="button" class="tacticchip ${on && !disabled ? "is-on" : "is-off"}" data-tactic="${t}" aria-pressed="${on && !disabled}" ${disabled ? "disabled" : ""}>
       <span class="tacticchip__dot" style="background:${tacticColor(t)}"></span>
       <span class="tacticchip__name">${escapeHtml(tacticTitle(t))}</span>
       <span class="tacticchip__n">${stage.techniques.length}</span>
       <span class="tacticchip__check"><svg class="icon"><use href="#i-check"/></svg></span>
-    </div>`;
+    </button>`;
   }).join("");
   $$(".tacticchip", grid).forEach(c => c.addEventListener("click", () => {
     const t = c.dataset.tactic;
@@ -361,7 +422,13 @@ function toggleAllStages() {
 }
 
 /* ---------- small utilities ---------- */
-function setOn(sel, btn) { $$(`${sel} .segmented__btn`).forEach(b => b.classList.toggle("is-on", b === btn)); }
+function setOn(sel, btn) {
+  $$(`${sel} .segmented__btn`).forEach(b => {
+    const on = b === btn;
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
 function escapeHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function stripMd(s) { return String(s || "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/<[^>]+>/g, ""); }
 function toast(msg) { const t = el("toast"); t.innerHTML = `<svg class="icon"><use href="#i-check"/></svg>${escapeHtml(msg)}`; t.hidden = false; requestAnimationFrame(() => t.classList.add("is-show")); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("is-show"); }, 1900); }
@@ -371,9 +438,15 @@ function hideLoader() { el("loader").hidden = true; }
 /* ============================================================
    STEP 3 — GUIDED PLAN RUN-THROUGH
    ============================================================ */
-function runKey() { return "af_run_" + (state.selectedId || ""); }
+function runKey() {
+  const identity = [state.selectedId || "", state.domains.join("+"), state.dataVersion, state.scope.cmdPlatform].join("|");
+  return "af_run_v2_" + encodeURIComponent(identity);
+}
 function loadRunState() {
-  try { state.run = new Set(JSON.parse(localStorage.getItem(runKey()) || "[]")); }
+  try {
+    const stored = JSON.parse(localStorage.getItem(runKey()) || "[]");
+    state.run = new Set(Array.isArray(stored) ? stored.filter(item => typeof item === "string") : []);
+  }
   catch { state.run = new Set(); }
 }
 function saveRunState() {
@@ -384,7 +457,7 @@ function enterPlan() {
   const a = state.selectedActor;
   el("planActorName").textContent = `${a.name} · ${a.attack_id}`;
   el("planActorMeta").innerHTML = (a.aliases.length ? `aka ${escapeHtml(a.aliases.slice(0, 3).join(", "))} · ` : "") +
-    `benign detection-validation plan · commands target <b>${titleCase(state.scope.cmdPlatform)}</b>`;
+    `development-lab emulation plan · commands target <b>${titleCase(state.scope.cmdPlatform)}</b>`;
   if (state.stage >= filteredPlan().stages.length) state.stage = 0;
   renderRail();
   renderStage();
@@ -394,8 +467,9 @@ function renderRail() {
   const p = filteredPlan();
   const rail = el("stageRail");
   rail.innerHTML = p.stages.map((s, i) => {
-    const done = s.techniques.every(t => state.run.has(t.attack_id));
-    return `<button class="railitem ${i === state.stage ? "is-active" : ""}" data-i="${i}">
+    const runnable = s.techniques.filter(t => !t._cmd.unsupported);
+    const done = runnable.length > 0 && runnable.every(t => state.run.has(t.attack_id));
+    return `<button type="button" class="railitem ${i === state.stage ? "is-active" : ""}" data-i="${i}" aria-current="${i === state.stage ? "step" : "false"}">
       <span class="railitem__num" style="background:${tacticColor(s.tactic)}">${i + 1}</span>
       <span class="railitem__name">${escapeHtml(s.title)}</span>
       ${done ? '<span class="railitem__done"><svg class="icon"><use href="#i-check"/></svg></span>' : `<span class="railitem__meta">${s.techniques.length}</span>`}
@@ -417,8 +491,8 @@ function renderStage() {
     <p class="stagepanel__desc">${escapeHtml(TACTIC_META[s.tactic] || "")} · ${s.techniques.length} technique${s.techniques.length !== 1 ? "s" : ""}</p>
     <div class="techlist">${s.techniques.map(renderTech).join("")}</div>
     <div class="stagenav">
-      <button class="btn btn--ghost" ${state.stage === 0 ? "disabled" : ""} id="prevStage"><svg class="icon"><use href="#i-arrow-l"/></svg> Previous stage</button>
-      <button class="btn" ${state.stage >= p.stages.length - 1 ? "disabled" : ""} id="nextStage">Next stage <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+      <button type="button" class="btn btn--ghost" ${state.stage === 0 ? "disabled" : ""} id="prevStage"><svg class="icon"><use href="#i-arrow-l"/></svg> Previous stage</button>
+      <button type="button" class="btn" ${state.stage >= p.stages.length - 1 ? "disabled" : ""} id="nextStage">Next stage <svg class="icon"><use href="#i-arrow-r"/></svg></button>
     </div>`;
 
   $$(".techcard__check", body).forEach(c => c.addEventListener("click", () => toggleRun(c.dataset.id)));
@@ -432,10 +506,12 @@ function scrollPlanTop() { el("stage").scrollTo({ top: 0, behavior: "smooth" });
 function renderTech(t) {
   const c = t._cmd;
   const run = state.run.has(t.attack_id);
+  const unsupported = Boolean(c.unsupported);
+  const source = unsupported ? "unsupported" : t.command_source;
   return `
   <div class="techcard ${run ? "is-run" : ""}" data-tid="${t.attack_id}">
     <div class="techcard__main">
-      <button class="techcard__check" data-id="${t.attack_id}" title="Mark as run"><svg class="icon"><use href="#i-check"/></svg></button>
+      <button type="button" class="techcard__check" data-id="${t.attack_id}" title="${unsupported ? "No test available for this platform" : "Mark as run"}" aria-label="${unsupported ? "No test available for this platform" : `Mark ${escapeHtml(t.attack_id)} as run`}" aria-pressed="${run}" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-check"/></svg></button>
       <div class="techcard__info">
         <div class="techcard__row">
           <a class="techcard__id" href="${t.url || "#"}" target="_blank" rel="noopener">${t.attack_id} <svg class="icon"><use href="#i-external"/></svg></a>
@@ -446,15 +522,15 @@ function renderTech(t) {
         ${(t.platforms || []).length ? `<div class="techcard__plats">${t.platforms.slice(0, 5).map(p => `<span class="plat">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
       </div>
     </div>
-    <div class="benign">
-      <div class="benign__bar">
-        <span class="benign__label">Benign test</span>
-        <span class="srcbadge srcbadge--${t.benign_source}">${t.benign_source}</span>
+    <div class="command ${unsupported ? "cmd--unsupported" : ""}">
+      <div class="command__bar">
+        <span class="command__label">Lab command</span>
+        <span class="srcbadge srcbadge--${source}">${source}</span>
       </div>
       <div class="cmd">
         <div class="cmd__head">
           <span class="cmd__plat">${escapeHtml(c.platform)}</span>
-          <button class="copybtn" data-cmd="${escapeHtml(c.command)}"><svg class="icon"><use href="#i-copy"/></svg> Copy</button>
+          <button type="button" class="copybtn" data-cmd="${escapeHtml(c.command)}" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-copy"/></svg> Copy</button>
         </div>
         <pre class="cmd__code">${escapeHtml(c.command)}</pre>
         ${c.note ? `<p class="cmd__note">${escapeHtml(c.note)}</p>` : ""}
@@ -464,10 +540,13 @@ function renderTech(t) {
   </div>`;
 }
 function toggleRun(tid) {
+  if (!filteredPlan().runnableIds.has(tid)) return;
   if (state.run.has(tid)) state.run.delete(tid); else state.run.add(tid);
   saveRunState();
   const card = document.querySelector(`.techcard[data-tid="${CSS.escape(tid)}"]`);
   if (card) card.classList.toggle("is-run", state.run.has(tid));
+  const control = card && card.querySelector(".techcard__check");
+  if (control) control.setAttribute("aria-pressed", String(state.run.has(tid)));
   updateProgress();
   renderRail();
 }
@@ -477,16 +556,18 @@ function copyCmd(btn) {
     btn.innerHTML = '<svg class="icon"><use href="#i-check"/></svg> Copied';
     toast("Command copied to clipboard");
     setTimeout(() => { btn.classList.remove("is-copied"); btn.innerHTML = '<svg class="icon"><use href="#i-copy"/></svg> Copy'; }, 1600);
-  });
+  }).catch(() => toast("Clipboard access was denied"));
 }
 function updateProgress() {
   const p = filteredPlan();
-  const done = [...state.run].filter(id => p.ids.has(id)).length;
-  const pct = p.total ? Math.round(done / p.total * 100) : 0;
+  const done = [...state.run].filter(id => p.runnableIds.has(id)).length;
+  const pct = p.runnable ? Math.round(done / p.runnable * 100) : 0;
   const ring = el("progressRing");
   ring.style.setProperty("--pct", pct);
+  ring.setAttribute("aria-valuenow", String(pct));
+  ring.setAttribute("aria-valuetext", `${done} of ${p.runnable} runnable techniques`);
   el("progressPct").textContent = pct + "%";
-  el("progressCount").textContent = `${done} / ${p.total}`;
+  el("progressCount").textContent = `${done} / ${p.runnable}`;
   updateActionBar();
 }
 
@@ -495,12 +576,12 @@ function updateProgress() {
    ============================================================ */
 function renderExport() {
   const p = filteredPlan();
-  const done = [...state.run].filter(id => p.ids.has(id)).length;
+  const done = [...state.run].filter(id => p.runnableIds.has(id)).length;
   el("exportSummary").innerHTML = `
     <div class="statsrow">
       <div class="statbox brand"><div class="n">${p.total}</div><div class="l">Techniques</div></div>
       <div class="statbox"><div class="n">${p.stages.length}</div><div class="l">Stages</div></div>
-      <div class="statbox safe"><div class="n">${p.curated}</div><div class="l">Curated tests</div></div>
+      <div class="statbox success"><div class="n">${p.runnable}</div><div class="l">Runnable tests</div></div>
       <div class="statbox"><div class="n">${done}</div><div class="l">Marked run</div></div>
     </div>`;
 }
@@ -512,36 +593,53 @@ function exportPlan(format) {
   let content, filename, mime;
   if (format === "json") { content = JSON.stringify(buildExportObj(p), null, 2); filename = `AdversaryFlow_${slug}.json`; mime = "application/json"; }
   else if (format === "markdown") { content = toMarkdown(p); filename = `AdversaryFlow_${slug}.md`; mime = "text/markdown"; }
-  else { content = toRunbook(p); filename = `AdversaryFlow_${slug}_runbook.txt`; mime = "text/plain"; }
+  else {
+    content = toRunbook(p);
+    const shell = state.scope.cmdPlatform === "windows" ? "cmd" : "sh";
+    filename = `AdversaryFlow_${slug}_runbook.${shell}.txt`;
+    mime = "text/plain";
+  }
   download(content, filename, mime);
   toast(`Exported ${filename}`);
 }
 function buildExportObj(p) {
   return {
-    tool: "AdversaryFlow", generated: new Date().toISOString(),
+    schema_version: "1.0",
+    tool: "AdversaryFlow", tool_version: state.workflow.metadata.version,
+    data_version: state.workflow.metadata.data_version,
+    domains: state.workflow.metadata.domains,
+    generated: new Date().toISOString(),
     actor: state.selectedActor,
     scope: { command_platform: state.scope.cmdPlatform, include_pre: state.scope.includePre, curated_only: state.scope.curatedOnly, stages: [...state.scope.tactics] },
-    summary: { techniques: p.total, stages: p.stages.length, curated: p.curated, fallback: p.fallback, marked_run: [...state.run] },
+    summary: {
+      techniques: p.total, runnable: p.runnable, unsupported: p.unsupported,
+      stages: p.stages.length, curated: p.curated, fallback: p.fallback,
+      marked_run: [...state.run].filter(id => p.runnableIds.has(id)),
+    },
     stages: p.stages.map(s => ({ tactic: s.tactic, title: s.title, techniques: s.techniques.map(t => ({
-      id: t.attack_id, name: t.name, url: t.url, platforms: t.platforms, benign_source: t.benign_source,
-      benign_command: t._cmd, run: state.run.has(t.attack_id),
+      id: t.attack_id, name: t.name, url: t.url, platforms: t.platforms, command_source: t.command_source,
+      supported: !t._cmd.unsupported, command: t._cmd, run: !t._cmd.unsupported && state.run.has(t.attack_id),
     })) })),
   };
 }
 function toMarkdown(p) {
   const a = state.selectedActor;
   let md = `# AdversaryFlow — ${a.name} (${a.attack_id})\n\n`;
-  md += `> **Authorized purple-team use only.** Every command is a benign detection-validation proxy — review before running.\n\n`;
+  md += `> Development-lab emulation plan. AdversaryFlow generated this plan but did not execute it.\n\n`;
   if (a.aliases.length) md += `*Aliases: ${a.aliases.join(", ")}*\n\n`;
   md += `${a.description || ""}\n\n`;
-  md += `**${p.total} techniques · ${p.stages.length} stages · commands target ${titleCase(state.scope.cmdPlatform)}** (${p.curated} curated / ${p.fallback} fallback)\n\n`;
+  md += `**${p.total} techniques · ${p.runnable} runnable · ${p.unsupported} unsupported · ${p.stages.length} stages · commands target ${titleCase(state.scope.cmdPlatform)}** (${p.curated} curated / ${p.fallback} fallback)\n\n`;
   p.stages.forEach((s, i) => {
     md += `## ${i + 1}. ${s.title}\n\n_${TACTIC_META[s.tactic] || ""}_\n\n`;
     s.techniques.forEach(t => {
       const c = t._cmd;
       md += `### ${t.attack_id} — ${t.name}${state.run.has(t.attack_id) ? " ✅" : ""}\n\n`;
       if (t.description) md += `${stripMd(t.description)}\n\n`;
-      md += `**[${c.platform}] benign test:**\n\n\`\`\`\n${c.command}\n\`\`\`\n`;
+      if (c.unsupported) {
+        md += `**Unsupported on ${titleCase(state.scope.cmdPlatform)}.** ${c.note}\n\n`;
+        return;
+      }
+      md += `**[${c.platform}] lab command:**\n\n\`\`\`\n${c.command}\n\`\`\`\n`;
       if (c.note) md += `_${c.note}_\n`;
       if (c.cleanup) md += `_cleanup: \`${c.cleanup}\`_\n`;
       md += `\n`;
@@ -551,17 +649,23 @@ function toMarkdown(p) {
 }
 function toRunbook(p) {
   const a = state.selectedActor;
-  let out = `:: AdversaryFlow runbook — ${a.name} (${a.attack_id})\n`;
-  out += `:: AUTHORIZED PURPLE-TEAM USE ONLY. Benign detection-validation commands. Review every line.\n`;
-  out += `:: Command platform: ${titleCase(state.scope.cmdPlatform)}\n`;
+  const comment = state.scope.cmdPlatform === "windows" ? "REM" : "#";
+  let out = `${comment} AdversaryFlow runbook — ${a.name} (${a.attack_id})\n`;
+  out += `${comment} DEVELOPMENT-LAB EMULATION RUNBOOK.\n`;
+  out += `${comment} Command platform: ${titleCase(state.scope.cmdPlatform)}\n`;
+  out += `${comment} Data version: ${state.workflow.metadata.data_version}\n`;
   p.stages.forEach((s, i) => {
-    out += `\n:: ===== ${i + 1}. ${s.title.toUpperCase()} =====\n`;
+    out += `\n${comment} ===== ${i + 1}. ${s.title.toUpperCase()} =====\n`;
     s.techniques.forEach(t => {
       const c = t._cmd;
-      out += `\n:: ${t.attack_id} ${t.name} [${c.platform}]${state.run.has(t.attack_id) ? " (run)" : ""}\n`;
-      if (c.note) out += `::   ${c.note}\n`;
+      out += `\n${comment} ${t.attack_id} ${t.name} [${c.platform}]${state.run.has(t.attack_id) ? " (run)" : ""}\n`;
+      if (c.unsupported) {
+        out += `${comment} UNSUPPORTED: ${c.note}\n`;
+        return;
+      }
+      if (c.note) out += `${comment}   ${c.note}\n`;
       out += `${c.command}\n`;
-      if (c.cleanup) out += `:: cleanup: ${c.cleanup}\n`;
+      if (c.cleanup) out += `${comment} MANUAL CLEANUP: ${c.cleanup}\n`;
     });
   });
   return out;

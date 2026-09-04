@@ -1,0 +1,46 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve AdversaryFlow.
+  - type: input
+    id: version
+    attributes:
+      label: AdversaryFlow version
+      description: Output from adversaryflow --version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version, and browser
+    validations:
+      required: true
+  - type: input
+    id: domains
+    attributes:
+      label: ATT&CK domains and data version
+      description: Copy the non-private domain/data-version fields from /api/health
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+

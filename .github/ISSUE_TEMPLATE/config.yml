@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage and operations documentation
+    url: https://github.com/rikterskale/AdversaryFlow/blob/main/docs/OPERATIONS.md
+    about: Review setup and troubleshooting guidance before filing an issue.
+
