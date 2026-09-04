@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import unittest
@@ -31,6 +32,7 @@ class CatalogSafetyTests(unittest.TestCase):
                 if command["cleanup_required"]:
                     self.assertEqual(command["rollback"], command["cleanup"])
 
+    @unittest.skipIf(os.name == "nt", "POSIX command parsing is covered by Linux and macOS jobs")
     @unittest.skipUnless(shutil.which("bash"), "bash parser is unavailable")
     def test_posix_commands_parse_without_execution(self):
         for technique_id, command in self.commands():

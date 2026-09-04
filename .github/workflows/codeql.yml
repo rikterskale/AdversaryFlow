@@ -20,9 +20,9 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: github/codeql-action/init@5ba2889ada762081db2c4f32a729827dce632c7b # v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: github/codeql-action/init@fddeee1a7ece751b577e409a89057319e3172939 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: none
-      - uses: github/codeql-action/analyze@5ba2889ada762081db2c4f32a729827dce632c7b # v3
+      - uses: github/codeql-action/analyze@fddeee1a7ece751b577e409a89057319e3172939 # v4
