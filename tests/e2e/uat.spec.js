@@ -328,7 +328,7 @@ test("J30 — the Markdown export is a readable report", async ({ page }) => {
   expect(text).toContain("whoami");
 });
 
-test("J31 — the runbook export is commented and non-executable", async ({ page }) => {
+test("J31 — the runbook export contains review metadata and command lines", async ({ page }) => {
   await toScope(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
@@ -337,7 +337,7 @@ test("J31 — the runbook export is commented and non-executable", async ({ page
   expect(text).toContain("REM AdversaryFlow runbook — UAT Actor (G0001)");
   expect(text).toContain("REM ===== 1. EXECUTION =====");
   expect(text).toContain("REM Outcome: not_run");
-  expect(text).toContain("whoami");
+  expect(text.split(/\r?\n/)).toContain("whoami");
 });
 
 test("J32 — a saved plan is restored with its evidence", async ({ page }) => {

@@ -9,23 +9,26 @@
 
 ## 1. Product overview
 
-AdversaryFlow turns a **named threat actor into an ordered, runnable lab
-workflow**. You pick an adversary — APT29, FIN7, Lazarus, a named campaign —
-and AdversaryFlow resolves every technique that actor is recorded as using in
-the official MITRE ATT&CK STIX feed, sorts those techniques into the real
-kill-chain order published in the ATT&CK matrix, and attaches a concrete lab
-exercise to each one. Safe behaviours use direct technique-specific commands;
-unsafe or externally dependent behaviours use self-cleaning local artifact
-simulations that produce observable process and file telemetry. The result is a plan you can walk
-stage by stage, executing one command at a time in a disposable lab and
-recording whether your detections fired.
+AdversaryFlow turns a **named threat actor into an ordered development-lab
+workflow**. You pick an adversary — APT29, FIN7, Lazarus, or a named campaign —
+and AdversaryFlow resolves the techniques that actor is recorded as using in
+the MITRE ATT&CK STIX feed, sorts them into the order published in the ATT&CK
+matrix, and attaches a catalog record to each one. Some records contain direct
+lab actions. Behaviours that would be unsafe or require external infrastructure
+may instead receive a self-cleaning temporary-file simulation that produces
+process and file telemetry. Those simulations are deliberately bounded; they
+do **not** reproduce the mapped attack behaviour.
 
 It is built for people who need to answer *"would we actually see this
 adversary?"* and want an answer grounded in evidence rather than a coverage
-spreadsheet. The catalog ships **533 curated command entries** covering all
-**529 unique techniques used by the 227 groups and campaigns** in the current
-enterprise bundle, so a real actor workflow comes back fully curated with no
-generic fallback entries. Every exercise carries structured safety metadata — risk rating,
+spreadsheet. The audited catalog has **533 technique keys and 556 command
+records**. The audited enterprise dataset mapped 529 unique techniques across
+227 groups and campaigns, and those mapped techniques resolve to catalog
+records rather than the runtime fallback. This is coverage of catalog records,
+not proof of attack-behaviour fidelity: **146 catalog techniques are explicitly
+marked bounded simulations**, and all 146 are converted into the same class of
+temporary-file create, observe, and remove activity. Every record carries
+structured safety metadata — risk rating,
 whether it needs administrator rights or network access, what it changes, the
 telemetry you should expect, and how to undo it — and the interface refuses to
 hand you a command whose risk exceeds the scope you set.
@@ -34,7 +37,7 @@ AdversaryFlow **generates plans; it never executes commands**. It runs entirely
 on your own machine, binds to loopback by default, and stores nothing beyond a
 cached copy of the public ATT&CK bundle and your own progress in browser local
 storage. The finished plan exports as a human-readable Markdown report, a
-schema-versioned JSON document, or a commented runbook — and a JSON export can
+schema-versioned JSON document, or a text runbook — and a JSON export can
 be loaded back in later to resume exactly where you left off.
 
 ---
@@ -43,7 +46,7 @@ be loaded back in later to resume exactly where you left off.
 
 | Persona | Goal | Entry point |
 |---|---|---|
-| **Detection engineer** — owns EDR/SIEM rules, needs to prove coverage against a specific adversary | Run one actor's techniques in a lab and record which ones her detections caught | `./run.sh` → browser opens at `http://127.0.0.1:5000` |
+| **Detection engineer** — owns EDR/SIEM rules and needs evidence about a specific adversary | Review one actor's mapped exercises, run suitable commands in a lab, and record which detections fired | `./run.sh` → browser opens at `http://127.0.0.1:5000` |
 | **Purple-team lead** — plans and reports on a scheduled exercise | Scope an exercise to a platform and a set of kill-chain stages, then hand the team a runbook and keep an evidence record | Welcome screen → **Begin emulation plan** → **Export** |
 | **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume JSON plan** |
 | **Automation / platform engineer** — feeds plans into other tooling | Pull the workflow as JSON without touching the UI | `curl http://127.0.0.1:5000/api/workflow/<stix_id>` |
@@ -73,11 +76,8 @@ AdversaryFlow installed and verified. Start it with ./run.sh
 
 Windows uses `.\install.ps1`, which performs the same checks via `py -3`.
 
-> The project also declares an `adversaryflow` console script for
-> `pipx install adversaryflow`. The entry point is real and verified
-> (`adversaryflow --version` → `AdversaryFlow 0.3.0`); PyPI publication is
-> gated behind the repository variable `PUBLISH_PYPI` and has not happened yet,
-> so the source checkout above is the working path today.
+The package declares an `adversaryflow` console script. In a verified source
+installation, `adversaryflow --version` prints `AdversaryFlow 0.3.0`.
 
 ### Step 2 — Launch
 
@@ -110,9 +110,10 @@ the background worker downloads the enterprise bundle.
 
 > **Preparing MITRE ATT&CK data…**
 > The first run downloads and validates the enterprise bundle. Downloaded
-> 12.4 MB of 51.3 MB. You can leave this tab open.
+> *N.N* MB of *N.N* MB. You can leave this tab open.
 
-The megabyte counter advances from live cache metadata. The download is capped
+The byte values are calculated from live cache metadata and only appear once
+download progress is available. The download is capped
 at 128 MiB, checksummed, validated as a STIX bundle, and atomically promoted
 before it is used. Subsequent launches reuse the disk cache for 7 days.
 
@@ -122,7 +123,7 @@ before it is used. Subsequent launches reuse the disk cache for 7 days.
 emulation plan"*, a **Begin emulation plan** button, a **Resume JSON plan**
 file picker, and the footer *"Built for disposable development labs.
 AdversaryFlow creates plans; it does not execute commands."* The header status
-chip turns green and reads `227 actors · Enterprise`.
+chip turns green and reads `<count> actors · Enterprise`.
 
 ### Step 5 — Choose a threat actor
 
@@ -157,7 +158,7 @@ engagement"*.
 **Observable result:** the **Plan preview** card updates live — Actor,
 Techniques, *Runnable on Windows*, Unsupported, Kill-chain stages, Command
 target, and a curated/fallback split bar. The footer reads
-**`66 runnable · 0 unsupported across 13 stages`** for APT29 on Windows.
+`<runnable> runnable · <unsupported> unsupported across <stages> stages`.
 
 ### Step 7 — Build and walk the plan
 
@@ -179,6 +180,12 @@ Each technique card shows:
 - an **evidence row**: an outcome selector (*Not run / Passed / Failed /
   Skipped*), a 500-character evidence note field, and a **cleanup verified**
   checkbox.
+
+The source badge `curated` means the technique ID has a keyed catalog record;
+it does not certify that the command reproduces the ATT&CK behaviour. For a
+bounded simulation, the note explicitly says it creates, observes, and removes
+one temporary artifact and does not perform the unsafe ATT&CK action. Its
+**Expected** field reports generic process and temporary-file telemetry.
 
 **Previous stage** / **Next stage** buttons and the rail both navigate.
 
@@ -213,7 +220,11 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 |---|---|---|
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
 | **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json` |
-| **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | `REM`-commented sequenced runbook (`#` for Linux/macOS), `.txt` so it is a review artifact rather than an executable script |
+| **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Sequenced text runbook with `REM` metadata (`#` for Linux/macOS), followed by the catalog command on an uncommented line and any cleanup as a manual-cleanup comment |
+
+The runbook has a `.txt` extension, but its command lines are intended to be
+copied and run. Treat the file as sensitive operational content and review each
+line before use.
 
 **Observable result:** the file downloads and a toast reads
 *"Exported AdversaryFlow_G0016_APT29.json"*. **Core value is delivered here.**
@@ -343,13 +354,13 @@ table directly.
 | J13 | Choose an actor | Click **Begin emulation plan**, then an actor card | Selects it | Footer reads `Selected: <name>` and **Continue** is enabled |
 | J14 | Search | Type `APT29` in the search box | Filters the grid | Only matching cards remain; the ✕ clear button appears |
 | J15 | Empty search | Type a string matching nothing | Shows the empty state | `No actors match your search.` is visible |
-| J16 | Build a workflow | `GET /api/workflow/<stix_id>` | Returns the ordered workflow | HTTP 200; top-level keys are exactly `actor`, `summary`, `kill_chain`, `stages`, `metadata`; APT29 reports 66 techniques, 66 curated, 0 fallback, 13 stages |
+| J16 | Build a workflow | `GET /api/workflow/<stix_id>` | Returns the ordered workflow | HTTP 200; top-level keys are exactly `actor`, `summary`, `kill_chain`, `stages`, `metadata`; stages follow `kill_chain`, and each technique contains `commands` and `command_source` |
 | J17 | Scope screen | Click **Continue** | Renders step 2 | Heading *Scope the engagement* visible and footer reads `<n> runnable · <m> unsupported across <s> stages` |
 | J18 | Switch platform | Click **Linux** | Re-selects commands for Linux only, never substituting another OS | Preview shows `Runnable on Linux`; techniques without a Linux command read `No Linux test is available for this technique.` |
 | J19 | Toggle stages | Click **Clear all** | Empties the plan | Footer reads `No techniques in scope — enable a stage`, **Build plan** is disabled, and the button label becomes `Select all` |
 | J20 | Safety scope | Leave *Allow high-risk commands* off with a high-risk command in scope | Blocks the command | Command text reads `Restricted by scope: high-risk commands are disabled.`; **Copy command** and **Copy cleanup** are both disabled |
 | J21 | Unblock safety scope | Enable the matching option | Restores the command | Real command text is shown and the footer runnable count increases |
-| J22 | Build the plan | Click **Build plan** | Renders step 3 | Heading reads `<name> · <attack_id>`; every stage appears in the rail with a technique card and a command |
+| J22 | Build the plan | Click **Build plan** | Renders step 3 | Heading reads `<name> · <attack_id>`; every in-scope stage appears in the rail and every technique card shows either the exact-platform command or an explicit unsupported message |
 | J23 | Command safety metadata | Inspect any curated card | Shows the classification | A risk badge, **Effects**, and **Expected** telemetry are visible on every supported command |
 | J24 | Navigate stages | Click **Next stage** / **Previous stage** / a rail item | Moves through the kill chain | The stage title changes; **Previous stage** is disabled on the first stage and **Next stage** on the last |
 | J25 | Copy a command | Click **Copy command** | Copies after acknowledgement for medium/high risk | For a high-risk command a confirm dialog appears; on accept the toast reads `Command copied to clipboard` |
@@ -358,7 +369,7 @@ table directly.
 | J28 | Export screen | Click **Finish & export** | Renders step 4 | Heading *Your emulation plan is ready* with tiles Techniques, Stages, Runnable tests, Marked run |
 | J29 | Export JSON | Click **JSON** | Downloads a schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
 | J30 | Export Markdown | Click **Markdown report** | Downloads a report | File named `AdversaryFlow_<ID>_<Name>.md` containing `# AdversaryFlow — <name> (<id>)`, a `### <technique>` section, and `**Outcome:**` |
-| J31 | Export runbook | Click **Runbook** | Downloads a commented runbook | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, and `REM Outcome:` |
+| J31 | Export runbook | Click **Runbook** | Downloads a text runbook | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and the selected command on an uncommented line |
 | J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with the actor heading, outcomes, and evidence notes restored; toast reads `Plan imported as high-risk; verify its data version before execution` |
 | J33 | Round-trip | Export with default scope, then resume that file | The plan is usable, not blocked by its own risk elevation | Command text is the real command (not `Restricted by scope`) and the runnable count is greater than 0 |
 | J34 | Reject a bad plan | Resume a file with an incomplete actor | Refuses and stays put | Toast reads `Plan actor record is invalid` and the welcome screen is still displayed |
@@ -381,7 +392,7 @@ table directly.
 | J51 | Reject an unknown CLI domain | `adversaryflow cache-refresh --domains bogus` | Refuses | Exit code 2 and stdout contains `Unknown ATT&CK domain(s): bogus` |
 | J52 | Operate offline | `adversaryflow --offline` with a seeded cache | Serves without network access | Actors load and no upstream request is made |
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
-| J54 | Catalog coverage | Resolve every technique used by any actor | Every one has a curated command | 529 unique techniques, 0 resolving to `fallback` |
+| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while simulations remain explicitly distinguishable from direct records | 529 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 533 technique keys, 556 command records, and exactly 146 technique keys whose notes contain `Bounded lab simulation`; all 146 state that they do not perform the unsafe ATT&CK action |
 | J55 | Accessibility | Load the welcome screen | No serious accessibility violations | axe-core reports zero `serious` or `critical` violations |
 
 ---

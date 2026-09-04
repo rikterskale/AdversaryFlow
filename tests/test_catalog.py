@@ -39,20 +39,27 @@ class CatalogIntegrityTests(unittest.TestCase):
         self.assertIn("risk", result["commands"][0])
 
     def test_bounded_simulations_are_observable_actions_not_no_ops(self):
-        simulations = []
+        simulations = set()
         for technique_id, commands in command_catalog.CURATED.items():
             for command in commands:
                 if "bounded lab simulation" not in command["note"].lower():
                     continue
-                simulations.append(technique_id)
+                simulations.add(technique_id)
                 self.assertNotIn(" echo ", command["command"].lower())
                 self.assertTrue(command["cleanup_required"])
                 self.assertIn("changes_local_state", command["side_effects"])
+                self.assertIn(
+                    "does not contact a target or perform the unsafe ATT&CK action",
+                    command["note"],
+                )
                 self.assertTrue(
                     "Set-Content" in command["command"] or "printf" in command["command"],
                     command["command"],
                 )
-        self.assertGreaterEqual(len(simulations), 140)
+        self.assertEqual(len(simulations), 146)
+
+    def test_catalog_record_counts_are_explicit(self):
+        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 556)
 
 
 if __name__ == "__main__":
