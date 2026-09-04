@@ -175,6 +175,7 @@ class LauncherScriptTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
 
+    @unittest.skipIf(os.name == "nt", "POSIX launcher contract runs on POSIX CI hosts")
     def test_posix_scripts_are_valid_bash(self):
         for name in ("install.sh", "run.sh"):
             result = subprocess.run(
@@ -183,6 +184,7 @@ class LauncherScriptTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    @unittest.skipIf(os.name == "nt", "POSIX launcher contract runs on POSIX CI hosts")
     def test_run_script_starts_the_installed_command_and_forwards_arguments(self):
         shutil.copy2(ROOT / "run.sh", self.root / "run.sh")
         command = self.root / ".venv" / "bin" / "adversaryflow"
@@ -199,6 +201,7 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("[AdversaryFlow] starting", result.stdout)
         self.assertIn("--open --port 6000", result.stdout)
 
+    @unittest.skipIf(os.name == "nt", "POSIX launcher contract runs on POSIX CI hosts")
     def test_install_script_runs_every_locked_install_and_doctor(self):
         shutil.copy2(ROOT / "install.sh", self.root / "install.sh")
         venv_bin = self.root / ".venv" / "bin"
