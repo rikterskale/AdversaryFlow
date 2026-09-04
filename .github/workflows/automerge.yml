@@ -1,12 +1,13 @@
 name: Auto-merge
 
 # Turns on auto-merge for the maintainer's own pull requests so they land only
-# after every required check passes. Admin enforcement is off on main, so this
-# is a guardrail rather than a gate: it makes the verified path the effortless
-# one without removing the ability to override by hand.
+# after every required check passes, then deletes the merged branch. Admin
+# enforcement is off on main, so this is a guardrail rather than a gate: it
+# makes the verified path the effortless one without removing the ability to
+# override by hand.
 on:
   pull_request_target:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, closed]
 
 permissions:
   contents: write
@@ -15,19 +16,42 @@ permissions:
 jobs:
   enable:
     name: Enable auto-merge
-    # Only the maintainer's own pull requests. Without this gate an outside
-    # contributor's branch would be queued to merge itself.
-    if: github.event.pull_request.user.login == 'rikterskale'
+    # Only the maintainer's own pull requests, and never on close: queuing a
+    # merge for an already-closed pull request just fails.
+    if: >-
+      github.event.action != 'closed'
+      && github.event.pull_request.user.login == 'rikterskale'
     runs-on: ubuntu-latest
     steps:
       # pull_request_target runs with write permissions against the base repo,
       # so this job deliberately checks out nothing and only calls the API.
-      # --rebase because main requires linear history. Branch cleanup is left
-      # to the repository's delete_branch_on_merge setting: --delete-branch is
-      # a client-side step gh takes after watching the merge land, and with
-      # --auto this job exits as soon as the merge is queued, so it would never
-      # run.
+      # --rebase because main requires linear history.
       - run: gh pr merge --auto --rebase "$PR_URL"
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+
+  cleanup:
+    name: Delete merged branch
+    # Rebase merges rewrite the commits onto main, so the original branch tip
+    # never becomes an ancestor of the base and GitHub's own
+    # delete_branch_on_merge does not fire. Delete the ref explicitly instead
+    # of depending on that behaviour. Head branches living in a fork are not
+    # ours to delete.
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.merged == true
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the head ref
+        run: |
+          if gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH" >/dev/null 2>&1; then
+            echo "deleted $BRANCH"
+          else
+            echo "$BRANCH was already gone; nothing to do"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
