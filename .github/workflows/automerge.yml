@@ -1,0 +1,29 @@
+name: Auto-merge
+
+# Turns on auto-merge for the maintainer's own pull requests so they land only
+# after every required check passes. Admin enforcement is off on main, so this
+# is a guardrail rather than a gate: it makes the verified path the effortless
+# one without removing the ability to override by hand.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    # Only the maintainer's own pull requests. Without this gate an outside
+    # contributor's branch would be queued to merge itself.
+    if: github.event.pull_request.user.login == 'rikterskale'
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request_target runs with write permissions against the base repo,
+      # so this job deliberately checks out nothing and only calls the API.
+      # --rebase because main requires linear history.
+      - run: gh pr merge --auto --rebase --delete-branch "$PR_URL"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
