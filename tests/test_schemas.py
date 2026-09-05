@@ -11,6 +11,10 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("execution_context", schema["required"])
         self.assertIn("execution", schema["$defs"]["technique"]["required"])
         self.assertIn("risk", schema["$defs"]["command"]["required"])
+        self.assertEqual(schema["$defs"]["command"]["properties"]["fidelity"]["enum"],
+                         ["direct", "bounded_synthetic", "lab_proxy"])
+        self.assertIn("data_sources", schema["$defs"]["technique"]["properties"])
+        self.assertIn("detection", schema["$defs"]["technique"]["properties"])
         self.assertEqual(schema["properties"]["stages"]["maxItems"], 32)
         self.assertEqual(schema["$defs"]["stage"]["properties"]["techniques"]["maxItems"], 2000)
         self.assertEqual(schema["$defs"]["command"]["properties"]["command"]["maxLength"], 10000)
@@ -19,6 +23,8 @@ class SchemaTests(unittest.TestCase):
             self.assertIn(field, execution)
         self.assertEqual(execution["receipt_sha256"]["pattern"], "^[a-fA-F0-9]{64}$")
         self.assertIn("siem_verified", execution["evidence_source"]["enum"])
+        self.assertEqual(execution["detection_result"]["enum"],
+                         ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"])
         acceptance = schema["$defs"]["telemetry_acceptance"]
         self.assertFalse(acceptance["additionalProperties"])
         self.assertIn("activity_event_types", acceptance["required"])

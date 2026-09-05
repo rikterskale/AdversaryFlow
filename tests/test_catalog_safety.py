@@ -1,3 +1,4 @@
+import re
 import shlex
 import shutil
 import subprocess
@@ -5,12 +6,34 @@ import unittest
 
 from backend import command_catalog
 
+FORBIDDEN_LIVE_PATTERNS = (
+    r"reg save\b",
+    r"sc\.exe create",
+    r"lockworkstation",
+    r"net user\s+\S+.*\/add",
+    r"https?://example\.com",
+    r"ifconfig\.me",
+    r"169\.254\.169\.254",
+    r"findstr /si password",
+    r"git ls-remote https://",
+    r"start-process 'https://",
+    r"downloadstring\('https://",
+)
+
 
 class CatalogSafetyTests(unittest.TestCase):
     def commands(self):
         for technique_id, commands in command_catalog.CURATED.items():
             for command in commands:
                 yield technique_id, command
+
+    def test_the_catalog_does_not_ship_live_mutators_or_third_party_fetches(self):
+        compiled = [re.compile(pattern, re.IGNORECASE) for pattern in FORBIDDEN_LIVE_PATTERNS]
+        for technique_id, command in self.commands():
+            text = command["command"]
+            for pattern in compiled:
+                with self.subTest(technique_id=technique_id, pattern=pattern.pattern):
+                    self.assertIsNone(pattern.search(text), text)
 
     def test_no_fixed_lab_account_passwords(self):
         for technique_id, command in self.commands():

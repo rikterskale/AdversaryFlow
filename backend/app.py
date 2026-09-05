@@ -124,6 +124,12 @@ def secure_response(response):
 # API
 # ---------------------------------------------------------------------------
 
+@app.route("/api/live")
+def live():
+    """Liveness: the process can answer. Readiness is /api/health."""
+    return jsonify({"status": "live", "version": __version__})
+
+
 @app.route("/api/health")
 def health():
     index_status = attack_data.loaded_index_status()
@@ -189,7 +195,11 @@ def refresh():
     try:
         with _runtime_lock:
             _runtime.update(ready=False, loading=True, phase="refreshing", error=None)
-        idx = attack_data.refresh_index(domains)
+        try:
+            idx = attack_data.refresh_index(domains)
+        except Exception as exc:
+            _mark_error(exc)
+            raise
         _mark_ready()
         _last_refresh = time.monotonic()
         return jsonify({
@@ -404,7 +414,11 @@ def api_error(exc: Exception):
             "version": __version__,
         }), exc.code
     app.logger.exception("API request failed")
-    _mark_error(exc)
+    # Per-request failures must not flip process-wide readiness. Bootstrap and
+    # refresh workers call _mark_error themselves when ATT&CK data is actually
+    # unusable.
+    _log_event("request_failed", level="error", error=type(exc).__name__,
+               request_id=getattr(g, "request_id", "unknown"))
     return jsonify({
         "error": "request failed",
         "message": "The request failed. Check the server log with the request ID.",

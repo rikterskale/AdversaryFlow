@@ -1,5 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
+
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 const Ajv2020 = require("ajv/dist/2020");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -140,8 +142,11 @@ test("guided workflow records evidence and exports JSON", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
   await page.getByRole("button", { name: /Build plan/ }).click();
   await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
-  await page.getByLabel("Outcome for T1033").selectOption("passed");
   await page.getByLabel("Evidence note for T1033").fill("Expected process event observed");
+  await page.getByLabel("Outcome for T1033").selectOption("passed");
+  await page.getByLabel("Detection for T1033").selectOption("silent");
+  await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Expected process event observed");
+  await expect(page.locator("#saveStatus")).toHaveText("Saved in this browser");
   await page.getByRole("button", { name: /Finish & export/ }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: /JSON/ }).click();
@@ -151,6 +156,9 @@ test("guided workflow records evidence and exports JSON", async ({ page }) => {
   const schema = JSON.parse(fs.readFileSync(path.resolve("schemas/adversaryflow-plan.schema.json"), "utf-8"));
   const validate = new Ajv2020({ strict: false, validateFormats: false }).compile(schema);
   expect(validate(exported), JSON.stringify(validate.errors)).toBeTruthy();
+  expect(exported.stages[0].techniques[0].execution.outcome).toBe("passed");
+  expect(exported.stages[0].techniques[0].execution.detection_result).toBe("silent");
+  expect(exported.stages[0].techniques[0].execution.notes).toBe("Expected process event observed");
 });
 
 test("welcome screen has no serious accessibility violations", async ({ page }) => {
@@ -220,6 +228,7 @@ test("markdown export carries the scope, outcome and command", async ({ page }) 
   expect(markdown).toContain("# AdversaryFlow — Test Actor (G0001)");
   expect(markdown).toContain("### T1033 — System Owner/User Discovery");
   expect(markdown).toContain("**Outcome:** failed");
+  expect(markdown).toContain("**Detection:** not_assessed");
   expect(markdown).toContain("whoami");
 });
 
@@ -236,6 +245,7 @@ test("runbook export is a commented, non-executable artifact", async ({ page }) 
   expect(runbook).toContain("REM AdversaryFlow runbook — Test Actor (G0001)");
   expect(runbook).toContain("REM ===== 1. EXECUTION =====");
   expect(runbook).toContain("REM Outcome: not_run");
+  expect(runbook).toContain("REM Detection: not_assessed");
   expect(runbook).toContain("REM COMMAND: whoami");
   expect(runbook.split(/\r?\n/)).not.toContain("whoami");
 });
@@ -256,6 +266,7 @@ test("a bounded exercise receipt is digest-verified and exported as execution pr
   await interceptApi(page, [exercise]);
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.locator(".srcbadge--bounded")).toHaveText("bounded synthetic");
   const receipt = {
     attestation: "self-reported",
     cleanup_verified: true,
@@ -284,6 +295,20 @@ test("a bounded exercise receipt is digest-verified and exported as execution pr
   const exported = JSON.parse(fs.readFileSync(await (await download).path(), "utf-8"));
   const evidence = exported.stages[0].techniques[0].execution;
   expect(evidence).toMatchObject({ run_id: receipt.run_id, exit_code: 0, receipt_sha256: receipt.receipt_sha256, receipt_verified: true, cleanup_completed: true, evidence_source: "exercise_receipt" });
+});
+
+test("a browser session can be resumed after reload", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  await page.getByRole("button", { name: /Select Test Actor/ }).click();
+  await page.getByRole("button", { name: /^Continue/ }).click();
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: /Resume Test Actor plan/ }).click();
+  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
+  await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
 });
 
 test("a saved plan can be resumed from the welcome screen", async ({ page }) => {
@@ -419,6 +444,7 @@ test("planning another actor resets the picker filters", async ({ page }) => {
   await page.getByRole("button", { name: /Finish & export/ }).click();
 
   await page.getByRole("button", { name: /Plan another actor/ }).click();
+  await page.getByRole("dialog", { name: "Start a new plan?" }).getByRole("button", { name: "Start new plan" }).click();
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
 
@@ -437,6 +463,7 @@ test("a new actor starts with an empty execution context", async ({ page }) => {
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await page.getByRole("button", { name: /Plan another actor/ }).click();
+  await page.getByRole("dialog", { name: "Start a new plan?" }).getByRole("button", { name: "Start new plan" }).click();
 
   // Saved progress is keyed by actor, data version, domains and platform, so a
   // different key must start clean rather than inherit the previous operator.
@@ -485,7 +512,7 @@ test("a failed setup shows an actionable error and can be retried", async ({ pag
 
   await page.getByRole("button", { name: "Retry setup" }).click();
   await expect(page.getByRole("button", { name: /Test Actor/ })).toBeVisible();
-  await expect(page.locator("#dataStatus")).toContainText("1 actors");
+  await expect(page.locator("#dataStatus")).toContainText("1 actor");
 });
 
 test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
@@ -511,4 +538,32 @@ test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
   await page.locator(".techcard__check").click();
   await expect(page.locator("#progressCount")).toHaveText("1 / 3");
   await expect(page.locator("#progressPct")).toHaveText("33%");
+});
+
+test("plan keyboard shortcuts move focus and copy the command", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const second = {
+    stix_id: "attack-pattern--t1059", attack_id: "T1059", name: "Command and Scripting Interpreter",
+    description: "Fixture technique", tactics: ["execution"], platforms: ["Windows"],
+    is_subtechnique: false, url: "https://attack.mitre.org/techniques/T1059/",
+    commands: [command], command_source: "curated",
+  };
+  const body = workflowBody();
+  body.summary.total_techniques = 2;
+  body.summary.curated_commands = 2;
+  body.stages[0].techniques.push(second);
+  await interceptApi(page);
+  await page.route("**/api/workflow/**", route => route.fulfill({ json: body }));
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const cards = page.locator(".techcard");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toHaveClass(/is-focused/);
+  await page.keyboard.press("j");
+  await expect(cards.nth(1)).toHaveClass(/is-focused/);
+  await page.keyboard.press("k");
+  await expect(cards.nth(0)).toHaveClass(/is-focused/);
+  await page.keyboard.press("c");
+  await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("whoami");
 });

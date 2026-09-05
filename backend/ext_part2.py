@@ -1,5 +1,5 @@
 """Extended lab commands — Part 2: Exfiltration + Impact (destructive => read-only proxies)."""
-from .ext_helper import c
+from .ext_helper import LOOPBACK_DNS, LOOPBACK_PING, c, loopback_tcp
 
 PART = {
     # ---- Exfiltration ----
@@ -7,18 +7,16 @@ PART = {
                 "Read-only auto-collection listing (automated-exfiltration proxy; no upload).")],
     "T1029": [c("windows", "powershell -NoProfile -Command \"$t=(Get-Date).AddMinutes(1); \\\"scheduled window: $t\\\"\"",
                 "Prints a future transfer window locally (scheduled-transfer proxy; nothing sent).")],
-    "T1048.002": [c("windows", "powershell -NoProfile -Command \"Test-NetConnection example.com -Port 443|Select TcpTestSucceeded\"",
-                    "Single lab TLS check (asymmetric-encrypted non-C2 exfil proxy; no data sent).")],
-    "T1048.003": [c("windows", "nslookup example.com & echo AF unencrypted-non-C2 exfil proxy - no data sent",
-                    "Lab DNS lookup (unencrypted non-C2 exfil proxy).")],
+    "T1048.002": [loopback_tcp("Loopback-only asymmetric-encrypted non-C2 exfil proxy. No data is sent.")],
+    "T1048.003": [c("windows", f"{LOOPBACK_DNS} & echo AF unencrypted-non-C2 exfil proxy - no data sent",
+                    "Loopback DNS lookup (unencrypted non-C2 exfil proxy).")],
     "T1052.001": [c("windows", "powershell -NoProfile -Command \"Get-Volume|? DriveType -eq 'Removable'|Select DriveLetter,FileSystemLabel\"",
                     "Enumerates removable drives (exfil-over-USB proxy; nothing copied).")],
-    "T1537": [c("windows", "powershell -NoProfile -Command \"Resolve-DnsName storage.googleapis.com|Select Name\"",
-                "Resolves a cloud-storage endpoint (transfer-to-cloud-account proxy; no upload).")],
-    "T1567": [c("windows", "powershell -NoProfile -Command \"Resolve-DnsName raw.githubusercontent.com|Select Name\"",
-                "Resolves a web-service endpoint (exfil-over-web-service proxy; no upload).")],
-    "T1567.004": [c("windows", "powershell -NoProfile -Command \"(Invoke-WebRequest https://example.com -Method GET -UseBasicParsing).StatusCode\"",
-                    "Lab GET to an example host (webhook-exfil proxy; no data posted).")],
+    "T1537": [c("windows", f"{LOOPBACK_DNS} & echo AF transfer-to-cloud-account proxy — no upload",
+                "Loopback DNS lookup (transfer-to-cloud-account proxy; no upload).")],
+    "T1567": [c("windows", f"{LOOPBACK_DNS} & echo AF exfil-over-web-service proxy — no upload",
+                "Loopback DNS lookup (exfil-over-web-service proxy; no upload).")],
+    "T1567.004": [loopback_tcp("Loopback-only webhook-exfil proxy. No data is posted.")],
 
     # ---- Impact (all read-only / echo proxies — nothing is destroyed) ----
     "T1485": [c("windows", "echo AF > %TEMP%\\af_destroy.txt & del %TEMP%\\af_destroy.txt & echo AF data-destruction proxy - only a temp file touched",
@@ -27,10 +25,9 @@ PART = {
                 "Read-only BIOS query (firmware-corruption proxy; firmware untouched).")],
     "T1496.001": [c("windows", "powershell -NoProfile -Command \"(Get-CimInstance Win32_Processor).LoadPercentage\"",
                     "Reads CPU load once (compute-hijacking/cryptomining proxy; no mining).")],
-    "T1498": [c("windows", "ping -n 2 example.com & echo AF network-DoS proxy - two lab packets only",
-                "Two lab pings (network-DoS proxy; no flooding).")],
-    "T1499": [c("windows", "powershell -NoProfile -Command \"(Invoke-WebRequest https://example.com -UseBasicParsing).StatusCode\"",
-                "One lab request (endpoint-DoS proxy; no flooding).")],
+    "T1498": [c("windows", f"{LOOPBACK_PING} & echo AF network-DoS proxy - one lab packet only",
+                "One loopback ping (network-DoS proxy; no flooding).")],
+    "T1499": [loopback_tcp("Loopback-only endpoint-DoS proxy. No flooding.")],
     "T1531": [c("windows", "net user %USERNAME% & echo AF account-access-removal proxy (read-only, nothing disabled)",
                 "Read-only account inspection (account-access-removal proxy).")],
     "T1561.001": [c("windows", "wmic diskdrive get model,size /format:list & echo AF disk-content-wipe proxy (read-only)",

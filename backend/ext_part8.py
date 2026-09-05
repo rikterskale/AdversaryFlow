@@ -26,8 +26,8 @@ PART = {
     "T1134.003": [c("windows", "whoami /groups | more & echo AF make-and-impersonate-token proxy (read-only)",
                     "Reads token groups (make/impersonate-token proxy; read-only).")],
     # ---- System binary proxy execution (LOLBins) ----
-    "T1218": [c("windows", "rundll32.exe user32.dll,LockWorkStation & echo AF system-binary-proxy-exec (lab documented export)",
-                "Uses rundll32 to call a lab export (system-binary-proxy-execution).")],
+    "T1218": [c("windows", "where rundll32.exe & echo AdversaryFlow lab rundll32 locate — screen is not locked",
+                "Locates rundll32.exe without invoking LockWorkStation or any other export.")],
     "T1218.001": [c("windows", "hh.exe about: & echo AF compiled-HTML-file (hh.exe) proxy & timeout 1 >nul & taskkill /IM hh.exe /F 2>nul",
                     "Launches the CHM host against a blank page (compiled-HTML-file proxy).")],
     "T1218.003": [c("windows", "cmd.exe /c \"echo AF CMSTP proxy - no INF supplied\"", "Bounded lab simulation only — no INF is processed.")],

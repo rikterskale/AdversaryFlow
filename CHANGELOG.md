@@ -4,6 +4,34 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Added a novice operator handbook (install, first verified PoC, everyday
+  use, remediation, recovery, upgrades, and support escalation) with
+  commands checked against the 0.3.0 CLI.
+- Split command result from detection result on the plan screen, stopped
+  evidence edits from rebuilding the whole stage, and added j/k/c keyboard
+  controls plus a visible local-save chip.
+- Showed catalog prerequisites, expected output, timeout, and rollback on each
+  card, and moved ATT&CK description, data sources, and detection text behind
+  an expandable context panel.
+- Made install copy lead with the source launcher and a GitHub/wheel pipx
+  path; `pipx install adversaryflow` is documented as unavailable until PyPI
+  publication.
+- Removed live SAM exports, account and service creation, session locks, IMDS
+  queries, recursive credential greps, and third-party HTTP fetches from the
+  catalog; remaining persistence tests keep explicit high-risk acknowledgement.
+- Stopped per-request API failures from marking the whole service failed, and
+  added GET /api/live for process liveness separate from ATT&CK readiness.
+- Surfaced ATT&CK data sources and detection text on plan cards and in exports.
+- Added acceptable-use and code-of-conduct documents, filled the Apache
+  copyright line, and expanded MITRE attribution in NOTICE.
+- Labelled every catalog command with an explicit fidelity class (`direct`,
+  `bounded synthetic`, or `lab proxy`) and surfaced those badges on the plan.
+- Rebound execution kits to the live catalog so client-supplied command text
+  cannot be packaged as an official runner, and bundled a portable copy of the
+  bounded-exercise runner when a plan includes those steps.
+- Restored the last in-progress plan from this browser after reload, made JSON
+  resume a real keyboard-accessible button, and replaced native confirm dialogs
+  with an in-app risk acknowledgement that shows the command.
 - Polished the responsive wizard with a compact mobile header, page-level
   overflow protection, clean ATT&CK descriptions, concise actor-card labels,
   visible search result counts, and less intrusive screen-reader focus.

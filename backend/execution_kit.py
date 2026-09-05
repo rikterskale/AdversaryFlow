@@ -13,11 +13,16 @@ import json
 import re
 import zipfile
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Mapping, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
+
+from . import command_catalog
 
 MAX_PLAN_STEPS = 4000
 MAX_COMMAND_LENGTH = 10_000
 SUPPORTED_PLATFORMS = {"windows", "linux"}
+EXERCISE_RUNNER_NAME = "AdversaryFlow-exercises.py"
+FIDELITY_VALUES = {"direct", "bounded_synthetic", "lab_proxy"}
 
 
 class ExecutionKitError(ValueError):
@@ -35,6 +40,7 @@ class PlanStep:
     platform: str
     supported: bool
     command_source: str
+    fidelity: str
     risk: str
     requires_admin: bool
     requires_network: bool
@@ -87,6 +93,141 @@ def _slug(value: str, fallback: str) -> str:
 
 def _step_slug(value: str) -> str:
     return _slug(value.lower(), "step")[:40]
+
+
+def _optional_bool(value: Any, field: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return _boolean(value, field)
+
+
+def _exercise_technique_id(command: Mapping[str, Any]) -> str:
+    tokens = str(command.get("command") or "").split()
+    if tokens and re.fullmatch(r"T[0-9]{4}(?:\.[0-9]{3})?", tokens[-1]):
+        return tokens[-1]
+    acceptance = command.get("telemetry_acceptance")
+    if isinstance(acceptance, dict):
+        technique_id = str(acceptance.get("technique_id") or "")
+        if re.fullmatch(r"T[0-9]{4}(?:\.[0-9]{3})?", technique_id):
+            return technique_id
+    return ""
+
+
+def kit_exercise_command(command: Mapping[str, Any], platform: str) -> str:
+    """Rewrite a bounded exercise so the kit invokes the bundled runner."""
+    planned = str(command.get("command") or "")
+    if command.get("exercise_kind") != "technique_relevant_bounded":
+        return planned
+    technique_id = _exercise_technique_id(command)
+    if not technique_id:
+        return planned
+    if platform == "windows":
+        return f"python .\\{EXERCISE_RUNNER_NAME} {technique_id}"
+    return f"python3 ./{EXERCISE_RUNNER_NAME} {technique_id}"
+
+
+def _unsupported_command(platform: str, message: str, note: str) -> Dict[str, Any]:
+    return {
+        "platform": platform,
+        "command": message,
+        "note": note,
+        "cleanup": "",
+        "risk": "none",
+        "side_effects": [],
+        "requires_admin": False,
+        "requires_network": False,
+        "network_targets": [],
+        "prerequisites": [],
+        "expected_telemetry": "",
+        "expected_output": "",
+        "timeout_seconds": 0,
+        "rollback": "",
+        "cleanup_required": False,
+        "acknowledgment_required": False,
+        "fidelity": "direct",
+        "unsupported": True,
+    }
+
+
+def _apply_scope(command: Dict[str, Any], scope: Mapping[str, Any], platform: str) -> Dict[str, Any]:
+    bound = dict(command)
+    restrictions = []
+    if bound.get("requires_network") and not scope.get("allow_network"):
+        restrictions.append("network-active commands are disabled")
+    if bound.get("requires_admin") and not scope.get("allow_admin"):
+        restrictions.append("administrator commands are disabled")
+    if bound.get("risk") == "high" and not scope.get("allow_high_risk"):
+        restrictions.append("high-risk commands are disabled")
+    if restrictions:
+        bound["command"] = f"Restricted by scope: {'; '.join(restrictions)}."
+        bound["note"] = "Enable the corresponding safety option in Scope after reviewing the risk."
+        bound["unsupported"] = True
+        bound["restricted"] = True
+        return bound
+    bound["command"] = kit_exercise_command(bound, platform)
+    bound.pop("unsupported", None)
+    bound.pop("restricted", None)
+    return bound
+
+
+def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
+    """Replace client-supplied command text with live catalog records.
+
+    Stage order and technique identity come from the submitted plan. Command
+    bodies, safety metadata, and fidelity always come from the catalog so an
+    execution kit cannot carry an operator- or attacker-supplied payload.
+    """
+    if not isinstance(document, dict):
+        raise ExecutionKitError("Plan must be a JSON object")
+    rebound = json.loads(json.dumps(document))
+    scope = rebound.get("scope")
+    stages = rebound.get("stages")
+    if not isinstance(scope, dict) or not isinstance(stages, list):
+        raise ExecutionKitError("Plan metadata is incomplete")
+    platform = _string(scope.get("command_platform"), "scope.command_platform", maximum=20, required=True).lower()
+    if platform not in SUPPORTED_PLATFORMS:
+        raise ExecutionKitError("Execution kits are available for Windows and Linux plans")
+    for key in ("allow_network", "allow_admin", "allow_high_risk", "curated_only"):
+        if key in scope:
+            scope[key] = _boolean(scope[key], f"scope.{key}")
+    curated_only = bool(scope.get("curated_only"))
+
+    for stage in stages:
+        if not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list):
+            raise ExecutionKitError("Plan contains an invalid stage")
+        tactic = _string(stage.get("tactic"), "stage.tactic", maximum=120, required=True)
+        for technique in stage["techniques"]:
+            if not isinstance(technique, dict):
+                raise ExecutionKitError("Plan contains an invalid technique")
+            technique_id = _string(technique.get("id"), "technique.id", maximum=64, required=True)
+            technique_name = _string(technique.get("name"), "technique.name", maximum=500, required=True)
+            result = command_catalog.get_commands(technique_id, technique_name, [tactic])
+            source = result["source"]
+            exact = next((item for item in result["commands"] if item.get("platform") == platform), None)
+            if curated_only and source == "fallback":
+                exact = None
+                note = "Curated tests only is enabled; this technique has no keyed catalog record."
+                message = f"No curated {platform} test is available for this technique."
+            else:
+                note = "Choose another platform or contribute an exact-platform test."
+                message = f"No {platform} test is available for this technique."
+            bound = (
+                _unsupported_command(platform, message, note)
+                if exact is None
+                else _apply_scope(dict(exact), scope, platform)
+            )
+            technique["command"] = bound
+            technique["command_source"] = "fallback" if source == "fallback" else "curated"
+            technique["supported"] = not bool(bound.get("unsupported"))
+    return rebound
+
+
+def _exercise_runner_source() -> bytes:
+    return (Path(__file__).resolve().parent / "lab_exercises.py").read_bytes()
+
+
+def _plan_needs_exercise_runner(plan: ExecutionPlan) -> bool:
+    return any(step.supported and EXERCISE_RUNNER_NAME in step.planned_command for step in plan.steps)
 
 
 def normalize_plan(document: Any) -> ExecutionPlan:
@@ -151,6 +292,9 @@ def normalize_plan(document: Any) -> ExecutionPlan:
             command_source = _string(technique.get("command_source"), "command_source", maximum=20, required=True)
             if command_source not in {"curated", "fallback"}:
                 raise ExecutionKitError(f"{technique_id} has an invalid command source")
+            fidelity = _string(command.get("fidelity", "direct"), "command.fidelity", maximum=40)
+            if fidelity not in FIDELITY_VALUES:
+                raise ExecutionKitError(f"{technique_id} has an invalid fidelity class")
             rows.append(PlanStep(
                 sequence=sequence,
                 step_id=step_id,
@@ -161,6 +305,7 @@ def normalize_plan(document: Any) -> ExecutionPlan:
                 platform=platform,
                 supported=supported,
                 command_source=command_source,
+                fidelity=fidelity,
                 risk=risk,
                 requires_admin=_boolean(command.get("requires_admin"), "command.requires_admin"),
                 requires_network=_boolean(command.get("requires_network"), "command.requires_network"),
@@ -200,7 +345,7 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
     output = io.StringIO(newline="")
     columns = (
         "sequence", "step_id", "tactic", "tactic_title", "technique_id", "technique_name",
-        "platform", "supported", "command_source", "risk", "requires_admin", "requires_network",
+        "platform", "supported", "command_source", "fidelity", "risk", "requires_admin", "requires_network",
         "prerequisites", "side_effects", "planned_command", "planned_command_sha256", "cleanup_command",
         "expected_output", "expected_telemetry", "timeout_seconds", "plan_sha256",
     )
@@ -217,6 +362,7 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
             "platform": step.platform,
             "supported": str(step.supported).lower(),
             "command_source": step.command_source,
+            "fidelity": step.fidelity,
             "risk": step.risk,
             "requires_admin": str(step.requires_admin).lower(),
             "requires_network": str(step.requires_network).lower(),
@@ -476,9 +622,9 @@ for index in "${!STEP_IDS[@]}"; do
   printf '\nExecuting exactly:\n'; indent_file "$effective_file"; printf '\n'
   set +e
   if command -v timeout >/dev/null 2>&1 && [ "$timeout_seconds" -gt 0 ]; then
-    timeout --signal=TERM --kill-after=5 "${timeout_seconds}s" bash "$effective_file" >"$stdout_file" 2>"$stderr_file"
+    timeout --signal=TERM --kill-after=5 "${timeout_seconds}s" bash -c 'cd "$1" && bash "$2"' bash "$SCRIPT_DIR" "$effective_file" >"$stdout_file" 2>"$stderr_file"
   else
-    bash "$effective_file" >"$stdout_file" 2>"$stderr_file"
+    ( cd "$SCRIPT_DIR" && bash "$effective_file" ) >"$stdout_file" 2>"$stderr_file"
   fi
   exit_code=$?
   set +e
@@ -498,7 +644,7 @@ for index in "${!STEP_IDS[@]}"; do
     if [ "$cleanup_choice" = Y ]; then
       cleanup_file="$RESULTS_DIR/commands/$step_id.cleanup.sh"
       printf '%s\n' "$cleanup_text" > "$cleanup_file"
-      set +e; bash "$cleanup_file" >>"$stdout_file" 2>>"$stderr_file"; cleanup_exit=$?; set +e
+      set +e; ( cd "$SCRIPT_DIR" && bash "$cleanup_file" ) >>"$stdout_file" 2>>"$stderr_file"; cleanup_exit=$?; set +e
       [ "$cleanup_exit" -eq 0 ] && cleanup_status=completed || cleanup_status=failed
       event "cleanup_completed" "$step_id" "status=$cleanup_status; exit_code=$cleanup_exit"
     else cleanup_status=declined; event "cleanup_declined" "$step_id" "operator declined cleanup"; fi
@@ -559,7 +705,7 @@ def render_powershell(plan: ExecutionPlan, csv_name: str, csv_sha256: str) -> st
             "TechniqueName": step.technique_name, "Risk": step.risk, "Supported": _bool_text(step.supported),
             "RequiresAdmin": _bool_text(step.requires_admin), "RequiresNetwork": _bool_text(step.requires_network),
             "Prerequisites": " | ".join(step.prerequisites), "Effects": " | ".join(step.side_effects),
-            "Command": step.planned_command, "Cleanup": step.cleanup_command,
+            "Command": step.planned_command, "Cleanup": step.cleanup_command, "Fidelity": step.fidelity,
             "ExpectedOutput": step.expected_output, "ExpectedTelemetry": step.expected_telemetry,
             "Timeout": str(step.timeout_seconds),
         }
@@ -744,7 +890,7 @@ try {
         Write-Host "`nExecuting exactly:"
         Get-Content -LiteralPath $effectiveFile | ForEach-Object { Write-Host "    $_" }
         $shellPath = (Get-Process -Id $PID).Path
-        $process = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$effectiveFile`"") -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -PassThru
+        $process = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$effectiveFile`"") -WorkingDirectory $ScriptDir -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -PassThru
         $timeoutSeconds = [int]$step.Timeout
         $timedOut = $false
         if ($timeoutSeconds -gt 0 -and -not $process.WaitForExit($timeoutSeconds * 1000)) { $timedOut = $true; Stop-Process -Id $process.Id -Force; $process.WaitForExit() }
@@ -763,7 +909,7 @@ try {
             if ((Read-AfChoice 'Run cleanup now? Y=yes / N=no' @('Y','N')) -eq 'Y') {
                 $cleanupFile = Join-Path $ResultsDir "commands\$stepId.cleanup.ps1"
                 [IO.File]::WriteAllText($cleanupFile, $step.Cleanup + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-                $cleanupProcess = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$cleanupFile`"") -Wait -PassThru
+                $cleanupProcess = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$cleanupFile`"") -WorkingDirectory $ScriptDir -Wait -PassThru
                 $cleanupStatus = if ($cleanupProcess.ExitCode -eq 0) { 'completed' } else { 'failed' }
                 Write-AfEvent 'cleanup_completed' $stepId "status=$cleanupStatus; exit_code=$($cleanupProcess.ExitCode)"
             } else { $cleanupStatus = 'declined'; Write-AfEvent 'cleanup_declined' $stepId 'operator declined cleanup' }
@@ -816,8 +962,7 @@ if ($runnerError) { Write-Error $runnerError.Exception.Message; exit 1 }
             .replace("__STEPS__", steps_literal))
 
 
-def build_execution_kit(document: Mapping[str, Any]) -> tuple[bytes, str]:
-    plan = normalize_plan(document)
+def archive_execution_kit(plan: ExecutionPlan) -> tuple[bytes, str]:
     actor_slug = _slug(f"{plan.actor_id}_{plan.actor_name}", "Adversary")
     platform_title = "Windows" if plan.platform == "windows" else "Linux"
     root = f"AdversaryFlow_{actor_slug}_{platform_title}"
@@ -836,4 +981,13 @@ def build_execution_kit(document: Mapping[str, Any]) -> tuple[bytes, str]:
         script_info = zipfile.ZipInfo(f"{root}/{script_name}")
         script_info.external_attr = (0o755 if plan.platform == "linux" else 0o644) << 16
         archive.writestr(script_info, script.encode("utf-8"))
+        if _plan_needs_exercise_runner(plan):
+            runner_info = zipfile.ZipInfo(f"{root}/{EXERCISE_RUNNER_NAME}")
+            runner_info.external_attr = 0o644 << 16
+            archive.writestr(runner_info, _exercise_runner_source())
     return output.getvalue(), f"{root}.zip"
+
+
+def build_execution_kit(document: Mapping[str, Any]) -> tuple[bytes, str]:
+    rebound = rebind_to_catalog(document)
+    return archive_execution_kit(normalize_plan(rebound))

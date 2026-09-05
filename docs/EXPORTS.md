@@ -5,20 +5,28 @@ AdversaryFlow exports a portable execution kit plus three planning formats.
 ## Operator execution kit
 
 For Windows or Linux plans, **Download operator execution kit** creates one ZIP
-containing exactly two files:
+containing:
 
-- an RFC 4180 UTF-8 CSV with one row per ordered plan-step occurrence; and
-- a self-contained `.ps1` or `.sh` runner containing the matching plan.
+- an RFC 4180 UTF-8 CSV with one row per ordered plan-step occurrence;
+- a self-contained `.ps1` or `.sh` runner containing the matching plan; and
+- `AdversaryFlow-exercises.py` when the plan includes bounded synthetic
+  exercises.
 
-The CSV and runner are integrity-bound with SHA-256. Keep them together when
-handing the kit to an operator. The runner refuses to start if the CSV is
-missing or has changed. The CSV is for human review; the runner uses its own
-embedded plan, avoiding fragile CSV parsing on the destination machine.
+The service **rebinds every technique to the live catalog** before the ZIP is
+written. Client-supplied command text is discarded, so an exported kit cannot
+carry an operator- or attacker-supplied payload under an AdversaryFlow name.
 
-The destination requires no AdversaryFlow installation, Python runtime, or
-network connection. PowerShell kits require Windows PowerShell 5.1 or newer.
-Linux kits require Bash and standard Linux utilities (`base64`, `sha256sum`,
-`awk`, `date`, and `mktemp`).
+The CSV and runner are integrity-bound with SHA-256. Keep every file in the ZIP
+together when handing the kit to an operator. The runner refuses to start if the
+CSV is missing or has changed. The CSV is for human review; the runner uses its
+own embedded plan, avoiding fragile CSV parsing on the destination machine.
+
+Direct catalog commands need no AdversaryFlow installation, Python runtime, or
+network connection on the destination. Bounded synthetic steps invoke the
+bundled exercise script and therefore need Python 3.10+ beside the kit; they
+still do not require an AdversaryFlow install or network access. PowerShell
+kits require Windows PowerShell 5.1 or newer. Linux kits require Bash and
+standard Linux utilities (`base64`, `sha256sum`, `awk`, `date`, and `mktemp`).
 
 Before every supported step, the runner displays the technique, risk,
 prerequisites, expected output, expected telemetry, and exact command. The
@@ -53,7 +61,9 @@ schemas/adversaryflow-plan.schema.json contract and include:
 - actor, domains, platform, stage, network/admin, and risk scope;
 - structured command safety metadata and exact-platform support;
 - operator and target context;
-- passed, failed, skipped, or not-run outcomes;
+- passed, failed, skipped, or not-run command outcomes, recorded separately
+  from detection results (not assessed, alerted, silent, blocked, not
+  instrumented);
 - unique run IDs, start/completion timestamps, exit codes, evidence notes,
   cleanup verification, stdout/stderr hashes, receipt digests, evidence-source
   classification, and endpoint/SIEM references.
@@ -69,8 +79,9 @@ The format is AdversaryFlow-native; VECTR and Caldera conversion is not included
 
 ## Markdown
 
-Markdown includes scope, outcomes, evidence, commands, notes, and cleanup. It
-is intended for human review and ticketing rather than automated ingestion.
+Markdown includes scope, command outcomes, detection results, evidence,
+commands, notes, and cleanup. It is intended for human review and ticketing
+rather than automated ingestion.
 
 ## Runbook
 

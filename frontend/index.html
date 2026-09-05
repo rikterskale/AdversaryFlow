@@ -6,6 +6,7 @@
   <meta name="description" content="Build guided MITRE ATT&CK adversary-emulation plans for detection validation." />
   <meta name="theme-color" content="#0a0d14" />
   <title>AdversaryFlow — Adversary Emulation Planner</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -49,7 +50,8 @@
     </nav>
 
     <div class="appbar__right">
-      <span id="dataStatus" class="chip chip--muted">loading…</span>
+      <span id="buildVersion" class="chip chip--muted" hidden></span>
+      <span id="dataStatus" class="chip chip--muted">Loading</span>
       <button type="button" id="refreshBtn" class="iconbtn" title="Refresh the live ATT&CK feed" aria-label="Refresh the live ATT&CK feed"><svg class="icon"><use href="#i-refresh"/></svg></button>
     </div>
   </header>
@@ -77,8 +79,10 @@
         </div>
 
         <div class="welcome__actions">
-          <button class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
-          <label class="btn btn--ghost">Resume JSON plan<input id="importPlan" type="file" accept="application/json,.json" hidden /></label>
+          <button type="button" class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+          <button type="button" class="btn btn--ghost btn--lg" id="resumeSessionBtn" hidden>Resume saved plan</button>
+          <button type="button" class="btn btn--ghost" id="resumeJsonBtn">Resume JSON plan</button>
+          <input id="importPlan" type="file" accept="application/json,.json" hidden />
         </div>
         <p class="welcome__foot">Built for disposable development labs. AdversaryFlow creates plans; it does not execute commands.</p>
       </div>
@@ -214,7 +218,7 @@
         </div>
         <div class="planhead__progress">
           <div class="progressring" id="progressRing" role="progressbar" aria-label="Runnable technique progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progressPct">0%</span></div>
-          <div class="planhead__ptext"><b id="progressCount">0 / 0</b><span>techniques run</span></div>
+          <div class="planhead__ptext"><b id="progressCount">0 / 0</b><span>techniques run</span><span id="saveStatus" class="savestatus" aria-live="polite">Saved in this browser</span></div>
         </div>
       </div>
 
@@ -237,7 +241,7 @@
         <div class="export__cards">
           <button class="expcard expcard--hero" data-export="kit" id="executionKitExport">
             <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
-            <b id="executionKitTitle">Download operator execution kit</b><span id="executionKitDescription">CSV plan plus a self-contained PowerShell or Bash runner. No AdversaryFlow installation or network connection required on the destination machine.</span>
+            <b id="executionKitTitle">Download operator execution kit</b><span id="executionKitDescription">CSV plan plus a self-contained PowerShell or Bash runner. Direct commands need no extra runtime. Bounded synthetic steps include a portable exercise script that needs Python 3.10+.</span>
           </button>
           <button class="expcard" data-export="markdown">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
@@ -253,7 +257,7 @@
           </button>
         </div>
         <div class="export__foot">
-          <button class="btn btn--ghost" id="restartBtn"><svg class="icon"><use href="#i-refresh"/></svg> Plan another actor</button>
+          <button type="button" class="btn btn--ghost" id="restartBtn"><svg class="icon"><use href="#i-refresh"/></svg> Plan another actor</button>
         </div>
       </div>
     </section>
@@ -262,10 +266,22 @@
 
   <!-- ===================== FOOTER NAV ===================== -->
   <footer class="actionbar" id="actionbar" hidden>
-    <button class="btn btn--ghost" id="backBtn"><svg class="icon"><use href="#i-arrow-l"/></svg> Back</button>
+    <button type="button" class="btn btn--ghost" id="backBtn"><svg class="icon"><use href="#i-arrow-l"/></svg> Back</button>
     <div class="actionbar__ctx" id="actionbarCtx"></div>
-    <button class="btn btn--primary" id="nextBtn" disabled>Continue <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+    <button type="button" class="btn btn--primary" id="nextBtn" disabled>Continue <svg class="icon"><use href="#i-arrow-r"/></svg></button>
   </footer>
+
+  <dialog class="confirmdialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmDescription">
+    <form class="authdialog__card" id="confirmForm">
+      <h2 id="confirmTitle">Confirm</h2>
+      <p id="confirmDescription"></p>
+      <pre id="confirmDetail" class="confirmdialog__detail" hidden></pre>
+      <div class="authdialog__actions">
+        <button type="button" class="btn btn--ghost" id="confirmCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary" id="confirmAccept">Continue</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog class="authdialog" id="authDialog" aria-labelledby="authTitle" aria-describedby="authDescription">
     <form class="authdialog__card" id="authForm">

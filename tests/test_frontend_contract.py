@@ -21,8 +21,17 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_run_state_is_versioned(self):
         self.assertIn('af_run_v3_', self.javascript)
+        self.assertIn('af_session_v1', self.javascript)
         self.assertIn('state.dataVersion', self.javascript)
         self.assertIn('state.scope.cmdPlatform', self.javascript)
+
+    def test_confirmations_and_resume_are_in_app_controls(self):
+        self.assertNotIn("window.confirm", self.javascript)
+        self.assertIn('id="confirmDialog"', self.html)
+        self.assertIn('id="resumeSessionBtn"', self.html)
+        self.assertIn('id="resumeJsonBtn"', self.html)
+        self.assertIn("bounded synthetic", self.javascript)
+        self.assertIn("lab proxy", self.javascript)
 
     def test_domain_controls_are_wired(self):
         self.assertIn('id="domainFilter"', self.html)
@@ -57,6 +66,15 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('telemetry_refs', self.javascript)
         self.assertIn('Verify and import receipt', self.javascript)
         self.assertIn('${comment} COMMAND:', self.javascript)
+        self.assertIn("ATT&amp;CK detection", self.javascript)
+        self.assertIn("data_sources", self.javascript)
+        self.assertIn("evidence__detection", self.javascript)
+        self.assertIn("detection_result", self.javascript)
+        self.assertIn("handlePlanKeys", self.javascript)
+        self.assertIn("syncCardRunState", self.javascript)
+        self.assertIn('id="saveStatus"', self.html)
+        self.assertIn('id="buildVersion"', self.html)
+        self.assertIn("rerender = false", self.javascript)
 
     def test_portable_execution_kit_is_a_one_click_gui_export(self):
         self.assertIn('data-export="kit"', self.html)

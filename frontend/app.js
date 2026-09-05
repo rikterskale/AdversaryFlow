@@ -38,6 +38,16 @@ function tacticTitle(tactic) {
 }
 
 const FEATURED = ["G0016", "G0032", "G0007", "G0046", "G1017", "G0096", "G0008", "G1006"];
+const SESSION_KEY = "af_session_v1";
+const FIDELITY_VALUES = ["direct", "bounded_synthetic", "lab_proxy"];
+const DETECTION_RESULTS = ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"];
+const DETECTION_LABELS = {
+  not_assessed: "Not assessed",
+  alerted: "Alerted",
+  silent: "Silent",
+  blocked: "Blocked",
+  not_instrumented: "Not instrumented",
+};
 
 // Upper bound on the first-run bundle download so a wedged bootstrap surfaces
 // an actionable error instead of spinning forever.
@@ -53,6 +63,8 @@ const state = {
   recordContext: { operator: "", target: "" },
   csrf: "",
   apiToken: sessionStorage.getItem("af_api_token") || "",
+  toolVersion: "",
+  focusedTech: 0,
   step: 0, stage: 0, maxStep: 0,
   typeFilter: "all", sort: "name",
 };
@@ -76,11 +88,13 @@ document.addEventListener("DOMContentLoaded", () => {
   boot();
 
   el("startBtn").addEventListener("click", () => goTo(1));
-  el("brandHome").addEventListener("click", restart);
+  el("brandHome").addEventListener("click", () => restart());
   el("refreshBtn").addEventListener("click", refreshFeed);
   el("backBtn").addEventListener("click", () => goTo(state.step - 1));
   el("nextBtn").addEventListener("click", onNext);
-  el("restartBtn").addEventListener("click", restart);
+  el("restartBtn").addEventListener("click", () => restart());
+  el("resumeSessionBtn").addEventListener("click", resumeSession);
+  el("resumeJsonBtn").addEventListener("click", () => el("importPlan").click());
   el("importPlan").addEventListener("change", importPlan);
 
   // Stepper
@@ -115,10 +129,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Export
   $$("[data-export]").forEach(b => b.addEventListener("click", () => exportPlan(b.dataset.export)));
 
-  // Keyboard: Enter advances when possible
+  // Keyboard: Enter advances when possible; j/k/c operate the plan.
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.target.matches("input,select,textarea,button,a") && !el("nextBtn").disabled && state.step >= 1 && state.step <= 3)
+    if (e.target.matches("input,select,textarea,a,[contenteditable]")) return;
+    if (e.key === "Enter" && !e.target.matches("button") && !el("nextBtn").disabled && state.step >= 1 && state.step <= 3)
       onNext();
+    if (state.step === 3) handlePlanKeys(e);
   });
 });
 
@@ -127,8 +143,14 @@ async function boot() {
   try {
     const session = await establishSession();
     state.csrf = session.csrf_token;
+    state.toolVersion = session.version || "";
+    if (state.toolVersion) {
+      el("buildVersion").hidden = false;
+      el("buildVersion").textContent = state.toolVersion;
+    }
     await waitForBootstrap();
     await loadActors(true);
+    renderWelcomeActions();
   } catch (e) {
     showLoadFailure(e);
   } finally {
@@ -197,6 +219,42 @@ function requestApiToken(message = "") {
   });
 }
 
+function confirmAction({ title, description, detail = "", acceptLabel = "Continue", danger = false } = {}) {
+  const dialog = el("confirmDialog");
+  const form = el("confirmForm");
+  const detailEl = el("confirmDetail");
+  el("confirmTitle").textContent = title || "Confirm";
+  el("confirmDescription").textContent = description || "";
+  detailEl.textContent = detail || "";
+  detailEl.hidden = !detail;
+  el("confirmAccept").textContent = acceptLabel;
+  el("confirmAccept").classList.toggle("btn--danger", Boolean(danger));
+  return new Promise(resolve => {
+    const cleanup = () => {
+      form.removeEventListener("submit", accept);
+      el("confirmCancel").removeEventListener("click", cancel);
+      dialog.removeEventListener("cancel", cancel);
+    };
+    const accept = event => {
+      event.preventDefault();
+      cleanup();
+      dialog.close();
+      resolve(true);
+    };
+    const cancel = event => {
+      event.preventDefault();
+      cleanup();
+      dialog.close();
+      resolve(false);
+    };
+    form.addEventListener("submit", accept);
+    el("confirmCancel").addEventListener("click", cancel);
+    dialog.addEventListener("cancel", cancel);
+    dialog.showModal();
+    el("confirmAccept").focus();
+  });
+}
+
 async function waitForBootstrap() {
   const deadline = Date.now() + BOOTSTRAP_TIMEOUT_MS;
   let status = await fetch("/api/bootstrap", { headers: authHeaders() });
@@ -231,7 +289,7 @@ function csrfHeaders(extra = {}) { return authHeaders({ ...extra, "X-AdversaryFl
 function showLoadFailure(error) {
   setStatus("setup needs attention", "err");
   const grid = el("actorGrid");
-  grid.innerHTML = `<div class="emptystate"><p>${escapeHtml(error.message || "Couldn't prepare ATT&CK data")}</p><button type="button" class="btn" id="retryLoad">Retry setup</button></div>`;
+  grid.innerHTML = `<div class="emptystate"><p>${escapeHtml(error.message || "Could not prepare ATT&CK data")}</p><button type="button" class="btn" id="retryLoad">Retry setup</button></div>`;
   const retry = el("retryLoad");
   if (retry) retry.addEventListener("click", boot);
 }
@@ -248,7 +306,8 @@ async function loadActors(throwOnError = false) {
     state.dataVersion = data.data_version || "unknown";
     renderFeatured();
     applyFilter();
-    setStatus(`${data.actors.length} actors · ${state.domains.map(titleCase).join(" + ")}`, "ok");
+    const count = data.actors.length;
+    setStatus(`${count} actor${count === 1 ? "" : "s"} · ${state.domains.map(titleCase).join(" + ")}`, "ok");
   } catch (e) {
     setStatus("backend offline", "err");
     showLoadFailure(e);
@@ -256,7 +315,11 @@ async function loadActors(throwOnError = false) {
   }
 }
 async function refreshFeed() {
-  if (state.workflow && !window.confirm("Refreshing can change technique mappings and will rebuild the current plan. Continue?")) return;
+  if (state.workflow && !await confirmAction({
+    title: "Refresh the ATT&CK feed?",
+    description: "Refreshing can change technique mappings and will rebuild the current plan.",
+    acceptLabel: "Refresh feed",
+  })) return;
   showLoader("Re-downloading the live ATT&CK STIX feed…");
   try {
     await apiJson(`/api/refresh?${domainQuery()}`, { method: "POST", headers: csrfHeaders() });
@@ -323,9 +386,11 @@ function goTo(step) {
   updateStepper();
   updateActionBar();
 
+  if (step === 0) renderWelcomeActions();
   if (step === 2) renderScope();
   if (step === 3) enterPlan();
   if (step === 4) renderExport();
+  persistSession();
   requestAnimationFrame(() => {
     const heading = document.querySelector(`.screen[data-screen="${step}"] h1, .screen[data-screen="${step}"] h2`);
     if (heading) heading.focus({ preventScroll: true });
@@ -377,11 +442,18 @@ function updateActionBar() {
     ctx.innerHTML = `<b>${done}</b> / ${p.runnable} runnable techniques marked run`;
   } else if (state.step === 4) {
     next.hidden = true;
-    ctx.innerHTML = "Plan complete ✓";
+    ctx.innerHTML = "Plan complete";
   }
 }
 
-function restart() {
+async function restart() {
+  if ((state.step > 0 || state.selectedId) && !await confirmAction({
+    title: "Start a new plan?",
+    description: "This clears the current actor, scope, and unsaved evidence in this browser. Exported files are not affected.",
+    acceptLabel: "Start new plan",
+    danger: true,
+  })) return;
+  clearSession();
   const domainsWereChanged = state.domains.length !== 1 || state.domains[0] !== "enterprise";
   state.selectedId = null; state.selectedActor = null; state.workflow = null;
   state.run = new Set();
@@ -443,6 +515,8 @@ async function importPlan(event) {
       stages: data.stages.map(stage => ({ ...stage, techniques: stage.techniques.map(technique => ({
         attack_id: technique.id, name: technique.name, url: technique.url, platforms: technique.platforms || [],
         description: "Imported plan record", is_subtechnique: technique.id.includes("."),
+        data_sources: Array.isArray(technique.data_sources) ? technique.data_sources : [],
+        detection: typeof technique.detection === "string" ? technique.detection : "",
         command_source: technique.command_source === "fallback" ? "fallback" : "curated",
         commands: [normalizeImportedCommand(technique.command)], tactics: [stage.tactic],
       })) })),
@@ -514,10 +588,12 @@ function validateImportedPlan(data) {
       || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
     stage.techniques.forEach(technique => {
       const techniqueKeys = ["id", "name", "url", "platforms", "command_source", "supported", "command", "run", "execution"];
-      if (!onlyKeys(technique, techniqueKeys) || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)
+      if (!onlyKeys(technique, techniqueKeys, ["data_sources", "detection"]) || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)
         || !uriOrNull(technique.url) || !stringArray(technique.platforms)
         || !["curated", "fallback"].includes(technique.command_source)
-        || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean") throw new Error("Plan contains an invalid technique record");
+        || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean"
+        || (technique.data_sources !== undefined && !stringArray(technique.data_sources))
+        || (technique.detection !== undefined && typeof technique.detection !== "string")) throw new Error("Plan contains an invalid technique record");
       const command = technique.command;
       const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
       if (!onlyKeys(command, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance"])
@@ -528,7 +604,7 @@ function validateImportedPlan(data) {
         || (command.unsupported !== undefined && typeof command.unsupported !== "boolean")
         || (command.restricted !== undefined && typeof command.restricted !== "boolean")
         || (command.exercise_kind !== undefined && command.exercise_kind !== "technique_relevant_bounded")
-        || (command.fidelity !== undefined && command.fidelity !== "bounded_synthetic")
+        || (command.fidelity !== undefined && !FIDELITY_VALUES.includes(command.fidelity))
         || (command.evidence_source !== undefined && command.evidence_source !== "self_reported_receipt")
         || (command.telemetry_acceptance !== undefined && (!plainObject(command.telemetry_acceptance)
           || !onlyKeys(command.telemetry_acceptance, ["technique_id", "scenario", "activity_event_types", "minimum_activity_events", "requirements", "limitation"])
@@ -540,8 +616,9 @@ function validateImportedPlan(data) {
           || !nonEmptyString(command.telemetry_acceptance.limitation)))
         || !Number.isInteger(command.timeout_seconds) || command.timeout_seconds < 0 || command.timeout_seconds > 3600) throw new Error("Plan contains an invalid command record");
       const execution = technique.execution;
-      if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source"])
+      if (!onlyKeys(execution, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source", "detection_result"])
         || !["not_run", "passed", "failed", "skipped"].includes(execution.outcome)
+        || (execution.detection_result !== undefined && !DETECTION_RESULTS.includes(execution.detection_result))
         || (execution.updated_at !== undefined && !dateTime(execution.updated_at))
         || (execution.operator !== undefined && (typeof execution.operator !== "string" || execution.operator.length > 120))
         || (execution.target !== undefined && (typeof execution.target !== "string" || execution.target.length > 200))
@@ -591,6 +668,11 @@ function syncStaticScopeControls() {
   $$("#cmdPlatform .segmented__btn").forEach(button => {
     const on = button.dataset.plat === state.scope.cmdPlatform; button.classList.toggle("is-on", on); button.setAttribute("aria-pressed", String(on));
   });
+  el("optPre").checked = state.scope.includePre;
+  el("optCurated").checked = state.scope.curatedOnly;
+  el("optNetwork").checked = state.scope.allowNetwork;
+  el("optAdmin").checked = state.scope.allowAdmin;
+  el("optHighRisk").checked = state.scope.allowHighRisk;
 }
 
 /* ============================================================
@@ -648,12 +730,13 @@ function selectActor(id) {
   updateStepper();
   updateActionBar();
   if (state.step === 0) goTo(1);
+  persistSession();
   // Smooth scroll the selected card into view when chosen via chip
   const card = document.querySelector(`.actorcard[data-id="${CSS.escape(id)}"]`);
   if (card && state.step === 1) card.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function loadWorkflowThen(cb) {
+async function loadWorkflowThen(cb, { keepScope = false } = {}) {
   showLoader(`Pulling ${state.selectedActor.name}'s TTPs from MITRE ATT&CK…`);
   try {
     const data = await apiJson(`/api/workflow/${encodeURIComponent(state.selectedId)}?${domainQuery()}`);
@@ -661,7 +744,7 @@ async function loadWorkflowThen(cb) {
     state.workflow = data;
     state.dataVersion = data.metadata.data_version || state.dataVersion;
     TACTIC_ORDER = data.kill_chain.map(item => item.tactic);
-    state.scope.tactics = new Set(TACTIC_ORDER);
+    if (!keepScope) state.scope.tactics = new Set(TACTIC_ORDER);
     loadRunState();
     cb && cb();
   } catch (e) { toast(e.message || "Failed to build workflow"); }
@@ -743,6 +826,7 @@ function renderScope() {
     </div>
     <div class="sumrow" style="border:0"><span class="k" style="color:var(--success)">${p.curated} curated</span><span class="k" style="color:var(--warn)">${p.fallback} fallback</span></div>`;
   updateActionBar();
+  persistSession();
 }
 function buildTacticGrid() {
   const grid = el("tacticGrid");
@@ -808,7 +892,7 @@ async function sha256Hex(value) {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 function toast(msg, kind = "success") { const t = el("toast"); t.innerHTML = `<svg class="icon"><use href="#${kind === "error" ? "i-x" : "i-check"}"/></svg>${escapeHtml(msg)}`; t.hidden = false; requestAnimationFrame(() => t.classList.add("is-show")); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("is-show"); t.hidden = true; }, 2600); }
-function showLoader(txt, detail = "") { el("loaderText").textContent = txt || "Working…"; el("loaderDetail").textContent = detail; el("loader").hidden = false; }
+function showLoader(txt, detail = "") { el("loaderText").textContent = txt || "Working"; el("loaderDetail").textContent = detail; el("loader").hidden = false; }
 function hideLoader() { el("loader").hidden = true; }
 function updateRecordContext() {
   state.recordContext.operator = el("recordOperator").value.trim();
@@ -837,13 +921,139 @@ function loadRunState() {
   catch { state.run = new Set(); state.records = {}; }
 }
 let runStateWarned = false;
+function sessionSnapshot() {
+  if (!state.selectedId || state.step < 1) return null;
+  return {
+    selectedId: state.selectedId,
+    selectedActor: state.selectedActor,
+    domains: state.domains,
+    dataVersion: state.dataVersion,
+    step: state.step,
+    stage: state.stage,
+    maxStep: state.maxStep,
+    scope: {
+      cmdPlatform: state.scope.cmdPlatform,
+      tactics: [...state.scope.tactics],
+      includePre: state.scope.includePre,
+      curatedOnly: state.scope.curatedOnly,
+      allowNetwork: state.scope.allowNetwork,
+      allowAdmin: state.scope.allowAdmin,
+      allowHighRisk: state.scope.allowHighRisk,
+    },
+    typeFilter: state.typeFilter,
+    sort: state.sort,
+  };
+}
+function readSession() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    if (!plainObject(stored) || !nonEmptyString(stored.selectedId) || !plainObject(stored.selectedActor)) return null;
+    if (!nonEmptyString(stored.selectedActor.name) || !nonEmptyString(stored.selectedActor.attack_id)) return null;
+    return stored;
+  } catch { return null; }
+}
+function persistSession() {
+  try {
+    const snapshot = sessionSnapshot();
+    if (!snapshot) return;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
+  } catch { /* run-state saver already warns when storage is unavailable */ }
+}
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+  renderWelcomeActions();
+}
+function renderWelcomeActions() {
+  const button = el("resumeSessionBtn");
+  if (!button) return;
+  const session = readSession();
+  if (!session) { button.hidden = true; return; }
+  button.hidden = false;
+  button.textContent = `Resume ${session.selectedActor.name} plan`;
+}
+function restoreScopeFromSession(session) {
+  const scope = session.scope || {};
+  state.scope.cmdPlatform = ["windows", "linux", "macos"].includes(scope.cmdPlatform) ? scope.cmdPlatform : "windows";
+  state.scope.includePre = Boolean(scope.includePre);
+  state.scope.curatedOnly = Boolean(scope.curatedOnly);
+  state.scope.allowNetwork = Boolean(scope.allowNetwork);
+  state.scope.allowAdmin = Boolean(scope.allowAdmin);
+  state.scope.allowHighRisk = Boolean(scope.allowHighRisk);
+  const allowed = new Set(killChainOrder());
+  const saved = Array.isArray(scope.tactics) ? scope.tactics.filter(item => allowed.has(item)) : [...allowed];
+  state.scope.tactics = new Set(saved.length ? saved : allowed);
+  syncStaticScopeControls();
+}
+async function resumeSession() {
+  const session = readSession();
+  if (!session) { toast("No saved plan was found in this browser", "error"); return; }
+  state.domains = Array.isArray(session.domains) && session.domains.length ? session.domains : ["enterprise"];
+  state.typeFilter = session.typeFilter || "all";
+  state.sort = session.sort || "name";
+  state.stage = Number.isInteger(session.stage) ? session.stage : 0;
+  state.maxStep = Number.isInteger(session.maxStep) ? session.maxStep : 1;
+  restoreScopeFromSession(session);
+  $$("#typeFilter .segmented__btn").forEach(button => {
+    const on = button.dataset.type === state.typeFilter;
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  el("sortSel").value = state.sort;
+  showLoader(`Resuming ${session.selectedActor.name}…`, "Reloading ATT&CK data and restoring this browser's evidence.");
+  try {
+    await loadActors(true);
+    const actor = state.actors.find(item => item.stix_id === session.selectedId);
+    if (!actor) {
+      clearSession();
+      throw new Error("The saved actor is not in the current ATT&CK data");
+    }
+    state.selectedId = actor.stix_id;
+    state.selectedActor = actor;
+    const targetStep = Math.min(Math.max(session.step || 1, 1), 4);
+    if (targetStep >= 2) {
+      await loadWorkflowThen(() => {
+        restoreScopeFromSession(session);
+        loadRunState();
+        state.maxStep = Math.max(session.maxStep || targetStep, targetStep);
+        state.stage = session.stage || 0;
+        goTo(targetStep);
+        if (session.dataVersion && session.dataVersion !== state.dataVersion) {
+          toast("ATT&CK data version changed since this plan was saved; review commands before use");
+        } else {
+          toast(`Resumed ${actor.name}`);
+        }
+      }, { keepScope: true });
+    } else {
+      applyFilter();
+      goTo(1);
+      toast(`Resumed ${actor.name}`);
+    }
+  } catch (error) {
+    toast(error.message || "The saved plan could not be resumed", "error");
+  } finally {
+    hideLoader();
+  }
+}
+function markSaveStatus(kind) {
+  const chip = el("saveStatus");
+  if (!chip) return;
+  chip.classList.toggle("is-saving", kind === "saving");
+  chip.classList.toggle("is-error", kind === "error");
+  if (kind === "error") chip.textContent = "Not saved in this browser";
+  else if (kind === "saving") chip.textContent = "Saving";
+  else chip.textContent = "Saved in this browser";
+}
 function saveRunState() {
+  persistSession();
+  markSaveStatus("saving");
   try {
     localStorage.setItem(runKey(), JSON.stringify({ records: state.records, context: state.recordContext }));
+    markSaveStatus("saved");
   } catch {
     // Private-browsing modes and full quotas make local storage unavailable.
     // Saving is best-effort, but the operator must know their evidence is not
     // being retained rather than discover it after closing the tab.
+    markSaveStatus("error");
     if (runStateWarned) return;
     runStateWarned = true;
     toast("Progress can't be saved in this browser — export the plan to keep your records", "error");
@@ -865,14 +1075,16 @@ function renderRail() {
   const rail = el("stageRail");
   rail.innerHTML = p.stages.map((s, i) => {
     const runnable = s.techniques.filter(t => !t._cmd.unsupported);
-    const done = runnable.length > 0 && runnable.every(t => state.run.has(t.attack_id));
+    const doneCount = runnable.filter(t => state.run.has(t.attack_id)).length;
+    const done = runnable.length > 0 && doneCount === runnable.length;
     return `<button type="button" class="railitem ${i === state.stage ? "is-active" : ""}" data-i="${i}" aria-current="${i === state.stage ? "step" : "false"}">
       <span class="railitem__num" style="background:${tacticColor(s.tactic)}">${i + 1}</span>
       <span class="railitem__name">${escapeHtml(s.title)}</span>
-      ${done ? '<span class="railitem__done"><svg class="icon"><use href="#i-check"/></svg></span>' : `<span class="railitem__meta">${s.techniques.length}</span>`}
+      <span class="railitem__meta">${runnable.length ? `${doneCount}/${runnable.length}` : s.techniques.length}</span>
+      ${done ? '<span class="railitem__done"><svg class="icon"><use href="#i-check"/></svg></span>' : ""}
     </button>`;
   }).join("");
-  $$(".railitem", rail).forEach(b => b.addEventListener("click", () => { state.stage = +b.dataset.i; renderRail(); renderStage(); }));
+  $$(".railitem", rail).forEach(b => b.addEventListener("click", () => { state.stage = +b.dataset.i; state.focusedTech = 0; renderRail(); renderStage(); }));
 }
 function renderStage() {
   const p = filteredPlan();
@@ -886,6 +1098,7 @@ function renderStage() {
       <h3>${escapeHtml(s.title)}</h3>
     </div>
     <p class="stagepanel__desc">${escapeHtml(TACTIC_META[s.tactic] || "")} · ${s.techniques.length} technique${s.techniques.length !== 1 ? "s" : ""}</p>
+    <p class="kbdhint">j / k move · c copy command · record command result and detection separately</p>
     <div class="techlist">${s.techniques.map(renderTech).join("")}</div>
     <div class="stagenav">
       <button type="button" class="btn btn--ghost" ${state.stage === 0 ? "disabled" : ""} id="prevStage"><svg class="icon"><use href="#i-arrow-l"/></svg> Previous stage</button>
@@ -894,9 +1107,14 @@ function renderStage() {
 
   $$(".techcard__check", body).forEach(c => c.addEventListener("click", () => toggleRun(c.dataset.id)));
   $$(".copybtn", body).forEach(b => b.addEventListener("click", () => copyCmd(b)));
-  $$(".evidence__outcome", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { outcome: control.value })));
-  $$(".evidence__note", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { notes: control.value.trim() })));
-  $$(".evidence__cleanup", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { cleanup_completed: control.checked })));
+  $$(".techcard", body).forEach((card, index) => card.addEventListener("click", () => setPlanFocus(index)));
+  $$(".evidence__outcome", body).forEach(control => control.addEventListener("change", () => {
+    updateEvidence(control.dataset.id, { outcome: control.value }, false);
+    syncCardRunState(control.dataset.id);
+  }));
+  $$(".evidence__detection", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { detection_result: control.value }, false)));
+  $$(".evidence__note", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { notes: control.value.trim() }, false)));
+  $$(".evidence__cleanup", body).forEach(control => control.addEventListener("change", () => updateEvidence(control.dataset.id, { cleanup_completed: control.checked }, false)));
   $$(".evidence__field", body).forEach(control => control.addEventListener("change", () => {
     let value = control.value.trim();
     if (control.dataset.key === "exit_code") value = value === "" ? undefined : Number(value);
@@ -912,8 +1130,9 @@ function renderStage() {
     await importExerciseReceipt(button.dataset.id, receipt);
   }));
   const prev = el("prevStage"), next = el("nextStage");
-  if (prev) prev.addEventListener("click", () => { if (state.stage > 0) { state.stage--; renderRail(); renderStage(); scrollPlanTop(); } });
-  if (next) next.addEventListener("click", () => { if (state.stage < p.stages.length - 1) { state.stage++; renderRail(); renderStage(); scrollPlanTop(); } });
+  if (prev) prev.addEventListener("click", () => { if (state.stage > 0) { state.stage--; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
+  if (next) next.addEventListener("click", () => { if (state.stage < p.stages.length - 1) { state.stage++; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
+  setPlanFocus(Math.min(state.focusedTech, Math.max(0, s.techniques.length - 1)));
 }
 function scrollPlanTop() { el("stage").scrollTo({ top: 0, behavior: "smooth" }); }
 
@@ -923,6 +1142,7 @@ function renderTech(t) {
   const record = state.records[t.attack_id] || {};
   const unsupported = Boolean(c.unsupported);
   const source = unsupported ? "unsupported" : t.command_source;
+  const fidelity = fidelityMeta(c, unsupported);
   const effects = (c.side_effects || []).map(titleCase).join(", ");
   const risk = c.risk || "unknown";
   const tid = escapeHtml(t.attack_id);
@@ -936,20 +1156,26 @@ function renderTech(t) {
           <span class="techcard__name">${escapeHtml(t.name)}</span>
           ${t.is_subtechnique ? '<span class="techcard__sub">sub-technique</span>' : ""}
         </div>
-        <p class="techcard__desc">${escapeHtml(cleanDescription(t.description))}</p>
         ${(t.platforms || []).length ? `<div class="techcard__plats">${t.platforms.slice(0, 5).map(p => `<span class="plat">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
       </div>
     </div>
     <div class="command ${unsupported ? "cmd--unsupported" : ""}">
       <div class="command__bar">
         <span class="command__label">Lab command</span>
-        <span class="srcbadge srcbadge--${source}">${source}</span>
+        <span class="srcbadge srcbadge--${fidelity.cls}">${fidelity.label}</span>
+        ${source === "fallback" ? '<span class="srcbadge srcbadge--fallback">fallback</span>' : ""}
       </div>
       ${unsupported ? "" : `<div class="safety safety--${risk}">
         <div class="safety__badges"><span class="riskbadge riskbadge--${risk}">${escapeHtml(risk)} risk</span>${c.requires_admin ? '<span class="riskbadge">admin</span>' : ''}${c.requires_network ? '<span class="riskbadge">network</span>' : ''}${c.cleanup_required ? '<span class="riskbadge">cleanup required</span>' : ''}</div>
         <div><b>Effects:</b> ${escapeHtml(effects || "Not classified")} · <b>Expected:</b> ${escapeHtml(c.expected_telemetry || "Verify relevant telemetry")}</div>
+        ${c.fidelity === "bounded_synthetic" ? `<div>Bounded synthetic exercise — a safe analogue, not the full ATT&amp;CK behaviour. The JSON receipt is self-reported; correlate it with endpoint or SIEM telemetry.</div>` : ""}
+        ${c.fidelity === "lab_proxy" ? `<div>Lab proxy — locates, echoes, or approximates related telemetry rather than reproducing the full technique.</div>` : ""}
         ${c.telemetry_acceptance ? `<div><b>Independent pass gate:</b> marker + ${c.telemetry_acceptance.minimum_activity_events} ${escapeHtml(c.telemetry_acceptance.activity_event_types.join(" or "))} event(s) on the same host and receipt time window.</div>` : ""}
         ${(c.network_targets || []).length ? `<div><b>Network targets:</b> ${escapeHtml(c.network_targets.join(", "))}</div>` : ""}
+        ${(c.prerequisites || []).length ? `<div><b>Prerequisites:</b> ${escapeHtml(c.prerequisites.join("; "))}</div>` : ""}
+        ${c.expected_output ? `<div><b>Expected output:</b> ${escapeHtml(c.expected_output)}</div>` : ""}
+        ${c.timeout_seconds ? `<div><b>Timeout:</b> ${c.timeout_seconds}s</div>` : ""}
+        ${c.rollback ? `<div><b>Rollback:</b> ${escapeHtml(c.rollback)}</div>` : ""}
       </div>`}
       <div class="cmd">
         <div class="cmd__head">
@@ -961,12 +1187,24 @@ function renderTech(t) {
         ${c.cleanup ? `<p class="cmd__cleanup"><b>cleanup</b> <code>${escapeHtml(c.cleanup)}</code> <button type="button" class="copybtn" data-cmd="${escapeHtml(c.cleanup)}" data-risk="low" data-ack="false" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-copy"/></svg> Copy cleanup</button></p>` : ""}
       </div>
       ${unsupported ? "" : `<div class="evidence">
-        <select class="evidence__outcome" data-id="${t.attack_id}" aria-label="Outcome for ${t.attack_id}">
-          ${[["not_run","Not run"],["passed","Passed"],["failed","Failed"],["skipped","Skipped"]].map(([value,label]) => `<option value="${value}" ${record.outcome === value || (!record.outcome && value === "not_run") ? "selected" : ""}>${label}</option>`).join("")}
-        </select>
+        <label class="evidence__pair">Command
+          <select class="evidence__outcome" data-id="${t.attack_id}" aria-label="Outcome for ${t.attack_id}">
+            ${[["not_run","Not run"],["passed","Ran"],["failed","Failed"],["skipped","Skipped"]].map(([value,label]) => `<option value="${value}" ${record.outcome === value || (!record.outcome && value === "not_run") ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </label>
+        <label class="evidence__pair">Detection
+          <select class="evidence__detection" data-id="${t.attack_id}" aria-label="Detection for ${t.attack_id}">
+            ${DETECTION_RESULTS.map(value => `<option value="${value}" ${(record.detection_result || "not_assessed") === value ? "selected" : ""}>${DETECTION_LABELS[value]}</option>`).join("")}
+          </select>
+        </label>
         <input class="evidence__note" data-id="${t.attack_id}" maxlength="500" value="${escapeHtml(record.notes || "")}" placeholder="Evidence or observation (no secrets)" aria-label="Evidence note for ${t.attack_id}" />
         <label class="cleanupcheck"><input type="checkbox" class="evidence__cleanup" data-id="${t.attack_id}" ${record.cleanup_completed ? "checked" : ""} ${c.cleanup ? "" : "disabled"}/> cleanup verified</label>
       </div>
+      ${(t.description || (t.data_sources || []).length || t.detection) ? `<details class="techcard__more"><summary>ATT&amp;CK context</summary>
+        ${t.description ? `<p class="techcard__desc">${escapeHtml(cleanDescription(t.description))}</p>` : ""}
+        ${(t.data_sources || []).length ? `<div class="techcard__plats">${t.data_sources.slice(0, 8).map(item => `<span class="plat plat--source">${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+        ${t.detection ? `<p class="techcard__detect"><b>ATT&amp;CK detection:</b> ${escapeHtml(cleanDescription(t.detection))}</p>` : ""}
+      </details>` : ""}
       <details class="evidenceproof">
         <summary>Execution proof ${record.receipt_verified ? '<span class="proofbadge">receipt digest verified (self-reported)</span>' : ""}</summary>
         <p>A receipt proves this runner produced the recorded events. Correlate its run ID and timestamps with endpoint or SIEM telemetry for independent proof.</p>
@@ -985,19 +1223,80 @@ function renderTech(t) {
     </div>
   </div>`;
 }
+function planCard(tid) {
+  return document.querySelector(`.techcard[data-tid="${CSS.escape(tid)}"]`);
+}
+function syncCardRunState(tid) {
+  const card = planCard(tid);
+  if (!card) return;
+  const run = state.run.has(tid);
+  const record = state.records[tid] || {};
+  card.classList.toggle("is-run", run);
+  const check = card.querySelector(".techcard__check");
+  if (check) check.setAttribute("aria-pressed", String(run));
+  const outcome = card.querySelector(".evidence__outcome");
+  if (outcome) outcome.value = record.outcome || "not_run";
+}
+function syncCardEvidence(tid) {
+  const card = planCard(tid);
+  if (!card) return;
+  syncCardRunState(tid);
+  const record = state.records[tid] || {};
+  const detection = card.querySelector(".evidence__detection");
+  if (detection) detection.value = record.detection_result || "not_assessed";
+  const notes = card.querySelector(".evidence__note");
+  if (notes && document.activeElement !== notes) notes.value = record.notes || "";
+  const cleanup = card.querySelector(".evidence__cleanup");
+  if (cleanup) cleanup.checked = Boolean(record.cleanup_completed);
+  card.querySelectorAll(".evidence__field").forEach(field => {
+    if (document.activeElement === field) return;
+    const key = field.dataset.key;
+    let value = record[key];
+    if (key === "telemetry_refs") value = Array.isArray(value) ? value.join("\n") : "";
+    else if (value === undefined || value === null) value = "";
+    field.value = value;
+  });
+  const source = card.querySelector(".evidence__source");
+  if (source && record.evidence_source) source.value = record.evidence_source;
+  const summary = card.querySelector(".evidenceproof > summary");
+  if (summary && record.receipt_verified && !summary.querySelector(".proofbadge")) {
+    const badge = document.createElement("span");
+    badge.className = "proofbadge";
+    badge.textContent = "receipt digest verified (self-reported)";
+    summary.appendChild(badge);
+  }
+}
+function setPlanFocus(index) {
+  const cards = $$(".techcard", el("stageBody"));
+  if (!cards.length) { state.focusedTech = 0; return; }
+  state.focusedTech = Math.max(0, Math.min(index, cards.length - 1));
+  cards.forEach((card, i) => card.classList.toggle("is-focused", i === state.focusedTech));
+}
+function handlePlanKeys(e) {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (el("confirmDialog")?.open || el("authDialog")?.open) return;
+  if (e.target.matches("input,select,textarea,a,[contenteditable]")) return;
+  const cards = $$(".techcard", el("stageBody"));
+  if (!cards.length) return;
+  if (e.key === "j" || e.key === "J") {
+    e.preventDefault();
+    setPlanFocus(state.focusedTech + 1);
+    cards[state.focusedTech]?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "k" || e.key === "K") {
+    e.preventDefault();
+    setPlanFocus(state.focusedTech - 1);
+    cards[state.focusedTech]?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "c" || e.key === "C") {
+    const button = cards[state.focusedTech]?.querySelector(".cmd__head .copybtn:not(:disabled)");
+    if (button) { e.preventDefault(); copyCmd(button); }
+  }
+}
 function toggleRun(tid) {
   if (!filteredPlan().runnableIds.has(tid)) return;
-  const outcome = state.run.has(tid) ? "not_run" : "passed";
-  updateEvidence(tid, { outcome }, false);
-  saveRunState();
-  const card = document.querySelector(`.techcard[data-tid="${CSS.escape(tid)}"]`);
-  if (card) card.classList.toggle("is-run", state.run.has(tid));
-  const control = card && card.querySelector(".techcard__check");
-  if (control) control.setAttribute("aria-pressed", String(state.run.has(tid)));
-  updateProgress();
-  renderRail();
+  updateEvidence(tid, { outcome: state.run.has(tid) ? "not_run" : "passed" }, false);
+  syncCardRunState(tid);
 }
-function updateEvidence(tid, changes, rerender = true) {
+function updateEvidence(tid, changes, rerender = false) {
   const previous = state.records[tid] || {};
   const next = { ...previous, ...changes, updated_at: new Date().toISOString(), operator: state.recordContext.operator, target: state.recordContext.target };
   Object.entries(changes).forEach(([key, value]) => { if (value === undefined) delete next[key]; });
@@ -1005,6 +1304,7 @@ function updateEvidence(tid, changes, rerender = true) {
     next.outcome = "not_run";
     state.run.delete(tid);
   } else state.run.add(tid);
+  if (!DETECTION_RESULTS.includes(next.detection_result)) next.detection_result = "not_assessed";
   state.records[tid] = next;
   saveRunState();
   updateProgress();
@@ -1032,14 +1332,27 @@ async function importExerciseReceipt(tid, source) {
       receipt_sha256: claimed,
       receipt_verified: true,
       evidence_source: "exercise_receipt",
-    });
+    }, false);
+    syncCardEvidence(tid);
     toast(`Verified and imported ${tid} receipt`);
   } catch (error) {
     toast(error.message || "Receipt import failed", "error");
   }
 }
-function copyCmd(btn) {
-  if (btn.dataset.ack === "true" && !window.confirm(`This is a ${btn.dataset.risk} risk lab command. Review prerequisites, side effects, and cleanup before copying. Continue?`)) return;
+function fidelityMeta(command, unsupported) {
+  if (unsupported) return { cls: "unsupported", label: "unsupported" };
+  if (command.fidelity === "bounded_synthetic") return { cls: "bounded", label: "bounded synthetic" };
+  if (command.fidelity === "lab_proxy") return { cls: "proxy", label: "lab proxy" };
+  return { cls: "direct", label: "direct" };
+}
+async function copyCmd(btn) {
+  if (btn.dataset.ack === "true" && !await confirmAction({
+    title: `Copy this ${btn.dataset.risk} risk lab command?`,
+    description: "Review prerequisites, side effects, and cleanup before copying. AdversaryFlow does not execute the command.",
+    detail: btn.dataset.cmd,
+    acceptLabel: "Copy command",
+    danger: btn.dataset.risk === "high",
+  })) return;
   const originalLabel = btn.innerHTML;
   navigator.clipboard.writeText(btn.dataset.cmd).then(() => {
     btn.classList.add("is-copied");
@@ -1084,8 +1397,11 @@ function renderExport() {
   el("executionKitTitle").textContent = supported
     ? `Download ${titleCase(state.scope.cmdPlatform)} execution kit`
     : "Execution kits currently support Windows and Linux";
+  const hasBounded = p.stages.some(stage => stage.techniques.some(item => item._cmd.fidelity === "bounded_synthetic" && !item._cmd.unsupported));
   el("executionKitDescription").textContent = supported
-    ? `One ZIP containing the operator CSV and a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner. The runner requires approval before every step and writes its own evidence report.`
+    ? (hasBounded
+      ? `One ZIP containing the operator CSV, a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner, and a portable exercise script. Direct steps need no extra runtime; bounded synthetic steps need Python 3.10+ beside the kit.`
+      : `One ZIP containing the operator CSV and a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner. Direct commands need no AdversaryFlow installation, Python, or network on the destination.`)
     : "Choose Windows or Linux in Scope to generate a portable operator handoff.";
 }
 
@@ -1158,6 +1474,8 @@ function buildExportObj(p) {
       id: t.attack_id, name: t.name, url: t.url, platforms: t.platforms, command_source: t.command_source,
       supported: !t._cmd.unsupported, command: t._cmd, run: !t._cmd.unsupported && state.run.has(t.attack_id),
       execution: state.records[t.attack_id] || { outcome: "not_run" },
+      data_sources: Array.isArray(t.data_sources) ? t.data_sources : [],
+      detection: typeof t.detection === "string" ? t.detection : "",
     })) })),
   };
 }
@@ -1176,15 +1494,19 @@ function toMarkdown(p) {
       md += `### ${t.attack_id} — ${t.name}${state.run.has(t.attack_id) ? " ✅" : ""}\n\n`;
       const record = state.records[t.attack_id] || { outcome: "not_run" };
       md += `**Outcome:** ${record.outcome}${record.updated_at ? ` · ${record.updated_at}` : ""}${record.notes ? ` · ${record.notes}` : ""}\n\n`;
+      md += `**Detection:** ${record.detection_result || "not_assessed"}\n\n`;
       if (record.run_id) md += `**Execution proof:** run ID \`${record.run_id}\`${record.started_at ? ` · started ${record.started_at}` : ""}${record.completed_at ? ` · completed ${record.completed_at}` : ""}${record.exit_code !== undefined ? ` · exit ${record.exit_code}` : ""}\n\n`;
       if (record.receipt_sha256) md += `**Receipt SHA-256:** \`${record.receipt_sha256}\` (${record.receipt_verified ? "digest verified; self-reported" : "not verified"})\n\n`;
       if (record.stdout_sha256 || record.stderr_sha256) md += `**Captured output hashes:** stdout \`${record.stdout_sha256 || "not recorded"}\` · stderr \`${record.stderr_sha256 || "not recorded"}\`\n\n`;
       if ((record.telemetry_refs || []).length) md += `**Independent telemetry:** ${record.telemetry_refs.join(", ")}\n\n`;
+      if ((t.data_sources || []).length) md += `**ATT&CK data sources:** ${t.data_sources.join(", ")}\n\n`;
+      if (t.detection) md += `**ATT&CK detection:** ${stripMd(t.detection)}\n\n`;
       if (t.description) md += `${stripMd(t.description)}\n\n`;
       if (c.unsupported) {
         md += `**Unsupported on ${titleCase(state.scope.cmdPlatform)}.** ${c.note}\n\n`;
         return;
       }
+      md += `**Fidelity:** ${c.fidelity === "bounded_synthetic" ? "bounded synthetic" : c.fidelity === "lab_proxy" ? "lab proxy" : "direct"}\n\n`;
       md += `**[${c.platform}] lab command:**\n\n\`\`\`\n${c.command}\n\`\`\`\n`;
       if (c.note) md += `_${c.note}_\n`;
       if (c.cleanup) md += `_cleanup: \`${c.cleanup}\`_\n`;
@@ -1206,8 +1528,10 @@ function toRunbook(p) {
     s.techniques.forEach(t => {
       const c = t._cmd;
       out += `\n${comment} ${t.attack_id} ${t.name} [${c.platform}]${state.run.has(t.attack_id) ? " (run)" : ""}\n`;
+      out += `${comment} Fidelity: ${c.fidelity === "bounded_synthetic" ? "bounded synthetic" : c.fidelity === "lab_proxy" ? "lab proxy" : "direct"}\n`;
       const record = state.records[t.attack_id] || { outcome: "not_run" };
       out += `${comment} Outcome: ${record.outcome}${record.updated_at ? ` at ${record.updated_at}` : ""}\n`;
+      out += `${comment} Detection: ${record.detection_result || "not_assessed"}\n`;
       if (record.notes) out += `${comment} Evidence: ${runbookSafe(record.notes)}\n`;
       if (record.run_id) out += `${comment} Run ID: ${runbookSafe(record.run_id)}\n`;
       if (record.receipt_sha256) out += `${comment} Receipt SHA-256: ${runbookSafe(record.receipt_sha256)} (${record.receipt_verified ? "digest verified; self-reported" : "not verified"})\n`;

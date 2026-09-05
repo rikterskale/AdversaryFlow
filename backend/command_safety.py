@@ -26,6 +26,33 @@ _HIGH_RISK_MARKERS = (
     "reg save hklm\\sam", "net user adversaryflow", "sc.exe create", "lockworkstation",
     "schtasks /create", "crontab -", "hklm\\security", "sysvol",
 )
+_PROXY_NOTE_MARKERS = (
+    "bounded lab simulation",
+    "lab proxy",
+    "proxy for",
+    "proxy —",
+    "proxy -",
+    "no real exploit",
+    "no real document",
+    "no memory is read",
+    "no authentication attempts",
+    "no hooks installed",
+    "no data leaves",
+    "no data sent",
+    "without dumping",
+    "without reading it",
+    "without a malicious",
+    "system unchanged",
+)
+_PROXY_COMMAND_MARKERS = (
+    "echo adversaryflow",
+    "write-host 'adversaryflow",
+    "print('adversaryflow",
+)
+FIDELITY_DIRECT = "direct"
+FIDELITY_BOUNDED = "bounded_synthetic"
+FIDELITY_PROXY = "lab_proxy"
+FIDELITY_VALUES = (FIDELITY_DIRECT, FIDELITY_BOUNDED, FIDELITY_PROXY)
 
 
 def _network_targets(command: str) -> List[str]:
@@ -33,6 +60,23 @@ def _network_targets(command: str) -> List[str]:
     if "example.com" in command.lower() and "example.com" not in targets:
         targets.append("example.com")
     return list(dict.fromkeys(targets))
+
+
+def _infer_fidelity(command: str, note: str, overrides: Dict[str, Any]) -> str:
+    """Classify how faithfully a catalog record reproduces the ATT&CK technique."""
+    if overrides.get("exercise_kind") == "technique_relevant_bounded":
+        return FIDELITY_BOUNDED
+    supplied = overrides.get("fidelity")
+    if supplied in FIDELITY_VALUES:
+        return str(supplied)
+    text = f"{command} {note}".lower()
+    if "technique-relevant bounded exercise" in text:
+        return FIDELITY_BOUNDED
+    if any(marker in text for marker in _PROXY_NOTE_MARKERS):
+        return FIDELITY_PROXY
+    if any(marker in command.lower() for marker in _PROXY_COMMAND_MARKERS):
+        return FIDELITY_PROXY
+    return FIDELITY_DIRECT
 
 
 def command_record(
@@ -81,8 +125,13 @@ def command_record(
         "rollback": cleanup,
         "cleanup_required": bool(cleanup),
         "acknowledgment_required": risk in {"medium", "high"},
+        "fidelity": _infer_fidelity(command, note, overrides),
     }
     record.update(overrides)
+    if record.get("exercise_kind") == "technique_relevant_bounded":
+        record["fidelity"] = FIDELITY_BOUNDED
+    elif record.get("fidelity") not in FIDELITY_VALUES:
+        record["fidelity"] = _infer_fidelity(command, note, {})
     return record
 
 

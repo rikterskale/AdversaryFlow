@@ -42,6 +42,8 @@ function technique(id, name, tactic, commands) {
     stix_id: `attack-pattern--${id}`, attack_id: id, name,
     description: "Fixture technique", tactics: [tactic], platforms: ["Windows"],
     is_subtechnique: id.includes("."), url: `https://attack.mitre.org/techniques/${id}/`,
+    data_sources: ["Command: Command Execution"],
+    detection: "Monitor script-block logging for unexpected PowerShell.",
     commands, command_source: "curated",
   };
 }
@@ -118,7 +120,7 @@ test("J10 — the welcome screen invites the operator to start", async ({ page }
 test("J11 — the header reports how much ATT&CK data loaded", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
-  await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors · Enterprise$/);
+  await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors? · Enterprise$/);
 });
 
 test("J13 — selecting an actor enables the next step", async ({ page }) => {
@@ -225,6 +227,11 @@ test("J23 — every supported command shows its safety classification", async ({
   await expect(page.locator(".safety")).toContainText("Effects:");
   await expect(page.locator(".safety")).toContainText("Expected:");
   await expect(page.locator(".safety")).toContainText("cleanup required");
+  await expect(page.locator(".safety")).toContainText("Prerequisites:");
+  await expect(page.locator(".safety")).toContainText("Rollback:");
+  await page.getByText("ATT&CK context").click();
+  await expect(page.locator(".techcard__detect")).toContainText("ATT&CK detection");
+  await expect(page.locator(".plat--source")).toContainText("Command: Command Execution");
 });
 
 test("J24 — the operator can walk stages forwards and backwards", async ({ page }) => {
@@ -243,13 +250,14 @@ test("J24 — the operator can walk stages forwards and backwards", async ({ pag
 });
 
 test("J25 — copying a risky command requires acknowledgement", async ({ page }) => {
-  const dialogs = [];
-  page.on("dialog", d => { dialogs.push(d.message()); d.accept(); });
   await toScope(page, { commands: [highRisk] });
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Copy command/ }).click();
-  expect(dialogs.join("")).toContain("This is a high risk lab command.");
+  const dialog = page.getByRole("dialog", { name: /Copy this high risk lab command/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
+  await dialog.getByRole("button", { name: "Copy command" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText()))
     .toBe("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
@@ -260,11 +268,16 @@ test("J26 — recording an outcome advances the progress indicator", async ({ pa
   await page.getByRole("button", { name: /Build plan/ }).click();
   await expect(page.locator("#progressCount")).toHaveText("0 / 3");
   await expect(page.locator("#progressPct")).toHaveText("0%");
-  await page.getByLabel("Outcome for T1059.001").selectOption("passed");
+  await expect(page.locator("#saveStatus")).toHaveText("Saved in this browser");
   await page.getByLabel("Evidence note for T1059.001").fill("Script block logging fired");
+  await page.getByLabel("Outcome for T1059.001").selectOption("passed");
+  await page.getByLabel("Detection for T1059.001").selectOption("alerted");
+  await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Script block logging fired");
+  await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
   await expect(page.locator("#progressCount")).toHaveText("1 / 3");
   await expect(page.locator("#progressPct")).toHaveText("33%");
   await expect(page.locator("#actionbarCtx")).toContainText("1 / 3 runnable techniques marked run");
+  await expect(page.locator("#saveStatus")).toHaveText("Saved in this browser");
 });
 
 test("J27 — unavailable local storage is reported, not swallowed", async ({ page }) => {
@@ -289,7 +302,7 @@ test("J28 — the export screen summarises the finished plan", async ({ page }) 
   await expect(stats.nth(1)).toContainText("Stages");
   await expect(stats.nth(2)).toContainText("Runnable tests");
   await expect(stats.nth(3)).toContainText("Marked run");
-  await expect(page.locator("#actionbarCtx")).toHaveText("Plan complete ✓");
+  await expect(page.locator("#actionbarCtx")).toHaveText("Plan complete");
 });
 
 async function exportAndRead(page, name) {
@@ -313,6 +326,7 @@ test("J29 — the JSON export validates against the published schema", async ({ 
   expect(validate(exported), JSON.stringify(validate.errors)).toBeTruthy();
   expect(exported.stages[0].techniques[0].execution.outcome).toBe("passed");
   expect(exported.stages[0].techniques[0].execution.notes).toBe("Observed");
+  expect(exported.stages[0].techniques[0].execution.detection_result).toBe("not_assessed");
 });
 
 test("J30 — the Markdown export is a readable report", async ({ page }) => {
@@ -325,6 +339,7 @@ test("J30 — the Markdown export is a readable report", async ({ page }) => {
   expect(text).toContain("# AdversaryFlow — UAT Actor (G0001)");
   expect(text).toContain("### T1059.001 — PowerShell");
   expect(text).toContain("**Outcome:** failed");
+  expect(text).toContain("**Detection:** not_assessed");
   expect(text).toContain("whoami");
 });
 
@@ -337,6 +352,7 @@ test("J31 — the runbook export is a review-only commented artifact", async ({ 
   expect(text).toContain("REM AdversaryFlow runbook — UAT Actor (G0001)");
   expect(text).toContain("REM ===== 1. EXECUTION =====");
   expect(text).toContain("REM Outcome: not_run");
+  expect(text).toContain("REM Detection: not_assessed");
   expect(text).toContain("REM COMMAND: whoami");
   expect(text.split(/\r?\n/)).not.toContain("whoami");
 });
@@ -398,6 +414,7 @@ test("J36 — planning another actor resets the picker", async ({ page }) => {
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await page.getByRole("button", { name: /Plan another actor/ }).click();
+  await page.getByRole("dialog", { name: "Start a new plan?" }).getByRole("button", { name: "Start new plan" }).click();
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
 
   await expect(page.getByRole("button", { name: "Enterprise" })).toHaveAttribute("aria-pressed", "true");
@@ -414,6 +431,7 @@ test("J37 — a different actor starts with a clean execution record", async ({ 
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await page.getByRole("button", { name: /Plan another actor/ }).click();
+  await page.getByRole("dialog", { name: "Start a new plan?" }).getByRole("button", { name: "Start new plan" }).click();
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await page.getByRole("button", { name: /Second Actor/ }).click();
   await page.getByRole("button", { name: /^Continue/ }).click();
@@ -439,7 +457,7 @@ test("J38 — a failed setup is reported with a retry", async ({ page }) => {
   fail = false;
   await page.getByRole("button", { name: "Retry setup" }).click();
   await expect(page.getByRole("button", { name: /UAT Actor/ })).toBeVisible();
-  await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors · Enterprise$/);
+  await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors? · Enterprise$/);
 });
 
 /* Boundary inputs accepted or refused by the plan-import contract. Driven

@@ -5,6 +5,10 @@
 > limits, timeouts) it was measured against the checked-in code or the live
 > ATT&CK bundle, not estimated.
 
+If you are installing or running AdversaryFlow for the first time, use
+[Getting started](GETTING_STARTED.md). This page is the observed journey map
+behind that handbook.
+
 ---
 
 ## 1. Product overview
@@ -53,7 +57,7 @@ where you left off.
 |---|---|---|
 | **Detection engineer** — owns EDR/SIEM rules and needs evidence about a specific adversary | Review one actor's mapped exercises, run suitable commands in a lab, and record which detections fired | `./run.sh` → browser opens at `http://127.0.0.1:5000` |
 | **Purple-team lead** — plans and reports on a scheduled exercise | Scope an exercise to a platform and a set of kill-chain stages, then hand the team a runbook and keep an evidence record | Welcome screen → **Begin emulation plan** → **Export** |
-| **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume JSON plan** |
+| **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume saved plan** or **Resume JSON plan** |
 | **Automation / platform engineer** — feeds plans into other tooling | Pull the workflow as JSON without touching the UI | `curl http://127.0.0.1:5000/api/workflow/<stix_id>` |
 | **Lab operator** — runs the service for a team, or on an air-gapped host | Keep the service healthy, control where ATT&CK data comes from, and gate remote access | `adversaryflow doctor`, `cache-status`, `--offline`, `--allow-remote --api-token` |
 
@@ -126,9 +130,10 @@ before it is used. Subsequent launches reuse the disk cache for 7 days.
 
 **Observable result:** the heading *"Turn a threat actor into an end-to-end
 emulation plan"*, a **Begin emulation plan** button, a **Resume JSON plan**
-file picker, and the footer *"Built for disposable development labs.
-AdversaryFlow creates plans; it does not execute commands."* The header status
-chip turns green and reads `<count> actors · Enterprise`.
+button, and the footer *"Built for disposable development labs.
+AdversaryFlow creates plans; it does not execute commands."* If this browser
+already has an in-progress plan, **Resume saved plan** is also shown with the actor name.
+The header status chip turns green and reads `<count> actors · Enterprise`.
 
 ### Step 5 — Choose a threat actor
 
@@ -178,14 +183,18 @@ Each technique card shows:
   `sub-technique` tag where applicable;
 - a **safety block**: a risk badge (`low risk` / `medium risk` / `high risk`),
   plus `admin`, `network`, and `cleanup required` badges where they apply,
-  the classified **Effects**, the **Expected** telemetry, and any
-  **Network targets**;
-- the **Lab command** for the selected platform, a `curated` or `fallback`
-  source badge, an operational note, and any cleanup command;
-- an **evidence row** plus expandable **Execution proof**: outcome, note,
-  cleanup status, run ID, ISO timestamps, exit code, stdout/stderr hashes,
-  evidence source, and endpoint/SIEM references. Bounded exercise receipts can
-  be pasted, SHA-256 verified, and imported.
+  the classified **Effects**, the **Expected** telemetry, **Prerequisites**,
+  **Expected output**, **Timeout**, **Rollback**, and any **Network targets**;
+- the **Lab command** for the selected platform, a fidelity badge
+  (`direct`, `bounded synthetic`, or `lab proxy`), an operational note, and any cleanup command;
+- an **evidence row** with separate **Command** (Not run / Ran / Failed /
+  Skipped) and **Detection** (Not assessed / Alerted / Silent / Blocked /
+  Not instrumented) selects, a note, cleanup status, and expandable
+  **Execution proof** (run ID, ISO timestamps, exit code, stdout/stderr hashes,
+  evidence source, and endpoint/SIEM references). Bounded exercise receipts can
+  be pasted, SHA-256 verified, and imported without collapsing the card.
+  `j` / `k` move the focused card and `c` copies its command. A chip under the
+  progress ring reads **Saved in this browser**.
 
 The source badge `curated` means the technique ID has a keyed catalog record;
 it does not certify full ATT&CK-behaviour reproduction. Each bounded synthetic
@@ -200,10 +209,11 @@ editing; only endpoint or SIEM correlation independently proves execution.
 ### Step 8 — Copy a command and run it in your lab
 
 Click **Copy command**. Any command classified medium or high risk first
-raises a confirmation:
+raises an in-app confirmation that shows the command:
 
-> This is a high risk lab command. Review prerequisites, side effects, and
-> cleanup before copying. Continue?
+> Copy this high risk lab command?
+> Review prerequisites, side effects, and cleanup before copying.
+> AdversaryFlow does not execute the command.
 
 **Observable result:** the button flips to **Copied** and a toast reads
 *"Command copied to clipboard"*. You run the command yourself, in your own
@@ -211,13 +221,16 @@ disposable lab — AdversaryFlow never executes it.
 
 ### Step 9 — Record what happened
 
-Set the outcome, type an evidence note, and tick **cleanup verified**.
+Set the command result, set the detection result, type an evidence note, and
+tick **cleanup verified**. Changing those fields does not rebuild the stage or
+clear other evidence on the card.
 
 **Observable result:** the progress ring and the `N / M` counter update
-immediately, the stage rail marks completed stages with a check, and the state
-is written to browser local storage under a key derived from the actor, ATT&CK
-data version, domains, and command platform — so reopening the same plan
-restores it.
+immediately, the stage rail shows `done/runnable` counts (and a check when a
+stage is complete), the save chip stays on **Saved in this browser**, and the
+state is written to browser local storage under a key derived from the actor,
+ATT&CK data version, domains, and command platform. Reloading the tab offers
+**Resume saved plan** on the welcome screen, labelled with the actor name.
 
 ### Step 10 — Export
 
@@ -226,7 +239,7 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 
 | Card | File | Contents |
 |---|---|---|
-| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Integrity-bound CSV plus standalone PowerShell runner; Linux plans receive Bash. The destination needs no AdversaryFlow installation or network connection. |
+| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
 | **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json` |
 | **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
@@ -359,7 +372,7 @@ table directly.
 | J8 | Prepare data | `POST /api/bootstrap` with `X-AdversaryFlow-CSRF` | Starts the background loader | HTTP 200 or 202; a later `GET /api/bootstrap` reports `runtime.ready = true` |
 | J9 | Report readiness | `GET /api/health` | Reports readiness and provenance | HTTP 200 with `"status":"ready"` once loaded; HTTP 503 with `"status":"degraded"` before |
 | J10 | Welcome screen | Open `http://127.0.0.1:5000` | Renders step 0 | Heading *Turn a threat actor…* visible and **Begin emulation plan** is enabled |
-| J11 | Data status | Wait for load | Status chip updates | `#dataStatus` matches `^\d+ actors · Enterprise$` |
+| J11 | Data status | Wait for load | Status chip updates | `#dataStatus` matches `^\d+ actors? · Enterprise$` |
 | J12 | List actors | `GET /api/actors` | Returns mapped actors | HTTP 200, `actors` length is 227, and every entry has `stix_id`, `attack_id`, `name`, `type`, `aliases`, `description`, `technique_count` |
 | J13 | Choose an actor | Click **Begin emulation plan**, then an actor card | Selects it | Footer reads `Selected: <name>` and **Continue** is enabled |
 | J14 | Search | Type `APT29` in the search box | Filters the grid | Only matching cards remain; the ✕ clear button appears |
@@ -371,9 +384,9 @@ table directly.
 | J20 | Safety scope | Leave *Allow high-risk commands* off with a high-risk command in scope | Blocks the command | Command text reads `Restricted by scope: high-risk commands are disabled.`; **Copy command** and **Copy cleanup** are both disabled |
 | J21 | Unblock safety scope | Enable the matching option | Restores the command | Real command text is shown and the footer runnable count increases |
 | J22 | Build the plan | Click **Build plan** | Renders step 3 | Heading reads `<name> · <attack_id>`; every in-scope stage appears in the rail and every technique card shows either the exact-platform command or an explicit unsupported message |
-| J23 | Command safety metadata | Inspect any curated card | Shows the classification | A risk badge, **Effects**, and **Expected** telemetry are visible on every supported command |
+| J23 | Command safety metadata | Inspect any curated card | Shows the classification | A risk badge, **Effects**, **Expected** telemetry, ATT&CK detection text, and data-source chips are visible on every supported command |
 | J24 | Navigate stages | Click **Next stage** / **Previous stage** / a rail item | Moves through the kill chain | The stage title changes; **Previous stage** is disabled on the first stage and **Next stage** on the last |
-| J25 | Copy a command | Click **Copy command** | Copies after acknowledgement for medium/high risk | For a high-risk command a confirm dialog appears; on accept the toast reads `Command copied to clipboard` |
+| J25 | Copy a command | Click **Copy command** | Copies after acknowledgement for medium/high risk | For a high-risk command an in-app dialog titled *Copy this high risk lab command?* shows the command; on **Copy command** the toast reads `Command copied to clipboard` |
 | J26 | Record evidence | Set an outcome and expand **Execution proof** | Persists the note, cleanup state, run ID, timestamps, exit code, output hashes, evidence source, and telemetry references | `#progressCount` and `#progressPct` update to match the marked techniques; bounded-exercise receipts can be digest-verified and imported |
 | J27 | Persistence failure | Make local storage throw | Warns instead of silently dropping records | Toast reads `Progress can't be saved in this browser — export the plan to keep your records` |
 | J28 | Export screen | Click **Finish & export** | Renders step 4 | Heading *Your emulation plan is ready* with tiles Techniques, Stages, Runnable tests, Marked run |

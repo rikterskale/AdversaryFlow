@@ -1,15 +1,20 @@
 # Operations
 
+New operators should start with [Getting started](GETTING_STARTED.md).
+This page is the compact service, cache, and diagnostics reference.
+
 ## Service lifecycle
 
 AdversaryFlow starts its HTTP service immediately and loads ATT&CK data in a
 background worker. The UI polls GET /api/bootstrap and reports download bytes,
 validation, readiness, or a retryable failure.
 
-GET /api/health returns HTTP 200 only when an ATT&CK index is ready. During
-startup or failure it returns 503 with the service phase, cache provenance,
-request counters, loaded domain sets, and data versions. Every HTTP response
-includes X-Request-ID; server logs are structured JSON.
+GET /api/live returns HTTP 200 whenever the process can answer. GET /api/health
+returns HTTP 200 only when an ATT&CK index is ready. During startup or failure
+health returns 503 with the service phase, cache provenance, request counters,
+loaded domain sets, and data versions. A failed API request does not mark the
+whole service failed. Every HTTP response includes X-Request-ID; server logs
+are structured JSON.
 
 ## Configuration
 

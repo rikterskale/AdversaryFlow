@@ -53,6 +53,7 @@ version = { attr = "backend.__version__" }
   "frontend/index.html",
   "frontend/styles.css",
   "frontend/app.js",
+  "frontend/favicon.svg",
 ]
 "share/adversaryflow/schemas" = [
   "schemas/adversaryflow-plan.schema.json",

@@ -2,6 +2,11 @@
 
 Thank you for improving AdversaryFlow.
 
+By participating you agree to [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and
+[ACCEPTABLE_USE.md](ACCEPTABLE_USE.md). Catalog changes must keep the live-mutator
+invariants in `tests/test_catalog_safety.py` passing: no SAM exports, account
+or service creation, session locks, IMDS queries, or third-party HTTP fetches.
+
 ## Development setup
 
 ```bash

@@ -35,9 +35,24 @@ paths:
         "200": { description: Data is ready }
         "202": { description: Bootstrap started or is already running }
         "403": { $ref: "#/components/responses/Error" }
+  /api/live:
+    get:
+      summary: Report process liveness
+      description: Returns HTTP 200 whenever the process can answer. ATT&CK readiness is /api/health.
+      responses:
+        "200":
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status: { const: live }
+                  version: { type: string }
   /api/health:
     get:
-      summary: Report liveness and ATT&CK readiness
+      summary: Report ATT&CK readiness
       responses:
         "200":
           description: ATT&CK data is ready
@@ -92,7 +107,7 @@ paths:
   /api/execution-kit:
     post:
       summary: Generate an offline CSV and PowerShell/Bash operator handoff
-      description: Serializes a schema 2.0 browser plan into a ZIP. The service does not execute commands.
+      description: Rebinds every technique to the live catalog, then serializes a ZIP. Client-supplied command text is discarded. Bounded synthetic steps include AdversaryFlow-exercises.py. The service does not execute commands.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:

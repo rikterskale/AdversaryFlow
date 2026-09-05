@@ -2,8 +2,8 @@
 from .ext_helper import c
 
 PART = {
-    "T1016.001": [c("windows", "powershell -NoProfile -Command \"(Invoke-WebRequest https://ifconfig.me/ip -UseBasicParsing).Content\"",
-                    "Reads the host's external IP (internet-connection discovery).")],
+    "T1016.001": [c("windows", "ipconfig & echo AdversaryFlow lab internet-connection discovery (local adapters only)",
+                    "Reads local adapter configuration. Does not query an external IP-echo service.")],
     "T1016.002": [c("windows", "netsh wlan show networks mode=bssid", "Wi-Fi network discovery (read-only)."),
                   c("linux", "nmcli -t -f SSID dev wifi 2>/dev/null | head")],
     "T1069": [c("windows", "net localgroup & net group /domain 2>nul", "Permission-groups discovery (read-only).")],

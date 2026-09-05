@@ -25,17 +25,22 @@ steps are reached:
    macOS), toggle kill-chain stages on/off, include or drop pre-compromise
    tactics, and see a live plan preview update as you go.
 3. **Run & track the plan** — review structured risk, privilege, network,
-   expected-telemetry, and cleanup metadata before copying a command. Record
-   passed/failed/skipped outcomes, evidence notes, run IDs, timestamps, exit
-   codes, output hashes, receipt digests, SIEM/endpoint references, target
-   context, and cleanup verification; progress persists locally per versioned plan.
+   expected-telemetry, prerequisites, rollback, and cleanup metadata before
+   copying a command. Record command result (ran / failed / skipped) separately
+   from detection result (alerted / silent / blocked / not instrumented), plus
+   evidence notes, run IDs, timestamps, exit codes, output hashes, receipt
+   digests, SIEM/endpoint references, target context, and cleanup verification.
+   Progress autosaves in this browser; `j` / `k` move between techniques and
+   `c` copies the focused command.
 4. **Export** — download a one-click **operator execution kit** containing a CSV
    plan and self-contained PowerShell or Bash runner, or export **Markdown**,
    schema-versioned **JSON**, or a commented **runbook**.
 
-The execution kit is an offline handoff artifact. The destination operator does
-not need AdversaryFlow, Python, or network access. Every step requires explicit
-approval and offers run, edit, skip, or abort controls. The runner records
+The execution kit is an offline handoff artifact. Direct catalog commands need
+no AdversaryFlow installation, Python, or network access. Bounded synthetic
+steps ship a portable exercise script that needs Python 3.10+ beside the kit.
+Every step requires explicit approval and offers run, edit, skip, or abort
+controls. The runner records
 command edits, timestamps, output hashes, exit codes, cleanup, and detection
 assessment, then produces HTML/Markdown reports and machine-readable evidence.
 
@@ -99,14 +104,12 @@ Mobile domains are supported via `?domains=enterprise,ics,mobile`.
 
 ## Run it
 
-Recommended after publication to PyPI:
+New operators should follow the copy/paste handbook
+[Getting started](docs/GETTING_STARTED.md) (install, first verified PoC,
+everyday use, remediation, recovery, upgrades, and support).
 
-```bash
-pipx install adversaryflow
-adversaryflow --open
-```
-
-From a source checkout:
+AdversaryFlow is **not published on PyPI**. The supported path is a source
+checkout:
 
 Linux and macOS:
 
@@ -126,11 +129,23 @@ background while the UI reports progress. Later starts do not reinstall
 dependencies. Use **↻ Refresh feed** (or
 `POST /api/refresh`) to pull the newest ATT&CK release.
 
+To install an isolated copy from a built or GitHub Release wheel:
+
+```bash
+pipx install ./adversaryflow-0.3.0-py3-none-any.whl
+adversaryflow --open
+```
+
+`pipx install adversaryflow` will work only after the first PyPI publication.
+Until then that command is not an install path for this project.
+
 Manual setup, if you prefer:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-python -m pip install .
+python -m pip install --require-hashes --requirement requirements.lock
+python -m pip install --require-hashes --requirement requirements-build.lock
+python -m pip install --no-build-isolation --no-deps --editable .
 adversaryflow
 ```
 
@@ -139,7 +154,8 @@ The launcher accepts `--host`, `--port`, `--cache-dir`, `--offline`,
 Non-loopback binds require both `--allow-remote` and a bearer token; see
 [Operations](docs/OPERATIONS.md). Maintenance
 commands include `doctor`, `cache-status`, `cache-refresh`, and `cache-clear`.
-See [installation](docs/INSTALL.md) and
+See [Getting started](docs/GETTING_STARTED.md),
+[installation](docs/INSTALL.md), and
 [operations](docs/OPERATIONS.md) for supported platforms, cache locations,
 offline use, upgrades, health behavior, and troubleshooting.
 
@@ -230,5 +246,6 @@ three platforms, scans with CodeQL, and produces checksums and a CycloneDX SBOM.
 [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md), and
 [the release guide](docs/RELEASING.md).
 
-AdversaryFlow is licensed under [Apache-2.0](LICENSE). Report vulnerabilities
-privately according to [SECURITY.md](SECURITY.md).
+AdversaryFlow is licensed under [Apache-2.0](LICENSE). Use it only in an
+authorized disposable lab; see [ACCEPTABLE_USE.md](ACCEPTABLE_USE.md). Report
+vulnerabilities privately according to [SECURITY.md](SECURITY.md).

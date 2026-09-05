@@ -23,8 +23,9 @@ class CommandRecordTests(unittest.TestCase):
             "platform", "command", "note", "cleanup", "risk", "side_effects",
             "requires_admin", "requires_network", "network_targets", "prerequisites",
             "expected_telemetry", "expected_output", "timeout_seconds", "rollback",
-            "cleanup_required", "acknowledgment_required",
+            "cleanup_required", "acknowledgment_required", "fidelity",
         })
+        self.assertEqual(record["fidelity"], "direct")
 
     def test_prerequisites_name_the_platform_and_the_lab(self):
         record = command_record("macos", "sw_vers")
@@ -95,6 +96,14 @@ class CommandRecordTests(unittest.TestCase):
         self.assertTrue(command_record("windows", "REG ADD HKCU\\Software\\X")["requires_network"] is False)
         self.assertIn("changes_local_state", command_record("windows", "REG ADD HKCU\\Software\\X")["side_effects"])
         self.assertTrue(command_record("windows", "Invoke-WebRequest HTTPS://EXAMPLE.COM")["requires_network"])
+
+    def test_echo_and_locate_proxies_are_labelled_lab_proxy(self):
+        echo = command_record("windows", "cmd.exe /c \"echo AdversaryFlow lab brute-force proxy\"",
+                              "Bounded lab simulation only — no authentication attempts are generated.")
+        locate = command_record("windows", "cmd.exe /c \"echo AdversaryFlow lab LSASS-access proxy && tasklist | findstr lsass\"",
+                                "Locates lsass without dumping it — no memory is read.")
+        self.assertEqual(echo["fidelity"], "lab_proxy")
+        self.assertEqual(locate["fidelity"], "lab_proxy")
 
     def test_a_registered_exercise_has_specific_telemetry_and_receipt_metadata(self):
         record = technique_exercise_record("T1110", {"platform": "windows"})

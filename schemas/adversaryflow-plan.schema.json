@@ -91,7 +91,9 @@
         "supported": { "type": "boolean" },
         "command": { "$ref": "#/$defs/command" },
         "run": { "type": "boolean" },
-        "execution": { "$ref": "#/$defs/execution" }
+        "execution": { "$ref": "#/$defs/execution" },
+        "data_sources": { "type": "array", "items": { "type": "string" } },
+        "detection": { "type": "string" }
       },
       "additionalProperties": false
     },
@@ -116,7 +118,7 @@
         "cleanup_required": { "type": "boolean" },
         "acknowledgment_required": { "type": "boolean" },
         "exercise_kind": { "enum": ["technique_relevant_bounded"] },
-        "fidelity": { "enum": ["bounded_synthetic"] },
+        "fidelity": { "enum": ["direct", "bounded_synthetic", "lab_proxy"] },
         "evidence_source": { "enum": ["self_reported_receipt"] },
         "telemetry_acceptance": { "$ref": "#/$defs/telemetry_acceptance" },
         "unsupported": { "type": "boolean" },
@@ -156,7 +158,8 @@
         "receipt_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
         "receipt_verified": { "type": "boolean" },
         "telemetry_refs": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 }, "maxItems": 20, "uniqueItems": true },
-        "evidence_source": { "enum": ["operator_supplied", "exercise_receipt", "endpoint_verified", "siem_verified"] }
+        "evidence_source": { "enum": ["operator_supplied", "exercise_receipt", "endpoint_verified", "siem_verified"] },
+        "detection_result": { "enum": ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"] }
       },
       "additionalProperties": false
     }

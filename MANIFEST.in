@@ -19,6 +19,6 @@ include package-lock.json
 include playwright.config.js
 recursive-include docs *.md *.yaml
 recursive-include schemas *.json
-recursive-include frontend *.html *.css *.js
+recursive-include frontend *.html *.css *.js *.svg
 recursive-include tests *.py *.js
 recursive-include scripts *.py
