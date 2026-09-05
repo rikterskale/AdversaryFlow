@@ -269,7 +269,8 @@ class CommandLineUatTests(unittest.TestCase):
                     if process.poll() is not None:
                         self.fail(f"service exited {process.returncode}")
                     time.sleep(0.1)
-            self.assertIsNotNone(body)
+            if not isinstance(body, dict):
+                self.fail("liveness response was not JSON")
             self.assertEqual(body["status"], "live")
             self.assertEqual(body["version"], app_module.__version__)
             with urllib.request.urlopen(url, timeout=2) as homepage:
