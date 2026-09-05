@@ -3,12 +3,14 @@ import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import patch
 
 from backend import app as app_module
 from backend import attack_data
+from tests.test_execution_kit import plan_fixture
 
 
 class FakeIndex:
@@ -83,6 +85,46 @@ class ApiContractTests(unittest.TestCase):
     def test_refresh_requires_same_origin_token(self):
         response = self.client.post("/api/refresh?domains=enterprise")
         self.assertEqual(response.status_code, 403)
+
+    def test_execution_kit_requires_same_origin_token(self):
+        response = self.client.post("/api/execution-kit", json=plan_fixture("linux"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_execution_kit_returns_a_two_file_offline_handoff(self):
+        response = self.client.post(
+            "/api/execution-kit",
+            json=plan_fixture("windows"),
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/zip")
+        self.assertIn("_Windows.zip", response.headers["Content-Disposition"])
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            self.assertTrue(any(name.endswith("-plan.csv") for name in archive.namelist()))
+            self.assertTrue(any(name.endswith("-execute.ps1") for name in archive.namelist()))
+
+    def test_execution_kit_accepts_a_complete_plan_above_the_small_api_body_limit(self):
+        document = plan_fixture("linux", duplicate=True, command="printf x # " + "x" * 8_000)
+        encoded = json.dumps(document)
+        self.assertGreater(len(encoded), app_module.app.config["MAX_CONTENT_LENGTH"])
+        self.assertLess(len(encoded), app_module.EXECUTION_KIT_MAX_CONTENT_LENGTH)
+        response = self.client.post(
+            "/api/execution-kit",
+            data=encoded,
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token, "Content-Type": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_execution_kit_rejects_mac_without_generating_an_archive(self):
+        response = self.client.post(
+            "/api/execution-kit",
+            json=plan_fixture("macos"),
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Windows and Linux", response.get_json()["message"])
 
     @patch("backend.app.attack_data.refresh_index", return_value=FakeIndex())
     def test_refresh_uses_serialized_index_transition(self, refresh_index):

@@ -4,6 +4,12 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Added one-click, offline Windows and Linux execution kits containing an
+  integrity-bound CSV and standalone PowerShell/Bash runner.
+- Added per-step run/edit/skip/abort approval, mandatory edit reasons, separate
+  cleanup approval, timeouts, stdout/stderr capture, and command/output hashes.
+- Added portable HTML, Markdown, JSON, CSV, JSONL, and SHA-256 execution evidence
+  generated entirely on the destination machine.
 - Replaced 146 generic temporary-file proxies with explicit, bounded,
   technique-relevant exercises across 25 scenario families, each with a
   digest-protected self-reported execution receipt.

@@ -1018,13 +1018,26 @@ function renderExport() {
       <div class="statbox success"><div class="n">${p.runnable}</div><div class="l">Runnable tests</div></div>
       <div class="statbox"><div class="n">${done}</div><div class="l">Marked run</div></div>
     </div>`;
+  const kit = el("executionKitExport");
+  const supported = ["windows", "linux"].includes(state.scope.cmdPlatform);
+  kit.disabled = !supported;
+  el("executionKitTitle").textContent = supported
+    ? `Download ${titleCase(state.scope.cmdPlatform)} execution kit`
+    : "Execution kits currently support Windows and Linux";
+  el("executionKitDescription").textContent = supported
+    ? `One ZIP containing the operator CSV and a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner. The runner requires approval before every step and writes its own evidence report.`
+    : "Choose Windows or Linux in Scope to generate a portable operator handoff.";
 }
 
-function exportPlan(format) {
+async function exportPlan(format) {
   const p = filteredPlan();
   const a = state.selectedActor;
   const slug = a.attack_id + "_" + a.name.replace(/[^a-z0-9]+/gi, "_");
   let content, filename, mime;
+  if (format === "kit") {
+    await exportExecutionKit(p);
+    return;
+  }
   if (format === "json") { content = JSON.stringify(buildExportObj(p), null, 2); filename = `AdversaryFlow_${slug}.json`; mime = "application/json"; }
   else if (format === "markdown") { content = toMarkdown(p); filename = `AdversaryFlow_${slug}.md`; mime = "text/markdown"; }
   else {
@@ -1035,6 +1048,36 @@ function exportPlan(format) {
   }
   download(content, filename, mime);
   toast(`Exported ${filename}`);
+}
+async function exportExecutionKit(p) {
+  const button = el("executionKitExport");
+  const original = button.innerHTML;
+  button.disabled = true;
+  button.classList.add("is-loading");
+  button.innerHTML = '<span class="expcard__ico"><svg class="icon"><use href="#i-refresh"/></svg></span><b>Building verified execution kit…</b><span>Preparing the CSV, portable runner, integrity binding, and evidence workflow.</span>';
+  try {
+    const response = await fetch("/api/execution-kit", {
+      method: "POST",
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(buildExportObj(p)),
+    });
+    if (!response.ok) {
+      let message = `Execution kit could not be generated (${response.status})`;
+      try { const body = await response.json(); message = body.message || body.error || message; } catch { /* retain readable fallback */ }
+      throw new Error(message);
+    }
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const matched = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+    const filename = matched ? decodeURIComponent(matched[1].replace(/^\"|\"$/g, "")) : "AdversaryFlow_execution_kit.zip";
+    downloadBlob(await response.blob(), filename);
+    toast(`Execution kit ready: ${filename}`);
+  } catch (error) {
+    toast(error.message || "Execution kit generation failed", "error");
+  } finally {
+    button.innerHTML = original;
+    button.classList.remove("is-loading");
+    button.disabled = !["windows", "linux"].includes(state.scope.cmdPlatform);
+  }
 }
 function buildExportObj(p) {
   return {
@@ -1122,6 +1165,9 @@ function toRunbook(p) {
 }
 function download(content, filename, mime) {
   const blob = new Blob([content], { type: mime });
+  downloadBlob(blob, filename);
+}
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url; link.download = filename;

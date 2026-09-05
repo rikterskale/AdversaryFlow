@@ -89,6 +89,35 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
+  /api/execution-kit:
+    post:
+      summary: Generate an offline CSV and PowerShell/Bash operator handoff
+      description: Serializes a schema 2.0 browser plan into a ZIP. The service does not execute commands.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [schema_version, tool, actor, scope, execution_context, stages]
+              properties:
+                schema_version: { const: "2.0" }
+                tool: { const: AdversaryFlow }
+                actor: { type: object }
+                scope: { type: object }
+                execution_context: { type: object }
+                stages: { type: array, minItems: 1, maxItems: 32 }
+      responses:
+        "200":
+          description: ZIP containing the operator CSV and matching standalone runner
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
   /api/refresh:
     post:
       summary: Refresh selected ATT&CK domains and rebuild their index

@@ -54,6 +54,10 @@ version = { attr = "backend.__version__" }
   "frontend/styles.css",
   "frontend/app.js",
 ]
+"share/adversaryflow/schemas" = [
+  "schemas/adversaryflow-plan.schema.json",
+  "schemas/adversaryflow-execution.schema.json",
+]
 
 [tool.ruff]
 line-length = 140

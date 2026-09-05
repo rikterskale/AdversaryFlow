@@ -29,6 +29,14 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/api/bootstrap:", contract)
         self.assertIn('"403"', contract)
 
+    def test_portable_execution_summary_schema_is_strict_and_cross_platform(self):
+        schema = json.loads(Path("schemas/adversaryflow-execution.schema.json").read_text(encoding="utf-8"))
+        self.assertEqual(schema["properties"]["schema_version"]["const"], "1.0")
+        self.assertEqual(schema["properties"]["platform"]["enum"], ["windows", "linux"])
+        self.assertFalse(schema["additionalProperties"])
+        for field in ("plan_sha256", "csv_sha256", "events_file", "results_file", "report_file"):
+            self.assertIn(field, schema["required"])
+
 
 if __name__ == "__main__":
     unittest.main()

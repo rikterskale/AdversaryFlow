@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import io
 import json
 import os
 import secrets
@@ -22,10 +23,10 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List
 
-from flask import Flask, abort, g, jsonify, request, send_from_directory
+from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, attack_data, command_catalog
+from . import __version__, attack_data, command_catalog, execution_kit
 
 
 def _frontend_dir() -> str:
@@ -43,6 +44,7 @@ FRONTEND_DIR = _frontend_dir()
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+EXECUTION_KIT_MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 _runtime: Dict[str, Any] = {
     "ready": False,
     "loading": False,
@@ -81,6 +83,11 @@ def static_files(path: str):
 def begin_request() -> None:
     g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
     g.request_started = time.monotonic()
+    # Complete actor plans can contain hundreds of command records. Flask 3.1
+    # supports a route-specific request cap, so unrelated endpoints retain the
+    # much smaller global body limit.
+    if request.path == "/api/execution-kit":
+        request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
         supplied = request.headers.get("Authorization", "")
         expected = f"Bearer {API_TOKEN}"
@@ -272,6 +279,31 @@ def workflow(stix_id: str):
             "version": __version__,
         },
     })
+
+
+@app.route("/api/execution-kit", methods=["POST"])
+def execution_kit_download():
+    """Build a portable CSV plus PowerShell/Bash runner without executing it."""
+    _require_csrf()
+    document = request.get_json(silent=True)
+    if document is None:
+        abort(400, description="A JSON AdversaryFlow plan is required")
+    try:
+        archive, filename = execution_kit.build_execution_kit(document)
+    except execution_kit.ExecutionKitError as exc:
+        abort(400, description=str(exc))
+    _log_event("execution_kit_generated", platform=document.get("scope", {}).get("command_platform"),
+               size_bytes=len(archive))
+    response = send_file(
+        io.BytesIO(archive),
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+        max_age=0,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ---------------------------------------------------------------------------

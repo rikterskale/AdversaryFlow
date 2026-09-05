@@ -58,6 +58,13 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('Verify and import receipt', self.javascript)
         self.assertIn('${comment} COMMAND:', self.javascript)
 
+    def test_portable_execution_kit_is_a_one_click_gui_export(self):
+        self.assertIn('data-export="kit"', self.html)
+        self.assertIn('id="executionKitExport"', self.html)
+        self.assertIn('/api/execution-kit', self.javascript)
+        self.assertIn('buildExportObj(p)', self.javascript)
+        self.assertIn('Download operator execution kit', self.html)
+
 
 if __name__ == "__main__":
     unittest.main()

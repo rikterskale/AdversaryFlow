@@ -114,6 +114,12 @@ async function interceptApi(page, commands = [command]) {
     domains: ["enterprise"], data_version: "enterprise:bundle--test", version: "0.3.0",
   } }));
   await page.route("**/api/workflow/**", route => route.fulfill({ json: workflowBody(commands) }));
+  await page.route("**/api/execution-kit", route => route.fulfill({
+    status: 200,
+    contentType: "application/zip",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor_Windows.zip"' },
+    body: Buffer.from("fixture execution kit"),
+  }));
 }
 
 async function buildPlan(page) {
@@ -186,6 +192,17 @@ test("runbook export is a commented, non-executable artifact", async ({ page }) 
   expect(runbook).toContain("REM Outcome: not_run");
   expect(runbook).toContain("REM COMMAND: whoami");
   expect(runbook.split(/\r?\n/)).not.toContain("whoami");
+});
+
+test("operator execution kit is a one-click portable download", async ({ page }) => {
+  await interceptApi(page);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Download Windows execution kit/ }).click();
+  const artifact = await download;
+  expect(artifact.suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_Windows.zip");
 });
 
 test("a bounded exercise receipt is digest-verified and exported as execution proof", async ({ page }) => {

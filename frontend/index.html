@@ -73,7 +73,7 @@
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Run &amp; track</b><span>Lab command per TTP, stage by stage.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Export</b><span>Markdown, JSON, or runbook.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Hand off</b><span>One-click CSV and offline execution runner.</span></div></div>
         </div>
 
         <div class="welcome__actions">
@@ -228,12 +228,16 @@
       <div class="screen__head">
         <div>
           <h2 class="screen__title" tabindex="-1">Your emulation plan is ready</h2>
-          <p class="screen__hint">Take it into your test harness, ticketing, or detection-engineering backlog.</p>
+          <p class="screen__hint">Hand an operator a portable, offline execution kit or download a planning format.</p>
         </div>
       </div>
       <div class="export">
         <div class="export__summary" id="exportSummary"></div>
         <div class="export__cards">
+          <button class="expcard expcard--hero" data-export="kit" id="executionKitExport">
+            <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
+            <b id="executionKitTitle">Download operator execution kit</b><span id="executionKitDescription">CSV plan plus a self-contained PowerShell or Bash runner. No AdversaryFlow installation or network connection required on the destination machine.</span>
+          </button>
           <button class="expcard" data-export="markdown">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
             <b>Markdown report</b><span>Human-readable plan with commands, notes &amp; cleanup.</span>

@@ -7,8 +7,8 @@ ATT&CK-aligned lab command to every technique so detection teams can exercise
 and measure coverage.
 
 > AdversaryFlow is designed for disposable development labs rather than
-> production deployment. It generates command plans and exports; it does not
-> execute commands.
+> production deployment. The application never executes commands. It generates
+> a portable, operator-controlled execution kit for use on a separate lab host.
 
 ---
 
@@ -29,8 +29,15 @@ steps are reached:
    passed/failed/skipped outcomes, evidence notes, run IDs, timestamps, exit
    codes, output hashes, receipt digests, SIEM/endpoint references, target
    context, and cleanup verification; progress persists locally per versioned plan.
-4. **Export** — download the scoped plan as **Markdown**, schema-versioned
-   **JSON**, or a platform-specific commented **runbook**.
+4. **Export** — download a one-click **operator execution kit** containing a CSV
+   plan and self-contained PowerShell or Bash runner, or export **Markdown**,
+   schema-versioned **JSON**, or a commented **runbook**.
+
+The execution kit is an offline handoff artifact. The destination operator does
+not need AdversaryFlow, Python, or network access. Every step requires explicit
+approval and offers run, edit, skip, or abort controls. The runner records
+command edits, timestamps, output hashes, exit codes, cleanup, and detection
+assessment, then produces HTML/Markdown reports and machine-readable evidence.
 
 Under the hood:
 
@@ -193,8 +200,9 @@ python -c "from backend import attack_data as a, command_catalog as c; idx=a.get
 
 AdversaryFlow is a lightweight planner in the same space as **MITRE Caldera**,
 **Atomic Red Team**, and **VECTR** — focused specifically on turning a *named
-threat actor* into an *ordered, runnable lab workflow*. It does not execute
-commands; it produces plans and exports for use in a disposable test environment.
+threat actor* into an *ordered, runnable lab workflow*. Its web service never
+executes commands; it produces plans and portable, operator-gated runners for
+use in a disposable test environment.
 
 ## Development and releases
 

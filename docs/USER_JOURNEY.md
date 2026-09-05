@@ -37,12 +37,13 @@ whether it needs administrator rights or network access, what it changes, the
 telemetry you should expect, and how to undo it — and the interface refuses to
 hand you a command whose risk exceeds the scope you set.
 
-AdversaryFlow **generates plans; it never executes commands**. It runs entirely
-on your own machine, binds to loopback by default, and stores nothing beyond a
+The AdversaryFlow web service **generates plans; it never executes commands**.
+It runs entirely on your own machine, binds to loopback by default, and stores nothing beyond a
 cached copy of the public ATT&CK bundle and your own progress in browser local
-storage. The finished plan exports as a human-readable Markdown report, a
-schema-versioned JSON document, or a text runbook — and a JSON export can
-be loaded back in later to resume exactly where you left off.
+storage. The finished plan exports as a one-click, offline operator kit with a
+CSV and standalone PowerShell/Bash runner, or as Markdown, schema-versioned JSON,
+or a text runbook. A JSON export can be loaded back in later to resume exactly
+where you left off.
 
 ---
 
@@ -225,12 +226,15 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 
 | Card | File | Contents |
 |---|---|---|
+| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Integrity-bound CSV plus standalone PowerShell runner; Linux plans receive Bash. The destination needs no AdversaryFlow installation or network connection. |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
 | **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json` |
 | **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
 
-The runbook has a `.txt` extension and is deliberately non-executable. Copy one
-reviewed `COMMAND:` value at a time into the appropriate authorized lab shell.
+The runbook remains a deliberately non-executable review format. The execution
+kit is the controlled runnable handoff: each step requires an operator decision,
+edited commands require a reason and second approval, and the destination runner
+writes HTML/Markdown reports plus CSV, JSON, JSONL, logs, and checksums.
 
 **Observable result:** the file downloads and a toast reads
 *"Exported AdversaryFlow_G0016_APT29.json"*. **Core value is delivered here.**
@@ -403,5 +407,6 @@ table directly.
 
 ---
 
-*AdversaryFlow generates plans and exports. It does not execute commands. Run
-them only in a disposable lab you are authorised to test.*
+*The AdversaryFlow web service generates plans and exports; it does not execute
+commands. Portable runners execute only after operator approval and belong only
+in a disposable lab you are authorised to test.*
