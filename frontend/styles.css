@@ -2,6 +2,7 @@
    AdversaryFlow — vendor-grade guided UI
    ============================================================ */
 :root {
+  color-scheme: dark;
   --bg: #0a0d14;
   --bg-grad: radial-gradient(1200px 600px at 80% -10%, rgba(99,102,241,.10), transparent 60%),
              radial-gradient(1000px 500px at -10% 10%, rgba(244,63,94,.08), transparent 55%);
@@ -33,6 +34,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 button, input, select { font: inherit; }
+input, select { accent-color: var(--brand); }
 button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   outline: 3px solid rgba(56,189,248,.55);
   outline-offset: 2px;
@@ -157,7 +159,8 @@ body {
 .linkbtn:hover { text-decoration: underline; }
 
 /* ---------------- Welcome ---------------- */
-.screen--welcome { max-width: 900px; text-align: center; padding-top: 6vh; }
+.screen--welcome { max-width: 1080px; text-align: center; padding-top: 6vh; }
+.screen__title:focus-visible, .welcome__title:focus-visible { outline: none; }
 .welcome__badge {
   display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
   color: var(--success); background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.28);
@@ -219,6 +222,7 @@ body {
 .featured { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
 .featured__label { font-size: 12.5px; color: var(--text-faint); }
 .featured__chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.featured__count { margin-left: auto; color: var(--text-faint); font-size: 12px; white-space: nowrap; }
 .domainbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: -6px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
@@ -452,6 +456,21 @@ body {
 .skeleton { background: linear-gradient(90deg, var(--surface) 25%, var(--surface-3) 50%, var(--surface) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: var(--radius); height: 132px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
+/* ---------------- Remote access ---------------- */
+.authdialog {
+  width: min(500px, calc(100vw - 32px)); padding: 0; color: var(--text);
+  background: transparent; border: 0; overflow: visible;
+}
+.authdialog::backdrop { background: rgba(4,6,10,.82); backdrop-filter: blur(8px); }
+.authdialog__card { padding: 28px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border-2); box-shadow: var(--shadow-lg); }
+.authdialog__icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: var(--brand-2); background: rgba(244,63,94,.12); font-size: 22px; }
+.authdialog h2 { margin: 16px 0 6px; font-size: 22px; }
+.authdialog p { margin: 0 0 18px; color: var(--text-dim); }
+.authdialog__field { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.authdialog input { width: 100%; padding: 11px 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border-2); border-radius: 10px; }
+.authdialog__error { margin: 9px 0 0 !important; color: var(--brand-2) !important; font-size: 12px; }
+.authdialog__actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+
 /* ---------------- Responsive ---------------- */
 @media (max-width: 900px) {
   .stepper__label { display: none; }
@@ -464,9 +483,25 @@ body {
   .railitem { min-width: 150px; }
   .statsrow, .export__cards { grid-template-columns: 1fr 1fr; }
   .welcome__steps { flex-direction: column; }
-  .ministep__arrow { transform: rotate(90deg); }
+  .ministep { flex: none; width: 100%; }
+  .ministep__arrow { flex: 0 0 28px; height: 28px; pointer-events: none; }
+  .ministep__arrow .icon { transform: rotate(90deg); }
 }
 @media (max-width: 560px) {
+  .appbar { gap: 8px; padding: 10px 12px; }
+  .brand__name, #dataStatus { display: none; }
+  .stepper { flex: 1; justify-content: center; gap: 2px; min-width: 0; }
+  .stepper__item { padding: 4px; }
+  .stepper__dot { width: 24px; height: 24px; }
+  .stepper__bar { width: 8px; }
+  .appbar__right { margin-left: 0; gap: 0; }
+  .screen { padding: 26px 18px 142px; }
+  .featured__count { width: 100%; margin-left: 0; }
+  .actionbar { gap: 8px; padding: 10px 12px; }
+  .actionbar .btn { padding: 9px 11px; }
+  .actionbar__ctx { font-size: 11px; line-height: 1.3; }
+  .cmd__cleanup { flex-wrap: wrap; }
+  .cmd__cleanup code { overflow-wrap: anywhere; min-width: 0; }
   .statsrow, .export__cards { grid-template-columns: 1fr; }
   .planhead { flex-direction: column; align-items: flex-start; }
   .domainbar__hint { width: 100%; margin-left: 0; }

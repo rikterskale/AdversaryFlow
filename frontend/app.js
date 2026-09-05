@@ -125,17 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function boot() {
   showLoader("Preparing AdversaryFlow…", "Checking the local service and ATT&CK cache.");
   try {
-    let session;
-    try {
-      session = await apiJson("/api/session");
-    } catch (error) {
-      if (!/bearer token/i.test(error.message || "")) throw error;
-      const token = window.prompt("This AdversaryFlow service requires an API token.");
-      if (!token) throw new Error("An API token is required to use this remote service");
-      state.apiToken = token;
-      sessionStorage.setItem("af_api_token", token);
-      session = await apiJson("/api/session");
-    }
+    const session = await establishSession();
     state.csrf = session.csrf_token;
     await waitForBootstrap();
     await loadActors(true);
@@ -144,6 +134,67 @@ async function boot() {
   } finally {
     hideLoader();
   }
+}
+
+async function establishSession() {
+  let message = "";
+  for (;;) {
+    try {
+      return await apiJson("/api/session");
+    } catch (error) {
+      if (!/bearer token/i.test(error.message || "")) throw error;
+      state.apiToken = "";
+      sessionStorage.removeItem("af_api_token");
+      const token = await requestApiToken(message);
+      state.apiToken = token;
+      sessionStorage.setItem("af_api_token", token);
+      message = "That token was not accepted. Check it and try again.";
+    }
+  }
+}
+
+function requestApiToken(message = "") {
+  const dialog = el("authDialog");
+  const form = el("authForm");
+  const token = el("authToken");
+  const error = el("authError");
+  error.textContent = message;
+  error.hidden = !message;
+  token.value = "";
+  hideLoader();
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      form.removeEventListener("submit", submit);
+      el("authCancel").removeEventListener("click", cancel);
+      dialog.removeEventListener("cancel", cancel);
+    };
+    const submit = event => {
+      event.preventDefault();
+      const value = token.value.trim();
+      if (!value) {
+        error.textContent = "Enter the API token to continue.";
+        error.hidden = false;
+        token.focus();
+        return;
+      }
+      cleanup();
+      dialog.close();
+      showLoader("Connecting securely…", "Validating access to the AdversaryFlow service.");
+      resolve(value);
+    };
+    const cancel = event => {
+      event.preventDefault();
+      cleanup();
+      dialog.close();
+      reject(new Error("An API token is required to use this remote service"));
+    };
+    form.addEventListener("submit", submit);
+    el("authCancel").addEventListener("click", cancel);
+    dialog.addEventListener("cancel", cancel);
+    dialog.showModal();
+    token.focus();
+  });
 }
 
 async function waitForBootstrap() {
@@ -563,23 +614,24 @@ function applyFilter() {
 function renderFeatured() {
   const wrap = el("featuredChips");
   const chips = FEATURED.map(id => state.actors.find(a => a.attack_id === id)).filter(Boolean);
-  wrap.innerHTML = chips.map(a => `<button type="button" class="fchip" data-id="${a.stix_id}">${escapeHtml(a.name)}</button>`).join("");
+  wrap.innerHTML = chips.map(a => `<button type="button" class="fchip" data-id="${escapeHtml(a.stix_id)}">${escapeHtml(a.name)}</button>`).join("");
   $$(".fchip", wrap).forEach(c => c.addEventListener("click", () => { selectActor(c.dataset.id); }));
 }
 function renderActorGrid() {
   const grid = el("actorGrid");
   el("actorEmpty").hidden = state.filtered.length > 0;
+  el("actorResults").textContent = `${state.filtered.length} ${state.filtered.length === 1 ? "result" : "results"}`;
   grid.innerHTML = state.filtered.map(a => `
-    <button type="button" class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${a.stix_id}" aria-pressed="${state.selectedId === a.stix_id}">
+    <button type="button" class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${escapeHtml(a.stix_id)}" aria-label="Select ${escapeHtml(a.name)}, ${escapeHtml(a.attack_id)}, ${a.technique_count} techniques" aria-pressed="${state.selectedId === a.stix_id}">
       <div class="actorcard__top">
         <div>
           <div class="actorcard__name">${escapeHtml(a.name)}</div>
-          <div class="actorcard__id">${a.attack_id}</div>
+          <div class="actorcard__id">${escapeHtml(a.attack_id)}</div>
         </div>
-        <span class="tag tag--${a.type}">${a.type}</span>
+        <span class="tag tag--${escapeHtml(a.type)}">${escapeHtml(a.type)}</span>
       </div>
       ${a.aliases.length ? `<div class="actorcard__aka">aka ${escapeHtml(a.aliases.slice(0, 4).join(", "))}</div>` : ""}
-      <div class="actorcard__desc">${escapeHtml(a.description || "No description available.")}</div>
+      <div class="actorcard__desc">${escapeHtml(cleanDescription(a.description) || "No description available.")}</div>
       <div class="actorcard__foot">
         <span class="ttpcount">${a.technique_count} <span>TTPs</span></span>
         <span class="actorcard__pick">${state.selectedId === a.stix_id ? '<svg class="icon"><use href="#i-check"/></svg> Selected' : "Select"}</span>
@@ -738,6 +790,13 @@ function setOn(sel, btn) {
 }
 function escapeHtml(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function stripMd(s) { return String(s || "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/<[^>]+>/g, ""); }
+function cleanDescription(s) {
+  return stripMd(s)
+    .replace(/\[([^\]]+)\]\([^)]*$/g, "$1")
+    .replace(/\(Citation:[^)]+\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 function runbookSafe(s) { return String(s || "").replace(/[\r\n&|<>^]+/g, " ").trim(); }
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -866,17 +925,18 @@ function renderTech(t) {
   const source = unsupported ? "unsupported" : t.command_source;
   const effects = (c.side_effects || []).map(titleCase).join(", ");
   const risk = c.risk || "unknown";
+  const tid = escapeHtml(t.attack_id);
   return `
-  <div class="techcard ${run ? "is-run" : ""}" data-tid="${t.attack_id}">
+  <div class="techcard ${run ? "is-run" : ""}" data-tid="${tid}">
     <div class="techcard__main">
-      <button type="button" class="techcard__check" data-id="${t.attack_id}" title="${unsupported ? "No test available for this platform" : "Mark as run"}" aria-label="${unsupported ? "No test available for this platform" : `Mark ${escapeHtml(t.attack_id)} as run`}" aria-pressed="${run}" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-check"/></svg></button>
+      <button type="button" class="techcard__check" data-id="${tid}" title="${unsupported ? "No test available for this platform" : "Mark as run"}" aria-label="${unsupported ? `No ${tid} test available for this platform` : `Mark ${tid} as run`}" aria-pressed="${run}" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-check"/></svg></button>
       <div class="techcard__info">
         <div class="techcard__row">
-          <a class="techcard__id" href="${safeUrl(t.url)}" target="_blank" rel="noopener">${t.attack_id} <svg class="icon"><use href="#i-external"/></svg></a>
+          <a class="techcard__id" href="${safeUrl(t.url)}" target="_blank" rel="noopener">${tid} <svg class="icon"><use href="#i-external"/></svg></a>
           <span class="techcard__name">${escapeHtml(t.name)}</span>
           ${t.is_subtechnique ? '<span class="techcard__sub">sub-technique</span>' : ""}
         </div>
-        <p class="techcard__desc">${escapeHtml(stripMd(t.description || ""))}</p>
+        <p class="techcard__desc">${escapeHtml(cleanDescription(t.description))}</p>
         ${(t.platforms || []).length ? `<div class="techcard__plats">${t.platforms.slice(0, 5).map(p => `<span class="plat">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
       </div>
     </div>

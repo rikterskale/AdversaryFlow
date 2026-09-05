@@ -263,7 +263,7 @@ came from a file rather than from the ATT&CK catalog.
 | Port already in use | `waitress` fails to bind | `adversaryflow --port 5050 --open` |
 | Non-loopback bind without opt-in | `Refusing a non-loopback bind without --allow-remote. Read docs/OPERATIONS.md first.` exit 2 | Add `--allow-remote` **and** a token |
 | `--allow-remote` with no token | `Refusing a non-loopback bind without --api-token or ADVERSARYFLOW_API_TOKEN.` exit 2 | Supply `--api-token` or the environment variable |
-| Remote mode active | `WARNING: remote binding is enabled; every API request requires the configured bearer token.` | Expected; the browser prompts once for the token and holds it in session storage |
+| Remote mode active | `WARNING: remote binding is enabled; every API request requires the configured bearer token.` | Expected; the in-app connection dialog requests the token and holds it only in session storage |
 
 ### ATT&CK data
 

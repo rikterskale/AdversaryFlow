@@ -126,6 +126,7 @@
       <div class="featured" id="featured">
         <span class="featured__label">Popular:</span>
         <div class="featured__chips" id="featuredChips"></div>
+        <span class="featured__count" id="actorResults" role="status" aria-live="polite"></span>
       </div>
 
       <div class="actorgrid" id="actorGrid"></div>
@@ -265,6 +266,21 @@
     <div class="actionbar__ctx" id="actionbarCtx"></div>
     <button class="btn btn--primary" id="nextBtn" disabled>Continue <svg class="icon"><use href="#i-arrow-r"/></svg></button>
   </footer>
+
+  <dialog class="authdialog" id="authDialog" aria-labelledby="authTitle" aria-describedby="authDescription">
+    <form class="authdialog__card" id="authForm">
+      <span class="authdialog__icon"><svg class="icon"><use href="#i-shield"/></svg></span>
+      <h2 id="authTitle">Connect to this AdversaryFlow service</h2>
+      <p id="authDescription">This remote service requires the API token configured by its administrator. The token stays in this browser tab and is never included in exports.</p>
+      <label class="authdialog__field" for="authToken">API token</label>
+      <input id="authToken" type="password" autocomplete="off" spellcheck="false" required />
+      <p class="authdialog__error" id="authError" role="alert" hidden></p>
+      <div class="authdialog__actions">
+        <button type="button" class="btn btn--ghost" id="authCancel">Cancel</button>
+        <button type="submit" class="btn btn--primary">Connect securely</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   <div id="loader" class="loader" role="status" aria-live="polite" aria-busy="true" hidden><div class="loader__card"><div class="loader__spin"></div><p id="loaderText">Working…</p><p class="loader__detail" id="loaderDetail"></p></div></div>

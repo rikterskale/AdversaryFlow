@@ -339,15 +339,25 @@ class ResponseHardeningTests(unittest.TestCase):
     def test_every_response_carries_the_security_headers(self):
         response = self.client.get("/api/session")
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
         self.assertEqual(response.headers["Cross-Origin-Resource-Policy"], "same-origin")
+        self.assertEqual(response.headers["Cross-Origin-Opener-Policy"], "same-origin")
+        self.assertIn("camera=()", response.headers["Permissions-Policy"])
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
         self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+        self.assertIn("object-src 'none'", response.headers["Content-Security-Policy"])
         self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
         self.assertTrue(response.headers["X-Request-ID"])
 
     def test_a_supplied_request_id_is_echoed_back(self):
         response = self.client.get("/api/session", headers={"X-Request-ID": "fixture-id"})
         self.assertEqual(response.headers["X-Request-ID"], "fixture-id")
+
+    def test_an_oversized_request_id_is_replaced(self):
+        response = self.client.get("/api/session", headers={"X-Request-ID": "x" * 129})
+        self.assertNotEqual(response.headers["X-Request-ID"], "x" * 129)
+        self.assertRegex(response.headers["X-Request-ID"], r"^[a-f0-9]{32}$")
 
     def test_request_counters_advance(self):
         before = app_module._runtime_snapshot()["requests_total"]

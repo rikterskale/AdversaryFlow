@@ -4,6 +4,15 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Polished the responsive wizard with a compact mobile header, page-level
+  overflow protection, clean ATT&CK descriptions, concise actor-card labels,
+  visible search result counts, and less intrusive screen-reader focus.
+- Replaced the browser-native remote token prompt with an accessible in-app
+  connection dialog that keeps credentials scoped to the current tab.
+- Hardened HTTP responses with no-store API caching, request-ID validation,
+  clickjacking and opener isolation, a restrictive permissions policy, and
+  tighter CSP directives.
+- Added weekly Dependabot coverage for the npm-based browser toolchain.
 - Added one-click, offline Windows and Linux execution kits containing an
   integrity-bound CSV and standalone PowerShell/Bash runner.
 - Added per-step run/edit/skip/abort approval, mandatory edit reasons, separate

@@ -29,8 +29,9 @@ includes X-Request-ID; server logs are structured JSON.
 
 Loopback is the supported default. A non-loopback bind is refused unless
 --allow-remote is present and a non-empty bearer token is supplied with
---api-token or ADVERSARYFLOW_API_TOKEN. The browser prompts once and holds the
-token in session storage; every API route requires it. Use TLS at an
+--api-token or ADVERSARYFLOW_API_TOKEN. An in-app connection dialog requests
+the token once and holds it only in session storage; every API route requires
+it. Use TLS at an
 authenticated reverse proxy, apply host firewall rules, and never expose the
 plain HTTP service directly to the internet.
 

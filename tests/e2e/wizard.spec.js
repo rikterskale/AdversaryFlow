@@ -110,7 +110,7 @@ async function interceptApi(page, commands = [command]) {
   await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "test-token", version: "0.3.0" } }));
   await page.route("**/api/bootstrap", route => route.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
   await page.route("**/api/actors?*", route => route.fulfill({ json: {
-    actors: [{ stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: ["Example"], description: "Fixture actor", technique_count: 1 }],
+    actors: [{ stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: ["Example"], description: "[Test Actor](https://attack.mitre.org/groups/G0001/) fixture. (Citation: Test source)", technique_count: 1 }],
     domains: ["enterprise"], data_version: "enterprise:bundle--test", version: "0.3.0",
   } }));
   await page.route("**/api/workflow/**", route => route.fulfill({ json: workflowBody(commands) }));
@@ -158,6 +158,52 @@ test("welcome screen has no serious accessibility violations", async ({ page }) 
   await page.goto("/");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
+});
+
+test("mobile screens never create page-level horizontal scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await interceptApi(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: /Select Test Actor/ }).click();
+  await page.getByRole("button", { name: /^Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test("actor cards present clean copy and concise accessible names", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  const card = page.locator(".actorcard").first();
+  await expect(card).toHaveAttribute("aria-label", /Select Test Actor, G0001, 1 techniques/);
+  await expect(card.locator(".actorcard__desc")).not.toContainText("[Test Actor](https://");
+});
+
+test("remote access uses an accessible in-app token dialog", async ({ page }) => {
+  await page.route("**/api/session", route => {
+    const authorization = route.request().headers().authorization;
+    if (authorization === "Bearer fixture-token") return route.fulfill({ json: { csrf_token: "test-token", version: "0.3.0" } });
+    return route.fulfill({ status: 401, json: { error: "unauthorized", message: "A valid bearer token is required for remote API access" } });
+  });
+  await page.route("**/api/bootstrap", route => route.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
+  await page.route("**/api/actors?*", route => route.fulfill({ json: { actors: [], domains: ["enterprise"], data_version: "enterprise:fixture", version: "0.3.0" } }));
+  await page.goto("/");
+
+  const dialog = page.getByRole("dialog", { name: "Connect to this AdversaryFlow service" });
+  await expect(dialog).toBeVisible();
+  await page.getByLabel("API token").fill("fixture-token");
+  await page.getByRole("button", { name: "Connect securely" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("af_api_token"))).toBe("fixture-token");
 });
 
 test("markdown export carries the scope, outcome and command", async ({ page }) => {

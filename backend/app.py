@@ -12,6 +12,7 @@ import importlib.metadata
 import io
 import json
 import os
+import re
 import secrets
 import sys
 import sysconfig
@@ -63,6 +64,7 @@ REFRESH_COOLDOWN_SECONDS = 5
 LOG_LEVEL = os.environ.get("ADVERSARYFLOW_LOG_LEVEL", "info").lower()
 REMOTE_MODE = False
 API_TOKEN = ""
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +83,8 @@ def static_files(path: str):
 
 @app.before_request
 def begin_request() -> None:
-    g.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    supplied_request_id = request.headers.get("X-Request-ID", "")
+    g.request_id = supplied_request_id if REQUEST_ID_PATTERN.fullmatch(supplied_request_id) else uuid.uuid4().hex
     g.request_started = time.monotonic()
     # Complete actor plans can contain hundreds of command records. Flask 3.1
     # supports a route-specific request cap, so unrelated endpoints retain the
@@ -99,9 +102,15 @@ def begin_request() -> None:
 def secure_response(response):
     response.headers["X-Request-ID"] = getattr(g, "request_id", "unknown")
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
     with _runtime_lock:
         _runtime["requests_total"] += 1
         key = str(response.status_code)
