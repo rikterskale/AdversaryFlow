@@ -109,8 +109,7 @@ New operators should follow the copy/paste handbook
 [Getting started](docs/GETTING_STARTED.md) (install, first verified PoC,
 everyday use, remediation, recovery, upgrades, and support).
 
-AdversaryFlow is **not published on PyPI**. The supported path is a source
-checkout:
+The supported path is a source checkout:
 
 Linux and macOS:
 
@@ -130,15 +129,15 @@ background while the UI reports progress. Later starts do not reinstall
 dependencies. Use **↻ Refresh feed** (or
 `POST /api/refresh`) to pull the newest ATT&CK release.
 
-To install an isolated copy from a built or GitHub Release wheel:
+To install an isolated copy from a [GitHub Release](https://github.com/rikterskale/AdversaryFlow/releases)
+wheel (or a wheel you built):
 
 ```bash
 pipx install ./adversaryflow-0.4.0-py3-none-any.whl
 adversaryflow --open
 ```
 
-`pipx install adversaryflow` will work only after the first PyPI publication.
-Until then that command is not an install path for this project.
+Install that wheel file. Do not run `pipx install adversaryflow`.
 
 Manual setup, if you prefer:
 

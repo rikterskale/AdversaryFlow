@@ -23,8 +23,7 @@ technique. The web service **does not execute catalog commands**. You copy a
 command (or hand an operator an offline kit) and run it only on a lab host
 you are authorized to test.
 
-It is **not** published on PyPI. `pipx install adversaryflow` is not an
-install path today.
+Install from a source checkout or a GitHub Release wheel.
 
 ## Safety (read before any command)
 
@@ -89,7 +88,8 @@ AdversaryFlow requires Python 3.10 or newer. Install Python, then retry.
 
 ## 2. Install
 
-AdversaryFlow is **not on PyPI**. Install from a Git checkout.
+Install from a Git checkout. For a GitHub Release wheel, skip to
+[From a wheel](#from-a-wheel).
 
 ### 2.1 Clone (skip if you already have the tree)
 
@@ -525,7 +525,7 @@ strings are exact CLI or HTTP output.
 | `Refusing a non-loopback bind without --allow-remote.` (exit 2) | `--host 0.0.0.0` | Stay on 127.0.0.1, or read OPERATIONS.md before opting in |
 | `Refusing a non-loopback bind without --api-token or ADVERSARYFLOW_API_TOKEN.` (exit 2) | Remote bind, no token | Supply `--api-token` as well as `--allow-remote` |
 | `adversaryflow: error: argument command: invalid choice: 'nosuch'` (exit 2) | Typo | Commands are only `serve`, `doctor`, `cache-status`, `cache-refresh`, `cache-clear` |
-| `pipx install adversaryflow` cannot find a package | Not on PyPI | Use `./install.sh` or a GitHub Release wheel. See [Upgrades](#7-upgrades) |
+| `pipx install adversaryflow` cannot find a package | That command is not an install path | Use `./install.sh` or a GitHub Release wheel. See [Upgrades](#7-upgrades) |
 
 Show the CLI list any time:
 
@@ -606,7 +606,7 @@ exists. After a `git pull`, run `./install.sh` yourself.
 ## 7. Upgrades
 
 AdversaryFlow **0.4.0** is the current package version
-(`backend/__init__.py`, `adversaryflow --version`). It is **not** on PyPI.
+(`backend/__init__.py`, `adversaryflow --version`).
 
 ### From a git checkout (supported)
 
@@ -626,7 +626,8 @@ Imported files must be schema **2.0**; a `1.0` export is refused with
 
 ### From a wheel
 
-After you build a wheel or download a GitHub Release asset:
+After you download a wheel from [GitHub Releases](https://github.com/rikterskale/AdversaryFlow/releases)
+or build one locally:
 
 ```bash
 pipx install ./adversaryflow-0.4.0-py3-none-any.whl
@@ -635,10 +636,9 @@ adversaryflow doctor
 adversaryflow --open
 ```
 
-Replace the filename with the wheel you actually have. Upgrade that install
-later with `pipx upgrade adversaryflow` only if pipx originally installed
-**this project's wheel or git URL**. `pipx install adversaryflow` (no path)
-resolves on PyPI and will fail until a release is published there.
+Replace the filename with the wheel you actually have. To replace a local
+wheel, run `pipx install --force` against the new `.whl`. A git-URL install
+can use `pipx upgrade adversaryflow`. Do not run `pipx install adversaryflow`.
 
 ### After a version bump
 

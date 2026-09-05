@@ -4,6 +4,11 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Stopped install and release copy from treating PyPI as a coming install
+  path. Distribution is a source checkout or a GitHub Release wheel.
+- Removed the optional PyPI trusted-publishing steps from the release
+  workflow.
+
 ## 0.4.0 — 2026-09-05
 
 - Made first-run simpler: a recommended-actor start, in-app help, a visible

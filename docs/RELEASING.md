@@ -10,9 +10,9 @@
    re-runs the ruff and mypy gates, builds the wheel and sdist, produces
    CycloneDX SBOM and SHA-256 files, and creates GitHub build-provenance
    attestations.
-6. The protected release environment should require approval. Set the
-   repository variable PUBLISH_PYPI=true only after PyPI trusted publishing
-   is configured for that environment.
+6. The protected release environment should require approval. GitHub Release
+   assets (wheel, sdist, SBOM, SHA256SUMS, and provenance attestations) are
+   the distribution. Do not publish to PyPI.
 7. Verify release checksums and attestations, then smoke-test --version,
    doctor, /, /api/bootstrap, and /api/health from the released wheel.
 

@@ -1,8 +1,7 @@
 # Installation
 
 AdversaryFlow supports Python 3.10 or newer on Linux, macOS, and Windows.
-It is **not published on PyPI**. `pipx install adversaryflow` is not an
-install path until a release is published there.
+The supported path is a source checkout or a GitHub Release wheel.
 
 If you are installing for the first time, use the copy/paste handbook
 [Getting started](GETTING_STARTED.md) instead of this page. This file is
@@ -28,8 +27,8 @@ when ATT&CK data is ready. Later launches reuse the environment.
 
 ## Isolated install from a wheel
 
-After you build a wheel (`python -m build`) or download a GitHub Release
-asset, install that file with pipx:
+Download the `.whl` from the [GitHub Releases](https://github.com/rikterskale/AdversaryFlow/releases)
+page, or build one with `python -m build`, then install that file:
 
 ~~~bash
 pipx install ./adversaryflow-0.4.0-py3-none-any.whl
@@ -42,10 +41,9 @@ You can also point pipx at this repository:
 pipx install git+https://github.com/rikterskale/AdversaryFlow.git
 ~~~
 
-Upgrade or remove a wheel/VCS install with **pipx upgrade adversaryflow** and
-**pipx uninstall adversaryflow**. Do not document or run `pipx install
-adversaryflow` as the current method; that name resolves on PyPI only after
-the first publication.
+Replace a local wheel with **pipx install --force ./adversaryflow-….whl**.
+Upgrade a git-URL install with **pipx upgrade adversaryflow**. Remove either
+with **pipx uninstall adversaryflow**. Do not run `pipx install adversaryflow`.
 
 ## Manual source setup
 
