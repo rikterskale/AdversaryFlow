@@ -30,6 +30,10 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('id="confirmDialog"', self.html)
         self.assertIn('id="resumeSessionBtn"', self.html)
         self.assertIn('id="resumeJsonBtn"', self.html)
+        self.assertIn('id="recommendedBtn"', self.html)
+        self.assertIn('id="helpDialog"', self.html)
+        self.assertIn('id="setupError"', self.html)
+        self.assertIn('id="retryLoad"', self.html)
         self.assertIn("bounded synthetic", self.javascript)
         self.assertIn("lab proxy", self.javascript)
 
@@ -53,6 +57,8 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('aria-live="polite"', self.html)
         self.assertIn('prefers-reduced-motion', self.css)
         self.assertIn('aria-pressed', self.javascript)
+        self.assertIn('class="skip"', self.html)
+        self.assertIn('Skip to content', self.html)
 
     def test_refresh_invalidates_current_workflow(self):
         self.assertIn('state.workflow = null; state.records = {};', self.javascript)

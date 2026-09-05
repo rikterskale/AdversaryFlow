@@ -20,7 +20,8 @@ from . import command_catalog
 
 MAX_PLAN_STEPS = 4000
 MAX_COMMAND_LENGTH = 10_000
-SUPPORTED_PLATFORMS = {"windows", "linux"}
+SUPPORTED_PLATFORMS = {"windows", "linux", "macos"}
+PLATFORM_TITLES = {"windows": "Windows", "linux": "Linux", "macos": "macOS"}
 EXERCISE_RUNNER_NAME = "AdversaryFlow-exercises.py"
 FIDELITY_VALUES = {"direct", "bounded_synthetic", "lab_proxy"}
 
@@ -186,7 +187,7 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
         raise ExecutionKitError("Plan metadata is incomplete")
     platform = _string(scope.get("command_platform"), "scope.command_platform", maximum=20, required=True).lower()
     if platform not in SUPPORTED_PLATFORMS:
-        raise ExecutionKitError("Execution kits are available for Windows and Linux plans")
+        raise ExecutionKitError("Execution kits are available for Windows, Linux, and macOS plans")
     for key in ("allow_network", "allow_admin", "allow_high_risk", "curated_only"):
         if key in scope:
             scope[key] = _boolean(scope[key], f"scope.{key}")
@@ -252,7 +253,7 @@ def normalize_plan(document: Any) -> ExecutionPlan:
     actor_name = _string(actor.get("name"), "actor.name", maximum=300, required=True)
     platform = _string(scope.get("command_platform"), "scope.command_platform", maximum=20, required=True).lower()
     if platform not in SUPPORTED_PLATFORMS:
-        raise ExecutionKitError("Execution kits are available for Windows and Linux plans")
+        raise ExecutionKitError("Execution kits are available for Windows, Linux, and macOS plans")
     operator = _string(context.get("operator", ""), "execution_context.operator", maximum=120)
     target = _string(context.get("target", ""), "execution_context.target", maximum=200)
     data_version = _string(document.get("data_version"), "data_version", maximum=500, required=True)
@@ -425,10 +426,19 @@ DEFAULT_TARGET_B64="__TARGET__"
 
 __ARRAYS__
 
-decode_b64() { printf '%s' "$1" | base64 --decode; }
+decode_b64() {
+  if printf '%s' "$1" | base64 -d >/dev/null 2>&1; then printf '%s' "$1" | base64 -d
+  else printf '%s' "$1" | base64 -D
+  fi
+}
 encode_b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 now_utc() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
-sha_file() { sha256sum "$1" | awk '{print $1}'; }
+sha_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  else printf 'Required standard utility not found: sha256sum or shasum\n' >&2; exit 2
+  fi
+}
 csv_cell() { local value=${1-}; value=${value//\"/\"\"}; printf '"%s"' "$value"; }
 append_csv() {
   local first=true value
@@ -462,7 +472,12 @@ indent_file() {
 html_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
 html_file() { html_escape < "$1"; }
 write_checksums() {
-  (cd "$RESULTS_DIR" && find . -type f ! -name SHA256SUMS -exec sha256sum '{}' \; | sort > SHA256SUMS)
+  (
+    cd "$RESULTS_DIR" || exit 2
+    find . -type f ! -name SHA256SUMS | sort | while IFS= read -r file; do
+      printf '%s  %s\n' "$(sha_file "$file")" "$file"
+    done > SHA256SUMS
+  )
 }
 on_interrupt() {
   event "session_interrupted" "" "Operator interrupted execution"
@@ -473,9 +488,13 @@ on_interrupt() {
   exit 130
 }
 
-for required in base64 sha256sum awk date mktemp; do
+for required in base64 awk date mktemp; do
   command -v "$required" >/dev/null 2>&1 || { printf 'Required standard utility not found: %s\n' "$required" >&2; exit 2; }
 done
+if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+  printf 'Required standard utility not found: sha256sum or shasum\n' >&2
+  exit 2
+fi
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 CSV_PATH="$SCRIPT_DIR/$CSV_NAME"
@@ -509,8 +528,8 @@ SUMMARY="$RESULTS_DIR/execution-summary.json"
 trap on_interrupt INT TERM
 
 heading "AdversaryFlow portable execution runner"
-printf 'Actor:        %s (%s)\nPlatform:     Linux\nPlan steps:   %s\nPlan SHA-256: %s\nData version: %s\n\n' \
-  "$ACTOR_NAME" "$ACTOR_ID" "${#STEP_IDS[@]}" "$PLAN_SHA256" "$DATA_VERSION"
+printf 'Actor:        %s (%s)\nPlatform:     %s\nPlan steps:   %s\nPlan SHA-256: %s\nData version: %s\n\n' \
+  "$ACTOR_NAME" "$ACTOR_ID" "__PLATFORM_TITLE__" "${#STEP_IDS[@]}" "$PLAN_SHA256" "$DATA_VERSION"
 printf 'This runner executes one lab step at a time. Nothing runs without approval.\n'
 printf 'Every decision, edit, command hash, output hash, and exit code is recorded locally.\n\n'
 printf 'Operator [%s]: ' "${DEFAULT_OPERATOR:-not set}"; IFS= read -r OPERATOR || OPERATOR=""
@@ -526,7 +545,7 @@ cat > "$REPORT" <<EOF
 # AdversaryFlow execution report
 
 - **Actor:** $ACTOR_NAME ($ACTOR_ID)
-- **Platform:** Linux
+- **Platform:** __PLATFORM_TITLE__
 - **Operator:** ${OPERATOR:-not recorded}
 - **Target:** ${TARGET:-not recorded}
 - **Session:** $RUN_ID
@@ -538,7 +557,7 @@ cat > "$REPORT" <<EOF
 EOF
 cat > "$HTML_REPORT" <<EOF
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AdversaryFlow execution report</title><style>body{font:15px/1.55 system-ui,sans-serif;margin:0;background:#0b1020;color:#e8edf7}main{max-width:1050px;margin:auto;padding:40px}h1,h2{color:#fff}section{background:#151c31;border:1px solid #2c3654;border-radius:12px;padding:20px;margin:18px 0}code,pre{font:13px/1.5 ui-monospace,monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#090d18;padding:16px;border-radius:8px}.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}.ok{color:#60d394}.warn{color:#ffca6a}</style></head><body><main>
-<h1>AdversaryFlow execution report</h1><div class="meta"><div><b>Actor</b><br>$(printf '%s' "$ACTOR_NAME ($ACTOR_ID)" | html_escape)</div><div><b>Platform</b><br>Linux</div><div><b>Operator</b><br>$(printf '%s' "${OPERATOR:-not recorded}" | html_escape)</div><div><b>Target</b><br>$(printf '%s' "${TARGET:-not recorded}" | html_escape)</div><div><b>Session</b><br>$(printf '%s' "$RUN_ID" | html_escape)</div><div><b>Started</b><br>$STARTED_AT</div></div>
+<h1>AdversaryFlow execution report</h1><div class="meta"><div><b>Actor</b><br>$(printf '%s' "$ACTOR_NAME ($ACTOR_ID)" | html_escape)</div><div><b>Platform</b><br>__PLATFORM_TITLE__</div><div><b>Operator</b><br>$(printf '%s' "${OPERATOR:-not recorded}" | html_escape)</div><div><b>Target</b><br>$(printf '%s' "${TARGET:-not recorded}" | html_escape)</div><div><b>Session</b><br>$(printf '%s' "$RUN_ID" | html_escape)</div><div><b>Started</b><br>$STARTED_AT</div></div>
 <p><b>Plan SHA-256:</b> <code>$PLAN_SHA256</code><br><b>CSV SHA-256:</b> <code>$CSV_SHA256</code><br><b>ATT&amp;CK data version:</b> $(printf '%s' "$DATA_VERSION" | html_escape)</p>
 EOF
 event "session_started" "" "operator=$OPERATOR; target=$TARGET; plan_sha256=$PLAN_SHA256"
@@ -676,8 +695,8 @@ event "session_completed" "" "status=$SESSION_STATUS; completed=$COMPLETED; fail
 printf '\n## Session summary\n\n- **Status:** %s\n- **Completed successfully:** %s\n- **Command failures/timeouts:** %s\n- **Skipped:** %s\n- **Completed:** %s\n' \
   "$SESSION_STATUS" "$COMPLETED" "$FAILED" "$SKIPPED" "$COMPLETED_AT" >> "$REPORT"
 printf '<section><h2>Session summary</h2><p><b>Status:</b> %s<br><b>Completed successfully:</b> %s<br><b>Command failures/timeouts:</b> %s<br><b>Skipped:</b> %s<br><b>Completed:</b> %s</p></section></main></body></html>\n' "$SESSION_STATUS" "$COMPLETED" "$FAILED" "$SKIPPED" "$COMPLETED_AT" >> "$HTML_REPORT"
-printf '{"schema_version":"1.0","run_id":"%s","status":"%s","actor_id":"%s","platform":"linux","plan_sha256":"%s","csv_sha256":"%s","started_at":"%s","completed_at":"%s","operator_b64":"%s","target_b64":"%s","completed_steps":%s,"failed_steps":%s,"skipped_steps":%s,"events_file":"evidence-events.jsonl","results_file":"execution-results.csv","report_file":"execution-report.html","markdown_report_file":"execution-report.md"}\n' \
-  "$RUN_ID" "$SESSION_STATUS" "$ACTOR_ID" "$PLAN_SHA256" "$CSV_SHA256" "$STARTED_AT" "$COMPLETED_AT" "$(encode_b64 "$OPERATOR")" "$(encode_b64 "$TARGET")" "$COMPLETED" "$FAILED" "$SKIPPED" > "$SUMMARY"
+printf '{"schema_version":"1.0","run_id":"%s","status":"%s","actor_id":"%s","platform":"%s","plan_sha256":"%s","csv_sha256":"%s","started_at":"%s","completed_at":"%s","operator_b64":"%s","target_b64":"%s","completed_steps":%s,"failed_steps":%s,"skipped_steps":%s,"events_file":"evidence-events.jsonl","results_file":"execution-results.csv","report_file":"execution-report.html","markdown_report_file":"execution-report.md"}\n' \
+  "$RUN_ID" "$SESSION_STATUS" "$ACTOR_ID" "__PLATFORM__" "$PLAN_SHA256" "$CSV_SHA256" "$STARTED_AT" "$COMPLETED_AT" "$(encode_b64 "$OPERATOR")" "$(encode_b64 "$TARGET")" "$COMPLETED" "$FAILED" "$SKIPPED" > "$SUMMARY"
 write_checksums
 heading "Execution $SESSION_STATUS"
 printf 'Report and evidence are ready to hand back:\n%s\n' "$RESULTS_DIR"
@@ -685,6 +704,8 @@ printf 'Report and evidence are ready to hand back:\n%s\n' "$RESULTS_DIR"
     return (template.replace("__PLAN_SHA__", plan.plan_sha256)
             .replace("__CSV_NAME__", csv_name)
             .replace("__CSV_SHA__", csv_sha256)
+            .replace("__PLATFORM__", plan.platform)
+            .replace("__PLATFORM_TITLE__", PLATFORM_TITLES.get(plan.platform, plan.platform))
             .replace("__ACTOR_ID__", _b64(plan.actor_id))
             .replace("__ACTOR_NAME__", _b64(plan.actor_name))
             .replace("__DATA_VERSION__", _b64(plan.data_version))
@@ -964,7 +985,7 @@ if ($runnerError) { Write-Error $runnerError.Exception.Message; exit 1 }
 
 def archive_execution_kit(plan: ExecutionPlan) -> tuple[bytes, str]:
     actor_slug = _slug(f"{plan.actor_id}_{plan.actor_name}", "Adversary")
-    platform_title = "Windows" if plan.platform == "windows" else "Linux"
+    platform_title = PLATFORM_TITLES.get(plan.platform, plan.platform.title())
     root = f"AdversaryFlow_{actor_slug}_{platform_title}"
     csv_name = f"{actor_slug}-plan.csv"
     script_name = f"{actor_slug}-execute.ps1" if plan.platform == "windows" else f"{actor_slug}-execute.sh"
@@ -979,7 +1000,7 @@ def archive_execution_kit(plan: ExecutionPlan) -> tuple[bytes, str]:
         csv_info.external_attr = 0o644 << 16
         archive.writestr(csv_info, csv_bytes)
         script_info = zipfile.ZipInfo(f"{root}/{script_name}")
-        script_info.external_attr = (0o755 if plan.platform == "linux" else 0o644) << 16
+        script_info.external_attr = (0o755 if plan.platform != "windows" else 0o644) << 16
         archive.writestr(script_info, script.encode("utf-8"))
         if _plan_needs_exercise_runner(plan):
             runner_info = zipfile.ZipInfo(f"{root}/{EXERCISE_RUNNER_NAME}")

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <a class="skip" href="#stage">Skip to content</a>
   <!-- SVG icon sprite -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -29,6 +30,7 @@
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 7.4-7 8.6C8 19.4 5 16.4 5 12V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
       <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 21V4M6 4h11l-2 3 2 3H6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.4-1.4 1-1.4 2.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="16.8" r="1.05" fill="currentColor"/></symbol>
     </defs>
   </svg>
 
@@ -52,34 +54,44 @@
     <div class="appbar__right">
       <span id="buildVersion" class="chip chip--muted" hidden></span>
       <span id="dataStatus" class="chip chip--muted">Loading</span>
+      <button type="button" id="helpBtn" class="iconbtn" title="How to use AdversaryFlow" aria-label="How to use AdversaryFlow"><svg class="icon"><use href="#i-help"/></svg></button>
       <button type="button" id="refreshBtn" class="iconbtn" title="Refresh the live ATT&CK feed" aria-label="Refresh the live ATT&CK feed"><svg class="icon"><use href="#i-refresh"/></svg></button>
     </div>
   </header>
 
+  <div id="setupError" class="setuperr" hidden role="alert">
+    <div class="setuperr__copy">
+      <b>Could not prepare ATT&amp;CK data</b>
+      <p id="setupErrorText"></p>
+    </div>
+    <button type="button" class="btn" id="retryLoad">Retry setup</button>
+  </div>
+
   <!-- ===================== STAGE ===================== -->
-  <main class="stage" id="stage">
+  <main class="stage" id="stage" tabindex="-1">
 
     <!-- STEP 0 — WELCOME -->
     <section class="screen screen--welcome is-active" data-screen="0">
       <div class="welcome">
         <div class="welcome__badge"><svg class="icon"><use href="#i-shield"/></svg> Development-lab ATT&amp;CK planner</div>
         <h1 class="welcome__title" tabindex="-1">Turn a threat actor into an<br/><span class="grad">end-to-end emulation plan</span></h1>
-        <p class="welcome__sub">AdversaryFlow pulls a chosen adversary's TTPs from the live MITRE ATT&CK&reg; feed, orders
-          them into a full kill chain, and attaches an <strong>ATT&amp;CK-aligned lab command to every technique</strong> —
-          so you can exercise and measure detection coverage.</p>
+        <p class="welcome__sub">Choose a named adversary. AdversaryFlow builds a step-by-step lab plan from the live
+          MITRE ATT&amp;CK&reg; catalog and gives you a command to copy for every technique — so you can check whether
+          detections would fire. <strong>It never runs those commands for you.</strong></p>
 
         <div class="welcome__steps">
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Search 220+ ATT&CK groups &amp; campaigns.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Start with APT29, or search 220+ groups.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-sliders"/></svg></span><div><b>Set scope</b><span>Focus platforms &amp; stages.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-sliders"/></svg></span><div><b>Set scope</b><span>Pick your lab OS. Risky commands stay off.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Run &amp; track</b><span>Lab command per TTP, stage by stage.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Copy, run, record</b><span>One lab command per technique.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Hand off</b><span>One-click CSV and offline execution runner.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-download"/></svg></span><div><b>Hand off</b><span>Download a kit for the lab operator.</span></div></div>
         </div>
 
         <div class="welcome__actions">
           <button type="button" class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
+          <button type="button" class="btn btn--secondary btn--lg" id="recommendedBtn" hidden>Start with a recommended actor</button>
           <button type="button" class="btn btn--ghost btn--lg" id="resumeSessionBtn" hidden>Resume saved plan</button>
           <button type="button" class="btn btn--ghost" id="resumeJsonBtn">Resume JSON plan</button>
           <input id="importPlan" type="file" accept="application/json,.json" hidden />
@@ -93,7 +105,7 @@
       <div class="screen__head">
         <div>
           <h2 class="screen__title" tabindex="-1">Choose a threat actor</h2>
-          <p class="screen__hint">Pick the adversary whose campaign you want to emulate. This drives the entire plan.</p>
+          <p class="screen__hint">Pick the adversary whose campaign you want to emulate. This drives the entire plan. New here? Use a Start here chip, then Continue.</p>
         </div>
       </div>
 
@@ -112,7 +124,7 @@
           <label for="sortSel">Sort</label>
           <select id="sortSel">
             <option value="name">Name (A–Z)</option>
-            <option value="ttps">Most TTPs</option>
+            <option value="ttps">Most techniques</option>
           </select>
         </div>
       </div>
@@ -124,17 +136,23 @@
           <button type="button" class="segmented__btn" data-domain="ics" aria-pressed="false">ICS / OT</button>
           <button type="button" class="segmented__btn" data-domain="mobile" aria-pressed="false">Mobile</button>
         </div>
-        <span class="domainbar__hint">Choose one or combine domains.</span>
+        <span class="domainbar__hint">Leave Enterprise on unless you need ICS or mobile coverage.</span>
       </div>
 
       <div class="featured" id="featured">
-        <span class="featured__label">Popular:</span>
+        <span class="featured__label">Start here:</span>
         <div class="featured__chips" id="featuredChips"></div>
         <span class="featured__count" id="actorResults" role="status" aria-live="polite"></span>
       </div>
 
       <div class="actorgrid" id="actorGrid"></div>
-      <div class="emptystate" id="actorEmpty" hidden>No actors match your search.</div>
+      <div class="emptystate" id="actorEmpty" hidden>
+        No actors match your search.
+        <span class="emptystate__hint">Try APT29, FIN7, or an ATT&amp;CK ID such as G0016.</span>
+      </div>
+      <div class="showmore" id="actorMore" hidden>
+        <button type="button" class="btn" id="actorShowAll">Show all actors</button>
+      </div>
     </section>
 
     <!-- STEP 2 — SCOPE -->
@@ -142,7 +160,7 @@
       <div class="screen__head">
         <div>
           <h2 class="screen__title" tabindex="-1">Scope the engagement</h2>
-          <p class="screen__hint">Tailor the plan to what you actually want to exercise. Everything updates live.</p>
+          <p class="screen__hint">Choose the OS of the lab host you will type on. Safe defaults stay on until you opt in to riskier tests.</p>
         </div>
       </div>
 
@@ -150,12 +168,13 @@
         <div class="scope__main">
           <div class="panel">
             <div class="panel__head"><svg class="icon"><use href="#i-terminal"/></svg><h3>Command platform</h3></div>
-            <p class="panel__desc">Which OS should the lab commands target?</p>
+            <p class="panel__desc">Which OS should the lab commands target? There is no cross-OS substitution.</p>
             <div class="segmented segmented--wide" id="cmdPlatform" role="group" aria-label="Command platform">
               <button type="button" class="segmented__btn is-on" data-plat="windows" aria-pressed="true">Windows</button>
               <button type="button" class="segmented__btn" data-plat="linux" aria-pressed="false">Linux</button>
               <button type="button" class="segmented__btn" data-plat="macos" aria-pressed="false">macOS</button>
             </div>
+            <p class="platformhint" id="platformHint" hidden></p>
           </div>
 
           <div class="panel">
@@ -169,22 +188,13 @@
 
           <div class="panel">
             <div class="panel__head"><svg class="icon"><use href="#i-layers"/></svg><h3>Kill-chain stages</h3><button type="button" class="linkbtn" id="stagesAll">Select all</button></div>
-            <p class="panel__desc">Include or drop tactics from the plan.</p>
+            <p class="panel__desc">Include or drop tactics from the plan. Leave them all on for a first run.</p>
             <div class="tacticgrid" id="tacticGrid" role="group" aria-label="Kill-chain stages"></div>
           </div>
 
           <div class="panel">
-            <div class="panel__head"><svg class="icon"><use href="#i-shield"/></svg><h3>Options</h3></div>
-            <label class="toggle">
-              <input type="checkbox" id="optPre" checked />
-              <span class="toggle__track"><span class="toggle__thumb"></span></span>
-              <span class="toggle__text"><b>Include pre-compromise tactics</b><span>Reconnaissance &amp; Resource Development happen off-host and aren't endpoint-detectable.</span></span>
-            </label>
-            <label class="toggle">
-              <input type="checkbox" id="optCurated" />
-              <span class="toggle__track"><span class="toggle__thumb"></span></span>
-              <span class="toggle__text"><b>Curated tests only</b><span>Hide any auto-generated fallback commands.</span></span>
-            </label>
+            <div class="panel__head"><svg class="icon"><use href="#i-shield"/></svg><h3>Safety</h3></div>
+            <p class="safedefaults" role="status">Safe lab defaults are on. High-risk, administrator, and network-active commands stay blocked until you opt in.</p>
             <label class="toggle">
               <input type="checkbox" id="optNetwork" />
               <span class="toggle__track"><span class="toggle__thumb"></span></span>
@@ -200,6 +210,19 @@
               <span class="toggle__track"><span class="toggle__thumb"></span></span>
               <span class="toggle__text"><b>Allow high-risk commands</b><span>Include commands with disruptive or sensitive side effects.</span></span>
             </label>
+            <details class="advanced">
+              <summary>More plan options</summary>
+              <label class="toggle">
+                <input type="checkbox" id="optPre" checked />
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text"><b>Include pre-compromise tactics</b><span>Reconnaissance &amp; Resource Development happen off-host and aren't endpoint-detectable.</span></span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="optCurated" />
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text"><b>Curated tests only</b><span>Hide any auto-generated fallback commands.</span></span>
+              </label>
+            </details>
           </div>
         </div>
 
@@ -222,6 +245,12 @@
         </div>
       </div>
 
+      <ol class="coach" id="planCoach">
+        <li><b>Copy</b> the lab command on a card.</li>
+        <li><b>Paste</b> it on your authorized lab host — never production.</li>
+        <li><b>Record</b> whether it ran and whether a detection fired.</li>
+      </ol>
+
       <div class="plan">
         <nav class="plan__rail" id="stageRail" aria-label="Kill-chain stages"></nav>
         <div class="plan__body" id="stageBody"></div>
@@ -238,20 +267,25 @@
       </div>
       <div class="export">
         <div class="export__summary" id="exportSummary"></div>
+        <ol class="nextsteps">
+          <li><b>Download the operator kit</b> if someone will run the plan on a lab host.</li>
+          <li><b>Export JSON</b> if you want to resume this plan later in AdversaryFlow.</li>
+          <li>Move files to the lab. The kit asks for approval before every command.</li>
+        </ol>
         <div class="export__cards">
-          <button class="expcard expcard--hero" data-export="kit" id="executionKitExport">
+          <button type="button" class="expcard expcard--hero" data-export="kit" id="executionKitExport">
             <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
             <b id="executionKitTitle">Download operator execution kit</b><span id="executionKitDescription">CSV plan plus a self-contained PowerShell or Bash runner. Direct commands need no extra runtime. Bounded synthetic steps include a portable exercise script that needs Python 3.10+.</span>
           </button>
-          <button class="expcard" data-export="markdown">
+          <button type="button" class="expcard" data-export="markdown">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
             <b>Markdown report</b><span>Human-readable plan with commands, notes &amp; cleanup.</span>
           </button>
-          <button class="expcard" data-export="json">
+          <button type="button" class="expcard" data-export="json">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
             <b>JSON</b><span>Versioned structured data for pipelines and custom integrations.</span>
           </button>
-          <button class="expcard" data-export="script">
+          <button type="button" class="expcard" data-export="script">
             <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
             <b>Runbook</b><span>Commented, sequenced command runbook.</span>
           </button>
@@ -296,6 +330,24 @@
         <button type="submit" class="btn btn--primary">Connect securely</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="authdialog helpdialog" id="helpDialog" aria-labelledby="helpTitle">
+    <div class="authdialog__card">
+      <span class="authdialog__icon"><svg class="icon"><use href="#i-help"/></svg></span>
+      <h2 id="helpTitle">How to use AdversaryFlow</h2>
+      <ol class="help__steps">
+        <li><b>Pick a threat actor</b> such as APT29. That choice builds the whole plan.</li>
+        <li><b>Set the lab OS</b> to the machine you will type on. Leave the safety switches off for a first run.</li>
+        <li><b>Copy a command</b>, paste it only on an authorized disposable lab host, then record the result.</li>
+        <li><b>Export</b> the operator kit or JSON when you are done. JSON lets you resume later.</li>
+      </ol>
+      <p class="help__note">AdversaryFlow never executes catalog commands. High-risk copy asks you to confirm first.</p>
+      <p class="help__keys"><b>Keyboard:</b> Enter continues · j / k move between techniques · c copies the focused command · ? opens this help</p>
+      <div class="authdialog__actions">
+        <button type="button" class="btn btn--primary" id="helpClose">Got it</button>
+      </div>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>

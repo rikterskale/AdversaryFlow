@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import patch
@@ -240,6 +244,53 @@ class CommandLineUatTests(unittest.TestCase):
         self.assertTrue(report["cache_writable"])
         self.assertEqual(report["version"], app_module.__version__)
         self.assertTrue(all(report["dependencies"].values()))
+
+    def test_j04_the_process_answers_liveness_before_attack_data_is_ready(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        env = dict(os.environ)
+        env.pop("ADVERSARYFLOW_OFFLINE", None)
+        env["ADVERSARYFLOW_CACHE_DIR"] = self.cache
+        process = subprocess.Popen(
+            [sys.executable, "-m", "backend.app", "--host", "127.0.0.1", "--port", str(port),
+             "--no-preload", "--offline"],
+            cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True,
+        )
+        url = f"http://127.0.0.1:{port}"
+        try:
+            body = None
+            for _ in range(50):
+                try:
+                    with urllib.request.urlopen(f"{url}/api/live", timeout=1) as response:
+                        body = json.loads(response.read().decode("utf-8"))
+                        break
+                except (urllib.error.URLError, TimeoutError, ConnectionError):
+                    if process.poll() is not None:
+                        self.fail(f"service exited {process.returncode}")
+                    time.sleep(0.1)
+            self.assertIsNotNone(body)
+            self.assertEqual(body["status"], "live")
+            self.assertEqual(body["version"], app_module.__version__)
+            with urllib.request.urlopen(url, timeout=2) as homepage:
+                html = homepage.read().decode("utf-8")
+            self.assertIn("AdversaryFlow — Adversary Emulation Planner", html)
+            try:
+                with urllib.request.urlopen(f"{url}/api/health", timeout=2) as health:
+                    self.fail(f"health should be degraded before ATT&CK data loads: {health.status}")
+            except urllib.error.HTTPError as exc:
+                try:
+                    exc.read()
+                finally:
+                    exc.close()
+                self.assertEqual(exc.code, 503)
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
 
     def test_j45_a_non_loopback_bind_is_refused(self):
         result = run_cli("--host", "0.0.0.0", "--no-preload", cache_dir=self.cache)

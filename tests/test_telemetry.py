@@ -135,6 +135,10 @@ class TelemetryAcceptanceTests(unittest.TestCase):
         self.assertNotIn("--vacuum", command)
         self.assertEqual(events[0]["host"], "lab")
 
+    def test_native_collection_rejects_non_iso_timestamps(self):
+        with self.assertRaisesRegex(ValueError, "ISO 8601"):
+            collect_native("windows", "2026-09-04T12:00:00Z'; calc.exe; '", "2026-09-04T12:01:00Z")
+
     def test_normalization_rejects_non_independent_sources(self):
         with self.assertRaisesRegex(ValueError, "endpoint or siem"):
             normalize_event({"timestamp": "2026-09-04T12:00:00Z", "source": "receipt"})

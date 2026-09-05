@@ -1,7 +1,10 @@
 # Operations
 
 New operators should start with [Getting started](GETTING_STARTED.md).
-This page is the compact service, cache, and diagnostics reference.
+This page is the compact service, cache, and diagnostics reference for a
+**single-operator loopback lab appliance**. It is not a multi-user production
+API; keep the default bind on `127.0.0.1` unless you have read
+[SECURITY.md](../SECURITY.md) and opted into `--allow-remote`.
 
 ## Service lifecycle
 

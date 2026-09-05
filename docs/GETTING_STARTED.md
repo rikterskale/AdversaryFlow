@@ -1,6 +1,6 @@
 # Getting started
 
-A copy/paste-safe operator handbook for **AdversaryFlow 0.3.0**.
+A copy/paste-safe operator handbook for **AdversaryFlow 0.4.0**.
 Every `adversaryflow` / `adversaryflow-telemetry` invocation, launcher
 `--help` / `--version`, and HTTP check quoted below was executed against
 this tree. Installer success lines are the literal strings from
@@ -151,7 +151,7 @@ Windows PowerShell:
 `--version` must print exactly:
 
 ```text
-AdversaryFlow 0.3.0
+AdversaryFlow 0.4.0
 ```
 
 `doctor` must exit `0` and include:
@@ -160,7 +160,7 @@ AdversaryFlow 0.3.0
 "ok": true,
 "frontend_available": true,
 "cache_writable": true,
-"version": "0.3.0"
+"version": "0.4.0"
 ```
 
 plus `"Flask"` and `"waitress"` versions under `"dependencies"`. If `"ok"`
@@ -205,7 +205,7 @@ You should see, in order:
 
 ```text
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.3.0: http://127.0.0.1:5000
+AdversaryFlow 0.4.0: http://127.0.0.1:5000
 ```
 
 Leave this terminal running. On a **first** enterprise start the UI shows
@@ -237,7 +237,7 @@ curl.exe -sS http://127.0.0.1:5000/api/live
 You should get HTTP 200 and:
 
 ```json
-{"status":"live","version":"0.3.0"}
+{"status":"live","version":"0.4.0"}
 ```
 
 `/api/live` means the process can answer. It does **not** mean ATT&CK data
@@ -294,9 +294,9 @@ row is loaded).
 
 In the browser at <http://127.0.0.1:5000>:
 
-1. Click **Begin emulation plan**.
-2. Search `APT29` or `G0016` and select **APT29**. The footer should read
-   `Selected: APT29`. Click **Continue**.
+1. Click **Start with APT29** (or **Begin emulation plan**, then search
+   `APT29` / `G0016` and select it). The footer should read
+   `Selected: APT29`. Click **Continue** if you used the gallery.
 3. On **Scope the engagement**:
    - Set **Command platform** to the OS of the lab host you will type on
      (**Linux**, **Windows**, or **macOS**). There is no cross-OS fallback:
@@ -365,7 +365,7 @@ file. It is the portable backup of the plan.
 
 ### PoC success checklist
 
-- [ ] `adversaryflow --version` prints `AdversaryFlow 0.3.0`
+- [ ] `adversaryflow --version` prints `AdversaryFlow 0.4.0`
 - [ ] `adversaryflow doctor` has `"ok": true`
 - [ ] `GET /api/live` returns `"status":"live"`
 - [ ] `GET /api/health` returns HTTP 200 `"ready": true`
@@ -455,7 +455,7 @@ On **Finish & export**:
 
 | Control | What you get |
 | --- | --- |
-| **Download operator execution kit** | ZIP: catalog-rebound CSV + PowerShell or Bash runner. Windows and Linux only; macOS is disabled on purpose. Bounded synthetic steps add `AdversaryFlow-exercises.py` (needs Python 3.10+ beside the kit). Direct steps need no AdversaryFlow install on the destination. |
+| **Download operator execution kit** | ZIP: catalog-rebound CSV + PowerShell (Windows) or Bash (Linux/macOS) runner. Bounded synthetic steps add `AdversaryFlow-exercises.py` (needs Python 3.10+ beside the kit). Direct steps need no AdversaryFlow install on the destination. |
 | **Markdown report** | Human-readable plan, including **Outcome** and **Detection**. |
 | **JSON** | Schema 2.0; this is the file you resume later. |
 | **Runbook** | `.txt` with every command commented (`REM` / `#`). It is not a script. |
@@ -509,7 +509,7 @@ strings are exact CLI or HTTP output.
 | `AdversaryFlow requires Python 3.10 or newer.` | Interpreter too old or missing | Install Python 3.10+, confirm with `python3 --version` / `py -3 --version`, rerun `./install.sh` |
 | `doctor` has `"ok": false` and `"frontend_available": false` | Frontend files not next to the package | Run install from a full git checkout; or set `ADVERSARYFLOW_FRONTEND_DIR` to the `frontend/` directory |
 | `doctor` has `"cache_writable": false` | Cache directory not writable | `adversaryflow --cache-dir /path/you/own doctor` then start with the same `--cache-dir` |
-| Browser never opens, nothing listens | Start failed, or you closed the terminal | Run `./run.sh` again; confirm `AdversaryFlow 0.3.0: http://127.0.0.1:5000` |
+| Browser never opens, nothing listens | Start failed, or you closed the terminal | Run `./run.sh` again; confirm `AdversaryFlow 0.4.0: http://127.0.0.1:5000` |
 | `OSError: [Errno 98] Address already in use` (Windows: WinError 10048) | Port 5000 taken | `./run.sh --port 5050` and open <http://127.0.0.1:5050> |
 | `/api/live` works, `/api/health` is HTTP 503 `"degraded"` | ATT&CK still loading, or load failed | If the UI still says **Preparing MITRE ATT&CK data…**, wait. If `"phase": "failed"`, read `"error"` and the next rows |
 | `"error": "ATT&CK data has not been loaded"` | Started with `--no-preload` and bootstrap never ran | Start **without** `--no-preload`, or click **Retry setup** in the UI |
@@ -605,7 +605,7 @@ exists. After a `git pull`, run `./install.sh` yourself.
 
 ## 7. Upgrades
 
-AdversaryFlow **0.3.0** is the current package version
+AdversaryFlow **0.4.0** is the current package version
 (`backend/__init__.py`, `adversaryflow --version`). It is **not** on PyPI.
 
 ### From a git checkout (supported)
@@ -629,7 +629,7 @@ Imported files must be schema **2.0**; a `1.0` export is refused with
 After you build a wheel or download a GitHub Release asset:
 
 ```bash
-pipx install ./adversaryflow-0.3.0-py3-none-any.whl
+pipx install ./adversaryflow-0.4.0-py3-none-any.whl
 adversaryflow --version
 adversaryflow doctor
 adversaryflow --open
@@ -687,7 +687,7 @@ Copy:
 | Suspected vulnerability | GitHub **private** vulnerability report only. Do not open a public issue. See [SECURITY.md](../SECURITY.md) |
 | “How do I target a network I do not own?” | Do not file it. That use is outside [ACCEPTABLE_USE.md](../ACCEPTABLE_USE.md) |
 
-Beta support is the **latest minor release** only ([SUPPORT.md](../SUPPORT.md)).
+Support is the **latest minor release** only ([SUPPORT.md](../SUPPORT.md)).
 Maintainers acknowledge private vulnerability reports within five business
 days.
 
@@ -695,7 +695,7 @@ days.
 
 ## Command cheat sheet
 
-Verified against `adversaryflow --help` on 0.3.0. Default command is
+Verified against `adversaryflow --help` on 0.4.0. Default command is
 `serve`.
 
 ```text

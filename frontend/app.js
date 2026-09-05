@@ -38,6 +38,7 @@ function tacticTitle(tactic) {
 }
 
 const FEATURED = ["G0016", "G0032", "G0007", "G0046", "G1017", "G0096", "G0008", "G1006"];
+const ACTOR_PAGE_SIZE = 24;
 const SESSION_KEY = "af_session_v1";
 const FIDELITY_VALUES = ["direct", "bounded_synthetic", "lab_proxy"];
 const DETECTION_RESULTS = ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"];
@@ -67,6 +68,7 @@ const state = {
   focusedTech: 0,
   step: 0, stage: 0, maxStep: 0,
   typeFilter: "all", sort: "name",
+  actorShowAll: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -88,8 +90,13 @@ document.addEventListener("DOMContentLoaded", () => {
   boot();
 
   el("startBtn").addEventListener("click", () => goTo(1));
+  el("recommendedBtn").addEventListener("click", startRecommended);
   el("brandHome").addEventListener("click", () => restart());
   el("refreshBtn").addEventListener("click", refreshFeed);
+  el("helpBtn").addEventListener("click", openHelp);
+  el("helpClose").addEventListener("click", () => el("helpDialog").close());
+  el("retryLoad").addEventListener("click", boot);
+  el("actorShowAll").addEventListener("click", () => { state.actorShowAll = true; renderActorGrid(); });
   el("backBtn").addEventListener("click", () => goTo(state.step - 1));
   el("nextBtn").addEventListener("click", onNext);
   el("restartBtn").addEventListener("click", () => restart());
@@ -132,6 +139,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Keyboard: Enter advances when possible; j/k/c operate the plan.
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input,select,textarea,a,[contenteditable]")) return;
+    if ((e.key === "?" || e.key === "F1") && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (el("helpDialog").open) el("helpDialog").close();
+      else if (!el("confirmDialog").open && !el("authDialog").open) openHelp();
+      return;
+    }
     if (e.key === "Enter" && !e.target.matches("button") && !el("nextBtn").disabled && state.step >= 1 && state.step <= 3)
       onNext();
     if (state.step === 3) handlePlanKeys(e);
@@ -141,6 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function boot() {
   showLoader("Preparing AdversaryFlow…", "Checking the local service and ATT&CK cache.");
   try {
+    hideSetupError();
     const session = await establishSession();
     state.csrf = session.csrf_token;
     state.toolVersion = session.version || "";
@@ -156,6 +170,11 @@ async function boot() {
   } finally {
     hideLoader();
   }
+}
+
+function openHelp() {
+  const dialog = el("helpDialog");
+  if (dialog && !dialog.open) dialog.showModal();
 }
 
 async function establishSession() {
@@ -286,18 +305,22 @@ function authHeaders(extra = {}) {
 }
 function csrfHeaders(extra = {}) { return authHeaders({ ...extra, "X-AdversaryFlow-CSRF": state.csrf }); }
 
+function hideSetupError() {
+  el("setupError").hidden = true;
+}
 function showLoadFailure(error) {
   setStatus("setup needs attention", "err");
-  const grid = el("actorGrid");
-  grid.innerHTML = `<div class="emptystate"><p>${escapeHtml(error.message || "Could not prepare ATT&CK data")}</p><button type="button" class="btn" id="retryLoad">Retry setup</button></div>`;
-  const retry = el("retryLoad");
-  if (retry) retry.addEventListener("click", boot);
+  el("setupErrorText").textContent = error.message || "Could not prepare ATT&CK data";
+  el("setupError").hidden = false;
+  const rec = el("recommendedBtn");
+  if (rec) rec.hidden = true;
 }
 
 /* ============================================================
    DATA
    ============================================================ */
-async function loadActors(throwOnError = false) {
+async function loadActors(throwOnError = false, { busy = false } = {}) {
+  if (busy) showLoader("Loading ATT&CK domain data…", "Downloading and validating the selected bundles. You can leave this tab open.");
   setStatus("loading ATT&CK…", "");
   try {
     const data = await apiJson(`/api/actors?${domainQuery()}`);
@@ -308,10 +331,14 @@ async function loadActors(throwOnError = false) {
     applyFilter();
     const count = data.actors.length;
     setStatus(`${count} actor${count === 1 ? "" : "s"} · ${state.domains.map(titleCase).join(" + ")}`, "ok");
+    hideSetupError();
+    renderWelcomeActions();
   } catch (e) {
     setStatus("backend offline", "err");
     showLoadFailure(e);
     if (throwOnError) throw e;
+  } finally {
+    if (busy) hideLoader();
   }
 }
 async function refreshFeed() {
@@ -362,7 +389,7 @@ function toggleDomain(domain) {
   state.run = new Set(); state.maxStep = 1; state.stage = 0;
   state.actors = []; state.filtered = []; state.dataVersion = "unknown";
   renderFeatured(); renderActorGrid(); updateStepper(); updateActionBar();
-  loadActors();
+  loadActors(false, { busy: true });
 }
 function setStatus(text, cls) {
   const s = el("dataStatus");
@@ -397,9 +424,18 @@ function goTo(step) {
   });
 }
 
+function firstRunnableStage() {
+  const p = filteredPlan();
+  const index = p.stages.findIndex(stage => stage.techniques.some(technique => !technique._cmd.unsupported));
+  return index < 0 ? 0 : index;
+}
 function onNext() {
   if (state.step === 1) { if (!state.selectedId) return; goTo(2); }
-  else if (state.step === 2) { if (filteredPlan().runnable === 0) return; goTo(3); }
+  else if (state.step === 2) {
+    if (filteredPlan().runnable === 0) return;
+    state.stage = firstRunnableStage();
+    goTo(3);
+  }
   else if (state.step === 3) { goTo(4); }
 }
 
@@ -461,6 +497,7 @@ async function restart() {
   state.recordContext = { operator: "", target: "" };
   state.maxStep = 0; state.stage = 0;
   state.typeFilter = "all"; state.sort = "name";
+  state.actorShowAll = false;
   state.domains = ["enterprise"];
   state.scope = { cmdPlatform: "windows", tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false };
   el("actorSearch").value = "";
@@ -691,6 +728,7 @@ function applyFilter() {
   });
   list.sort(state.sort === "ttps" ? (a, b) => b.technique_count - a.technique_count : (a, b) => a.name.localeCompare(b.name));
   state.filtered = list;
+  if (list.length <= ACTOR_PAGE_SIZE) state.actorShowAll = false;
   renderActorGrid();
 }
 function renderFeatured() {
@@ -698,12 +736,19 @@ function renderFeatured() {
   const chips = FEATURED.map(id => state.actors.find(a => a.attack_id === id)).filter(Boolean);
   wrap.innerHTML = chips.map(a => `<button type="button" class="fchip" data-id="${escapeHtml(a.stix_id)}">${escapeHtml(a.name)}</button>`).join("");
   $$(".fchip", wrap).forEach(c => c.addEventListener("click", () => { selectActor(c.dataset.id); }));
+  el("featured").classList.toggle("is-empty", chips.length === 0);
 }
 function renderActorGrid() {
   const grid = el("actorGrid");
+  const visible = state.actorShowAll || state.filtered.length <= ACTOR_PAGE_SIZE
+    ? state.filtered
+    : state.filtered.slice(0, ACTOR_PAGE_SIZE);
   el("actorEmpty").hidden = state.filtered.length > 0;
   el("actorResults").textContent = `${state.filtered.length} ${state.filtered.length === 1 ? "result" : "results"}`;
-  grid.innerHTML = state.filtered.map(a => `
+  const more = el("actorMore");
+  more.hidden = state.filtered.length <= ACTOR_PAGE_SIZE || state.actorShowAll;
+  el("actorShowAll").textContent = `Show all ${state.filtered.length} actors`;
+  grid.innerHTML = visible.map(a => `
     <button type="button" class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${escapeHtml(a.stix_id)}" aria-label="Select ${escapeHtml(a.name)}, ${escapeHtml(a.attack_id)}, ${a.technique_count} techniques" aria-pressed="${state.selectedId === a.stix_id}">
       <div class="actorcard__top">
         <div>
@@ -715,11 +760,35 @@ function renderActorGrid() {
       ${a.aliases.length ? `<div class="actorcard__aka">aka ${escapeHtml(a.aliases.slice(0, 4).join(", "))}</div>` : ""}
       <div class="actorcard__desc">${escapeHtml(cleanDescription(a.description) || "No description available.")}</div>
       <div class="actorcard__foot">
-        <span class="ttpcount">${a.technique_count} <span>TTPs</span></span>
+        <span class="ttpcount">${a.technique_count} <span>techniques</span></span>
         <span class="actorcard__pick">${state.selectedId === a.stix_id ? '<svg class="icon"><use href="#i-check"/></svg> Selected' : "Select"}</span>
       </div>
     </button>`).join("");
-  $$(".actorcard", grid).forEach(c => c.addEventListener("click", () => selectActor(c.dataset.id)));
+  $$(".actorcard", grid).forEach(c => {
+    c.addEventListener("click", () => selectActor(c.dataset.id));
+    c.addEventListener("dblclick", () => {
+      selectActor(c.dataset.id);
+      if (state.selectedId) goTo(2);
+    });
+  });
+}
+function recommendedActor() {
+  for (const id of FEATURED) {
+    const actor = state.actors.find(a => a.attack_id === id);
+    if (actor) return actor;
+  }
+  return state.actors[0] || null;
+}
+function startRecommended() {
+  if (!el("setupError").hidden) return;
+  const actor = recommendedActor();
+  if (!actor) { toast("No actors are loaded yet", "error"); return; }
+  const changed = state.selectedId !== actor.stix_id;
+  state.selectedId = actor.stix_id;
+  state.selectedActor = actor;
+  if (changed) { state.workflow = null; state.stage = 0; state.maxStep = 1; }
+  persistSession();
+  goTo(2);
 }
 function selectActor(id) {
   const changed = state.selectedId !== id;
@@ -737,7 +806,7 @@ function selectActor(id) {
 }
 
 async function loadWorkflowThen(cb, { keepScope = false } = {}) {
-  showLoader(`Pulling ${state.selectedActor.name}'s TTPs from MITRE ATT&CK…`);
+  showLoader(`Building ${state.selectedActor.name}'s lab plan…`, "Resolving mapped techniques from the live ATT&CK catalog.");
   try {
     const data = await apiJson(`/api/workflow/${encodeURIComponent(state.selectedId)}?${domainQuery()}`);
     if (!Array.isArray(data.stages) || !data.metadata) throw new Error("Workflow response is incomplete");
@@ -803,8 +872,35 @@ function pickCommand(t, plat) {
     };
 }
 
+function guessPlatform() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  const plat = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "").toLowerCase();
+  if (/mac/.test(plat) || /mac os/.test(ua)) return "macos";
+  if (/win/.test(plat) || /windows/.test(ua)) return "windows";
+  if (/linux/.test(plat) || /linux/.test(ua) || /cros/.test(ua)) return "linux";
+  return "";
+}
+function renderPlatformHint() {
+  const hint = el("platformHint");
+  if (!hint) return;
+  const guessed = guessPlatform();
+  if (!guessed || guessed === state.scope.cmdPlatform) { hint.hidden = true; hint.textContent = ""; return; }
+  hint.hidden = false;
+  hint.innerHTML = `This browser looks like <b>${titleCase(guessed)}</b>. Commands currently target <b>${titleCase(state.scope.cmdPlatform)}</b> — switch only if that is the lab OS you will type on. <button type="button" class="linkbtn" id="useGuessedPlat">Use ${titleCase(guessed)}</button>`;
+  el("useGuessedPlat").addEventListener("click", () => {
+    state.scope.cmdPlatform = guessed;
+    $$("#cmdPlatform .segmented__btn").forEach(button => {
+      const on = button.dataset.plat === guessed;
+      button.classList.toggle("is-on", on);
+      button.setAttribute("aria-pressed", String(on));
+    });
+    loadRunState();
+    renderScope();
+  });
+}
 function renderScope() {
   buildTacticGrid();
+  renderPlatformHint();
   const p = filteredPlan();
   const sc = state.scope;
   el("recordOperator").value = state.recordContext.operator;
@@ -814,6 +910,7 @@ function renderScope() {
   el("optHighRisk").checked = state.scope.allowHighRisk;
   el("scopeSummary").innerHTML = `
     <h4>Plan preview</h4>
+    <p class="panel__desc" style="margin-bottom:12px">${p.runnable ? `${p.runnable} lab tests ready on ${titleCase(sc.cmdPlatform)}.` : "No runnable tests with this scope — switch platform or enable a safety option."}</p>
     <div class="sumrow"><span class="k">Actor</span><span class="v">${escapeHtml(state.selectedActor.name)}</span></div>
     <div class="sumrow"><span class="k">Techniques</span><span class="v big">${p.total}</span></div>
     <div class="sumrow"><span class="k">Runnable on ${titleCase(sc.cmdPlatform)}</span><span class="v">${p.runnable}</span></div>
@@ -891,7 +988,7 @@ async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
-function toast(msg, kind = "success") { const t = el("toast"); t.innerHTML = `<svg class="icon"><use href="#${kind === "error" ? "i-x" : "i-check"}"/></svg>${escapeHtml(msg)}`; t.hidden = false; requestAnimationFrame(() => t.classList.add("is-show")); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("is-show"); t.hidden = true; }, 2600); }
+function toast(msg, kind = "success") { const t = el("toast"); t.innerHTML = `<svg class="icon"><use href="#${kind === "error" ? "i-x" : "i-check"}"/></svg>${escapeHtml(msg)}`; t.hidden = false; requestAnimationFrame(() => t.classList.add("is-show")); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("is-show"); t.hidden = true; }, kind === "error" ? 5200 : 2800); }
 function showLoader(txt, detail = "") { el("loaderText").textContent = txt || "Working"; el("loaderDetail").textContent = detail; el("loader").hidden = false; }
 function hideLoader() { el("loader").hidden = true; }
 function updateRecordContext() {
@@ -965,11 +1062,19 @@ function clearSession() {
 }
 function renderWelcomeActions() {
   const button = el("resumeSessionBtn");
-  if (!button) return;
   const session = readSession();
-  if (!session) { button.hidden = true; return; }
-  button.hidden = false;
-  button.textContent = `Resume ${session.selectedActor.name} plan`;
+  if (button) {
+    if (!session) button.hidden = true;
+    else {
+      button.hidden = false;
+      button.textContent = `Resume ${session.selectedActor.name} plan`;
+    }
+  }
+  const rec = el("recommendedBtn");
+  if (!rec) return;
+  const actor = recommendedActor();
+  rec.hidden = !actor || !el("setupError").hidden;
+  rec.textContent = actor ? `Start with ${actor.name}` : "Start with a recommended actor";
 }
 function restoreScopeFromSession(session) {
   const scope = session.scope || {};
@@ -1086,11 +1191,15 @@ function renderRail() {
   }).join("");
   $$(".railitem", rail).forEach(b => b.addEventListener("click", () => { state.stage = +b.dataset.i; state.focusedTech = 0; renderRail(); renderStage(); }));
 }
+function stageTechniques(stage) {
+  return [...stage.techniques].sort((a, b) => Number(Boolean(a._cmd.unsupported)) - Number(Boolean(b._cmd.unsupported)));
+}
 function renderStage() {
   const p = filteredPlan();
   const s = p.stages[state.stage];
   const body = el("stageBody");
   if (!s) { body.innerHTML = `<div class="emptystate">No techniques in scope.</div>`; return; }
+  const techniques = stageTechniques(s);
   const color = tacticColor(s.tactic);
   body.innerHTML = `
     <div class="stagepanel__head">
@@ -1098,8 +1207,8 @@ function renderStage() {
       <h3>${escapeHtml(s.title)}</h3>
     </div>
     <p class="stagepanel__desc">${escapeHtml(TACTIC_META[s.tactic] || "")} · ${s.techniques.length} technique${s.techniques.length !== 1 ? "s" : ""}</p>
-    <p class="kbdhint">j / k move · c copy command · record command result and detection separately</p>
-    <div class="techlist">${s.techniques.map(renderTech).join("")}</div>
+    <p class="kbdhint">On this stage: copy a command, run it on your lab host, then record the result. j / k move · c copies.</p>
+    <div class="techlist">${techniques.map(renderTech).join("")}</div>
     <div class="stagenav">
       <button type="button" class="btn btn--ghost" ${state.stage === 0 ? "disabled" : ""} id="prevStage"><svg class="icon"><use href="#i-arrow-l"/></svg> Previous stage</button>
       <button type="button" class="btn" ${state.stage >= p.stages.length - 1 ? "disabled" : ""} id="nextStage">Next stage <svg class="icon"><use href="#i-arrow-r"/></svg></button>
@@ -1132,7 +1241,7 @@ function renderStage() {
   const prev = el("prevStage"), next = el("nextStage");
   if (prev) prev.addEventListener("click", () => { if (state.stage > 0) { state.stage--; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
   if (next) next.addEventListener("click", () => { if (state.stage < p.stages.length - 1) { state.stage++; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
-  setPlanFocus(Math.min(state.focusedTech, Math.max(0, s.techniques.length - 1)));
+  setPlanFocus(Math.min(state.focusedTech, Math.max(0, techniques.length - 1)));
 }
 function scrollPlanTop() { el("stage").scrollTo({ top: 0, behavior: "smooth" }); }
 
@@ -1165,18 +1274,6 @@ function renderTech(t) {
         <span class="srcbadge srcbadge--${fidelity.cls}">${fidelity.label}</span>
         ${source === "fallback" ? '<span class="srcbadge srcbadge--fallback">fallback</span>' : ""}
       </div>
-      ${unsupported ? "" : `<div class="safety safety--${risk}">
-        <div class="safety__badges"><span class="riskbadge riskbadge--${risk}">${escapeHtml(risk)} risk</span>${c.requires_admin ? '<span class="riskbadge">admin</span>' : ''}${c.requires_network ? '<span class="riskbadge">network</span>' : ''}${c.cleanup_required ? '<span class="riskbadge">cleanup required</span>' : ''}</div>
-        <div><b>Effects:</b> ${escapeHtml(effects || "Not classified")} · <b>Expected:</b> ${escapeHtml(c.expected_telemetry || "Verify relevant telemetry")}</div>
-        ${c.fidelity === "bounded_synthetic" ? `<div>Bounded synthetic exercise — a safe analogue, not the full ATT&amp;CK behaviour. The JSON receipt is self-reported; correlate it with endpoint or SIEM telemetry.</div>` : ""}
-        ${c.fidelity === "lab_proxy" ? `<div>Lab proxy — locates, echoes, or approximates related telemetry rather than reproducing the full technique.</div>` : ""}
-        ${c.telemetry_acceptance ? `<div><b>Independent pass gate:</b> marker + ${c.telemetry_acceptance.minimum_activity_events} ${escapeHtml(c.telemetry_acceptance.activity_event_types.join(" or "))} event(s) on the same host and receipt time window.</div>` : ""}
-        ${(c.network_targets || []).length ? `<div><b>Network targets:</b> ${escapeHtml(c.network_targets.join(", "))}</div>` : ""}
-        ${(c.prerequisites || []).length ? `<div><b>Prerequisites:</b> ${escapeHtml(c.prerequisites.join("; "))}</div>` : ""}
-        ${c.expected_output ? `<div><b>Expected output:</b> ${escapeHtml(c.expected_output)}</div>` : ""}
-        ${c.timeout_seconds ? `<div><b>Timeout:</b> ${c.timeout_seconds}s</div>` : ""}
-        ${c.rollback ? `<div><b>Rollback:</b> ${escapeHtml(c.rollback)}</div>` : ""}
-      </div>`}
       <div class="cmd">
         <div class="cmd__head">
           <span class="cmd__plat">${escapeHtml(c.platform)}</span>
@@ -1186,6 +1283,20 @@ function renderTech(t) {
         ${c.note ? `<p class="cmd__note">${escapeHtml(c.note)}</p>` : ""}
         ${c.cleanup ? `<p class="cmd__cleanup"><b>cleanup</b> <code>${escapeHtml(c.cleanup)}</code> <button type="button" class="copybtn" data-cmd="${escapeHtml(c.cleanup)}" data-risk="low" data-ack="false" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-copy"/></svg> Copy cleanup</button></p>` : ""}
       </div>
+      ${unsupported ? "" : `<div class="safety safety--${risk}">
+        <div class="safety__badges"><span class="riskbadge riskbadge--${risk}">${escapeHtml(risk)} risk</span>${c.requires_admin ? '<span class="riskbadge">admin</span>' : ''}${c.requires_network ? '<span class="riskbadge">network</span>' : ''}${c.cleanup_required ? '<span class="riskbadge">cleanup required</span>' : ''}</div>
+        <div class="safety__grid">
+        <div><b>Effects:</b> ${escapeHtml(effects || "Not classified")} · <b>Expected:</b> ${escapeHtml(c.expected_telemetry || "Verify relevant telemetry")}</div>
+        ${c.fidelity === "bounded_synthetic" ? `<div>Bounded synthetic exercise — a safe analogue, not the full ATT&amp;CK behaviour. The JSON receipt is self-reported; correlate it with endpoint or SIEM telemetry.</div>` : ""}
+        ${c.fidelity === "lab_proxy" ? `<div>Lab proxy — locates, echoes, or approximates related telemetry rather than reproducing the full technique.</div>` : ""}
+        ${c.telemetry_acceptance ? `<div><b>Independent pass gate:</b> marker + ${c.telemetry_acceptance.minimum_activity_events} ${escapeHtml(c.telemetry_acceptance.activity_event_types.join(" or "))} event(s) on the same host and receipt time window.</div>` : ""}
+        ${(c.network_targets || []).length ? `<div><b>Network targets:</b> ${escapeHtml(c.network_targets.join(", "))}</div>` : ""}
+        ${(c.prerequisites || []).length ? `<div><b>Prerequisites:</b> ${escapeHtml(c.prerequisites.join("; "))}</div>` : ""}
+        ${c.expected_output ? `<div><b>Expected output:</b> ${escapeHtml(c.expected_output)}</div>` : ""}
+        ${c.timeout_seconds ? `<div><b>Timeout:</b> ${c.timeout_seconds}s</div>` : ""}
+        ${c.rollback ? `<div><b>Rollback:</b> ${escapeHtml(c.rollback)}</div>` : ""}
+        </div>
+      </div>`}
       ${unsupported ? "" : `<div class="evidence">
         <label class="evidence__pair">Command
           <select class="evidence__outcome" data-id="${t.attack_id}" aria-label="Outcome for ${t.attack_id}">
@@ -1274,7 +1385,7 @@ function setPlanFocus(index) {
 }
 function handlePlanKeys(e) {
   if (e.altKey || e.ctrlKey || e.metaKey) return;
-  if (el("confirmDialog")?.open || el("authDialog")?.open) return;
+  if (el("confirmDialog")?.open || el("authDialog")?.open || el("helpDialog")?.open) return;
   if (e.target.matches("input,select,textarea,a,[contenteditable]")) return;
   const cards = $$(".techcard", el("stageBody"));
   if (!cards.length) return;
@@ -1392,17 +1503,14 @@ function renderExport() {
       <div class="statbox"><div class="n">${done}</div><div class="l">Marked run</div></div>
     </div>`;
   const kit = el("executionKitExport");
-  const supported = ["windows", "linux"].includes(state.scope.cmdPlatform);
+  const supported = ["windows", "linux", "macos"].includes(state.scope.cmdPlatform);
   kit.disabled = !supported;
-  el("executionKitTitle").textContent = supported
-    ? `Download ${titleCase(state.scope.cmdPlatform)} execution kit`
-    : "Execution kits currently support Windows and Linux";
+  el("executionKitTitle").textContent = `Download ${titleCase(state.scope.cmdPlatform)} execution kit`;
   const hasBounded = p.stages.some(stage => stage.techniques.some(item => item._cmd.fidelity === "bounded_synthetic" && !item._cmd.unsupported));
-  el("executionKitDescription").textContent = supported
-    ? (hasBounded
-      ? `One ZIP containing the operator CSV, a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner, and a portable exercise script. Direct steps need no extra runtime; bounded synthetic steps need Python 3.10+ beside the kit.`
-      : `One ZIP containing the operator CSV and a self-contained ${state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash"} runner. Direct commands need no AdversaryFlow installation, Python, or network on the destination.`)
-    : "Choose Windows or Linux in Scope to generate a portable operator handoff.";
+  const runner = state.scope.cmdPlatform === "windows" ? "PowerShell" : "Bash";
+  el("executionKitDescription").textContent = hasBounded
+    ? `One ZIP containing the operator CSV, a self-contained ${runner} runner, and a portable exercise script. Direct steps need no extra runtime; bounded synthetic steps need Python 3.10+ beside the kit.`
+    : `One ZIP containing the operator CSV and a self-contained ${runner} runner. Direct commands need no AdversaryFlow installation, Python, or network on the destination.`;
 }
 
 async function exportPlan(format) {
@@ -1452,7 +1560,7 @@ async function exportExecutionKit(p) {
   } finally {
     button.innerHTML = original;
     button.classList.remove("is-loading");
-    button.disabled = !["windows", "linux"].includes(state.scope.cmdPlatform);
+    button.disabled = !["windows", "linux", "macos"].includes(state.scope.cmdPlatform);
   }
 }
 function buildExportObj(p) {

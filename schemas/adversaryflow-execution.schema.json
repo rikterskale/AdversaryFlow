@@ -15,7 +15,7 @@
     "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "status": { "enum": ["completed", "aborted", "interrupted", "failed"] },
     "actor_id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
-    "platform": { "enum": ["windows", "linux"] },
+    "platform": { "enum": ["windows", "linux", "macos"] },
     "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "csv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "started_at": { "type": "string", "format": "date-time" },

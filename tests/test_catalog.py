@@ -42,6 +42,12 @@ class CatalogIntegrityTests(unittest.TestCase):
         self.assertIn("T9999", result["commands"][0]["command"])
         self.assertIn("risk", result["commands"][0])
 
+    def test_fallback_ignores_braces_in_technique_names(self):
+        result = command_catalog.get_commands("T9999", "Name with {broken} braces", [])
+        self.assertEqual(result["source"], "fallback")
+        self.assertIn("T9999", result["commands"][0]["command"])
+        self.assertIn("Name with broken braces", result["commands"][0]["command"])
+
     def test_bounded_exercises_are_technique_specific_and_disclosed(self):
         exercises = {}
         for technique_id, commands in command_catalog.CURATED.items():

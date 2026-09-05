@@ -171,7 +171,8 @@ def _load_validated(path: str, domain: str, verify_provenance: bool = True) -> D
 def _download(url: str, dest: str, domain: str, conditional: bool = True) -> Dict[str, Any]:
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     previous = _read_metadata(domain)
-    headers = {"User-Agent": "AdversaryFlow/0.3"}
+    from . import __version__
+    headers = {"User-Agent": f"AdversaryFlow/{__version__}"}
     if conditional and previous.get("etag"):
         headers["If-None-Match"] = str(previous["etag"])
     req = urllib.request.Request(url, headers=headers)

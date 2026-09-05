@@ -567,3 +567,76 @@ test("plan keyboard shortcuts move focus and copy the command", async ({ page, c
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("whoami");
 });
+
+test("the plan opens on the first stage that has a runnable command", async ({ page }) => {
+  const linuxOnly = { ...command, platform: "linux", command: "id" };
+  const recon = {
+    stix_id: "attack-pattern--recon", attack_id: "T1595", name: "Active Scanning",
+    description: "Fixture technique", tactics: ["reconnaissance"], platforms: ["Linux"],
+    is_subtechnique: false, url: "https://attack.mitre.org/techniques/T1595/",
+    commands: [linuxOnly], command_source: "curated",
+  };
+  const body = workflowBody();
+  body.summary.total_techniques = 2;
+  body.summary.unique_stages = 2;
+  body.summary.curated_commands = 2;
+  body.kill_chain = [{ tactic: "reconnaissance", title: "Reconnaissance" }, { tactic: "execution", title: "Execution" }];
+  body.stages = [
+    { tactic: "reconnaissance", title: "Reconnaissance", techniques: [recon] },
+    body.stages[0],
+  ];
+  await interceptApi(page);
+  await page.route("**/api/workflow/**", route => route.fulfill({ json: body }));
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
+  await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
+});
+
+test("a recommended start builds a scoped plan for the first available actor", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Start with Test Actor/ }).click();
+  await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
+  await expect(page.locator("#scopeSummary")).toContainText("Test Actor");
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
+});
+
+test("setup failures are visible on the welcome screen with a retry", async ({ page }) => {
+  await page.route("**/api/session", route => route.fulfill({
+    status: 500, json: { error: "request failed", message: "ATT&CK cache is unreadable", version: "0.3.0" },
+  }));
+  await page.goto("/");
+  await expect(page.getByText("ATT&CK cache is unreadable")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
+  await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
+});
+
+test("help explains the four-step path", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "How to use AdversaryFlow" }).click();
+  const dialog = page.getByRole("dialog", { name: "How to use AdversaryFlow" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Pick a threat actor");
+  await expect(dialog).toContainText("never executes catalog commands");
+  await dialog.getByRole("button", { name: "Got it" }).click();
+  await expect(dialog).toBeHidden();
+});
+
+test("the actor gallery paginates large result sets", async ({ page }) => {
+  const actors = Array.from({ length: 30 }, (_, i) => ({
+    stix_id: `intrusion-set--${i}`, attack_id: `G${String(i).padStart(4, "0")}`,
+    name: `Actor ${String(i).padStart(2, "0")}`, type: "group", aliases: [],
+    description: "Fixture actor", technique_count: 1,
+  }));
+  await interceptApi(page);
+  await page.route("**/api/actors?*", route => route.fulfill({
+    json: { actors, domains: ["enterprise"], data_version: "enterprise:bundle--test", version: "0.3.0" },
+  }));
+  await page.goto("/");
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  await expect(page.locator(".actorcard")).toHaveCount(24);
+  await page.getByRole("button", { name: "Show all 30 actors" }).click();
+  await expect(page.locator(".actorcard")).toHaveCount(30);
+});

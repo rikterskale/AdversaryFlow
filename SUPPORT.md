@@ -1,6 +1,7 @@
 # Support policy
 
-AdversaryFlow is currently beta software.
+AdversaryFlow is a single-operator lab planner. Support covers the latest
+released minor version of that product, not a multi-user hosted service.
 
 ## Supported versions
 

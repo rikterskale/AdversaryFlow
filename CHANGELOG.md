@@ -4,6 +4,34 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+## 0.4.0 — 2026-09-05
+
+- Made first-run simpler: a recommended-actor start, in-app help, a visible
+  setup-error banner with retry, actor-gallery pagination, and a platform
+  hint when the browser OS differs from the selected lab OS. The plan now
+  opens on the first runnable stage, lists copyable commands first, and
+  keeps unsupported techniques below them.
+- Reframed Scope around safe-by-default safety switches, collapsed expert
+  plan options, and added copy/run/record coaching on the plan and export
+  screens so a first-time operator can finish without reading the handbook.
+- Added a skip-to-content link, replaced actor-card "TTPs" with
+  "techniques", and surfaced popular actors as "Start here" chips.
+- Aligned the OpenAPI command contract with the plan schema (`direct` /
+  `lab_proxy` fidelity and `none` risk), made Windows `install.ps1` fail when
+  `doctor` fails, and kept `/api/health` ready when a refresh fails but a
+  previous ATT&CK index is still loaded.
+- Hardened fallback command templating against braces in technique names,
+  normalized unhandled API errors to `request_failed`, refused cross-origin
+  mutating requests, and rejected non-ISO-8601 timestamps in native telemetry
+  collection.
+- Enabled macOS operator execution kits using a portable Bash runner
+  (`sha256sum` or `shasum`, GNU or BSD `base64`).
+- Treated every 127.0.0.0/8 and IPv6 loopback address as loopback, started
+  Waitress with an explicit thread pool and channel timeout, and warned when
+  `--api-token` is passed on the command line.
+- Showed a domain-download loader when ICS or Mobile is first selected, and
+  added a live-process liveness smoke test.
+
 - Added a novice operator handbook (install, first verified PoC, everyday
   use, remediation, recovery, upgrades, and support escalation) with
   commands checked against the 0.3.0 CLI.

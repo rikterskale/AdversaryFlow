@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import platform
+import re
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -201,8 +202,20 @@ def correlate(receipt: Mapping[str, Any], events: Iterable[Mapping[str, Any]], s
     }
 
 
+_ISO8601 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
+
+
+def _receipt_window(started_at: str, completed_at: str) -> tuple[str, str]:
+    """Accept only ISO-8601 instants so collector commands cannot be injected."""
+    for value in (started_at, completed_at):
+        if not _ISO8601.match(value):
+            raise ValueError("receipt timestamps must be ISO 8601")
+    return started_at, completed_at
+
+
 def collect_native(platform_name: str, started_at: str, completed_at: str) -> List[Dict[str, Any]]:
     """Collect read-only OS log records for the receipt window."""
+    started_at, completed_at = _receipt_window(started_at, completed_at)
     system = platform_name.lower()
     if system == "auto":
         system = {"windows": "windows", "darwin": "macos"}.get(platform.system().lower(), "linux")

@@ -329,6 +329,13 @@ def get_commands(technique_id: str, technique_name: str, tactics: List[str],
     tactic = tactics[0] if tactics else ""
     template = TACTIC_FALLBACK.get(tactic, GENERIC_FALLBACK)
     cmd = dict(template)
-    cmd["command"] = cmd["command"].format(tid=technique_id, name=technique_name, domain=target_domain)
+    cmd["command"] = _format_fallback(cmd["command"], technique_id, technique_name, target_domain)
     cmd["note"] = cmd["note"] + " (auto-generated bounded simulation for a technique introduced after this catalog release)"
     return {"source": "fallback", "commands": [cmd]}
+
+
+def _format_fallback(template: str, technique_id: str, technique_name: str, target_domain: str) -> str:
+    """Substitute fallback placeholders without interpreting braces in ATT&CK names."""
+    def _plain(value: str) -> str:
+        return str(value).replace("{", "").replace("}", "")
+    return template.format(tid=_plain(technique_id), name=_plain(technique_name), domain=_plain(target_domain))

@@ -35,10 +35,20 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/api/bootstrap:", contract)
         self.assertIn('"403"', contract)
 
+    def test_openapi_command_contract_matches_the_plan_schema(self):
+        contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
+        schema = json.loads(Path("schemas/adversaryflow-plan.schema.json").read_text(encoding="utf-8"))
+        self.assertIn("fidelity: { enum: [direct, bounded_synthetic, lab_proxy] }", contract)
+        self.assertIn("risk: { enum: [none, low, medium, high] }", contract)
+        self.assertEqual(schema["$defs"]["command"]["properties"]["fidelity"]["enum"],
+                         ["direct", "bounded_synthetic", "lab_proxy"])
+        self.assertEqual(schema["$defs"]["command"]["properties"]["risk"]["enum"],
+                         ["none", "low", "medium", "high"])
+
     def test_portable_execution_summary_schema_is_strict_and_cross_platform(self):
         schema = json.loads(Path("schemas/adversaryflow-execution.schema.json").read_text(encoding="utf-8"))
         self.assertEqual(schema["properties"]["schema_version"]["const"], "1.0")
-        self.assertEqual(schema["properties"]["platform"]["enum"], ["windows", "linux"])
+        self.assertEqual(schema["properties"]["platform"]["enum"], ["windows", "linux", "macos"])
         self.assertFalse(schema["additionalProperties"])
         for field in ("plan_sha256", "csv_sha256", "events_file", "results_file", "report_file"):
             self.assertIn(field, schema["required"])

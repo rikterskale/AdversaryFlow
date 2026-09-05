@@ -4,7 +4,7 @@ AdversaryFlow exports a portable execution kit plus three planning formats.
 
 ## Operator execution kit
 
-For Windows or Linux plans, **Download operator execution kit** creates one ZIP
+For Windows, Linux, or macOS plans, **Download operator execution kit** creates one ZIP
 containing:
 
 - an RFC 4180 UTF-8 CSV with one row per ordered plan-step occurrence;
@@ -25,8 +25,9 @@ Direct catalog commands need no AdversaryFlow installation, Python runtime, or
 network connection on the destination. Bounded synthetic steps invoke the
 bundled exercise script and therefore need Python 3.10+ beside the kit; they
 still do not require an AdversaryFlow install or network access. PowerShell
-kits require Windows PowerShell 5.1 or newer. Linux kits require Bash and
-standard Linux utilities (`base64`, `sha256sum`, `awk`, `date`, and `mktemp`).
+kits require Windows PowerShell 5.1 or newer. Linux and macOS kits require Bash
+and standard utilities (`base64`, `sha256sum` or `shasum`, `awk`, `date`, and
+`mktemp`).
 
 Before every supported step, the runner displays the technique, risk,
 prerequisites, expected output, expected telemetry, and exact command. The

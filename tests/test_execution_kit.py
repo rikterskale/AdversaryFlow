@@ -42,8 +42,8 @@ def plan_fixture(platform="linux", *, duplicate=False, command="printf 'hello fr
         "acknowledgment_required": False,
     }
     technique = {
-        "id": "T1059.004" if platform == "linux" else "T1059.001",
-        "name": "Unix Shell" if platform == "linux" else "PowerShell",
+        "id": "T1059.001" if platform == "windows" else "T1059.004",
+        "name": "PowerShell" if platform == "windows" else "Unix Shell",
         "url": "https://attack.mitre.org/techniques/T1059/004/",
         "platforms": [platform.title()],
         "command_source": "curated",
@@ -101,9 +101,21 @@ class ExecutionPlanTests(unittest.TestCase):
         self.assertNotEqual(plan.steps[0].step_id, plan.steps[1].step_id)
         self.assertEqual([step.sequence for step in plan.steps], [1, 2])
 
-    def test_only_windows_and_linux_can_generate_execution_kits(self):
-        with self.assertRaisesRegex(ExecutionKitError, "Windows and Linux"):
-            normalize_plan(plan_fixture("macos"))
+    def test_macos_plans_generate_a_bash_execution_kit(self):
+        plan = normalize_plan(plan_fixture("macos"))
+        self.assertEqual(plan.platform, "macos")
+        payload, filename = archive_execution_kit(plan)
+        self.assertIn("macOS", filename)
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            names = archive.namelist()
+        self.assertTrue(any(name.endswith("-execute.sh") for name in names))
+
+    def test_posix_runner_is_portable_to_macos(self):
+        from backend.execution_kit import render_bash
+        script = render_bash(normalize_plan(plan_fixture("macos")), "plan.csv", "abc")
+        self.assertIn("shasum", script)
+        self.assertIn("macOS", script)
+        self.assertIn('"macos"', script)
 
     def test_exact_platform_command_is_required(self):
         document = plan_fixture("linux")

@@ -5,7 +5,7 @@
 3. Merge only after the Linux, Windows, macOS, package-smoke, CodeQL, and build
    jobs pass.
 4. Create a reviewed annotated tag matching the package version, such as
-   v0.3.0. Never reuse or move a published tag.
+   v0.4.0. Never reuse or move a published tag.
 5. The release workflow verifies tag/version/changelog identity, retests,
    re-runs the ruff and mypy gates, builds the wheel and sdist, produces
    CycloneDX SBOM and SHA-256 files, and creates GitHub build-provenance

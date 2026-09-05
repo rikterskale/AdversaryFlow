@@ -15,13 +15,13 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 
 | Item | Value |
 |---|---|
-| Build | AdversaryFlow 0.3.0 |
+| Build | AdversaryFlow 0.4.0 |
 | Python | 3.14.4 (CPython, Linux) |
 | Node | v24.19.0, Playwright 1.62.1, Chromium |
 | PowerShell | 7.6.5 (`Core`, Linux host) |
 | ATT&CK data | `enterprise:bundle--6198013c-6f02-42a4-9713-38ea1301a1aa` (227 actors) |
 | Service under test | `http://127.0.0.1:5055`, loopback, offline mode against the cached bundle |
-| Suites | `pytest`, `npm run test:e2e`, Ruff, mypy, JavaScript/Bash/PowerShell syntax and launcher checks |
+| Suites | `python -m unittest discover`, `npm run test:e2e`, Ruff, mypy, JavaScript/Bash/PowerShell syntax and launcher checks |
 
 ---
 
@@ -30,14 +30,14 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | Test ID | Precondition | Steps | Expected result | Actual result | Pass/Fail |
 |---|---|---|---|---|---|
 | J1 | Clean source checkout, Python ≥ 3.10 | `./install.sh` *(manual)* | stdout ends `AdversaryFlow installed and verified.`; exit 0 | From an isolated source archive with no `.venv`: installed both hash-locked sets, built the editable package, doctor reported `ok = true`, then printed `AdversaryFlow installed and verified. Start it with ./run.sh`; exit 0 | **Pass** |
-| J2 | Installed | `adversaryflow --version` *(manual)*; `test_uat.py::test_j02_the_version_is_reported` *(auto)* | stdout exactly `AdversaryFlow 0.3.0` | `AdversaryFlow 0.3.0`; exit 0 | **Pass** |
-| J3 | Installed | `adversaryflow doctor` *(manual)*; `test_j03_doctor_reports_a_healthy_install` *(auto)* | exit 0; `ok`, `frontend_available`, `cache_writable` all true | `ok = True, frontend_available = True, cache_writable = True, version = 0.3.0, deps = {Flask: 3.1.3, waitress: 3.0.2}`; exit 0 | **Pass** |
-| J4 | Installed, cache seeded | `./run.sh` *(manual)* | stdout announces the service URL | `[AdversaryFlow] starting; the browser will open when ATT&CK data is ready` / `AdversaryFlow 0.3.0: http://127.0.0.1:5055` | **Pass** |
+| J2 | Installed | `adversaryflow --version` *(manual)*; `test_uat.py::test_j02_the_version_is_reported` *(auto)* | stdout exactly `AdversaryFlow 0.4.0` | `AdversaryFlow 0.4.0`; exit 0 | **Pass** |
+| J3 | Installed | `adversaryflow doctor` *(manual)*; `test_j03_doctor_reports_a_healthy_install` *(auto)* | exit 0; `ok`, `frontend_available`, `cache_writable` all true | `ok = True, frontend_available = True, cache_writable = True, version = 0.4.0, deps = {Flask: 3.1.3, waitress: 3.0.2}`; exit 0 | **Pass** |
+| J4 | Installed, cache seeded | `./run.sh` *(manual)* | stdout announces the service URL | `[AdversaryFlow] starting; the browser will open when ATT&CK data is ready` / `AdversaryFlow 0.4.0: http://127.0.0.1:5055` | **Pass** |
 | J5 | Service running | `curl http://127.0.0.1:5055/` *(manual)*; `test_j05_the_wizard_page_is_served` *(auto)* | HTTP 200 with the wizard title | `HTTP 200`, `<title>AdversaryFlow — Adversary Emulation Planner</title>` | **Pass** |
 | J6 | Service running | `curl -D - /api/session` *(manual)*; `test_j06_every_response_is_hardened` *(auto)* | nosniff, no-referrer, same-origin, request id, CSP with `frame-ancestors 'none'` | All five headers present; CSP contained `frame-ancestors 'none'`; request ID was non-empty | **Pass** |
-| J7 | Service running | `test_j07_a_session_token_is_issued` *(auto)* | Non-empty `csrf_token` and `version` | Token issued; `version = 0.3.0` | **Pass** |
+| J7 | Service running | `test_j07_a_session_token_is_issued` *(auto)* | Non-empty `csrf_token` and `version` | Token issued; `version = 0.4.0` | **Pass** |
 | J8 | Data not yet loaded | `test_j08_bootstrap_starts_and_reaches_ready` *(auto)* | POST 200/202, then `runtime.ready = true` | POST accepted; poll returned `ready = true` | **Pass** |
-| J9 | Before / after load | `test_j09_health_is_degraded_before_data_is_ready`, `…_ready_once_data_is_loaded` *(auto)*; live curl *(manual)* | 503 `degraded`, then 200 `ready` | 503 `degraded`; live service `status = ready, ready = True, phase = ready, version = 0.3.0` | **Pass** |
+| J9 | Before / after load | `test_j09_health_is_degraded_before_data_is_ready`, `…_ready_once_data_is_loaded` *(auto)*; live curl *(manual)* | 503 `degraded`, then 200 `ready` | 503 `degraded`; live service `status = ready, ready = True, phase = ready, version = 0.4.0` | **Pass** |
 | J10 | UI reachable | `uat.spec.js` J10 *(auto)* | Welcome heading and enabled start button | Heading, enabled button, and the "does not execute commands" footer all visible | **Pass** |
 | J11 | Actors loaded | `uat.spec.js` J11 *(auto)* | `#dataStatus` matches `^\d+ actors? · Enterprise$` | Matched | **Pass** |
 | J12 | Data loaded | `test_j12_actor_records_carry_the_published_contract` *(auto)*; live curl *(manual)* | Every actor carries the seven published fields; live count 227 | Contract violations = 0; `actors = 227`; `G0016 = APT29, technique_count = 66` | **Pass** |
@@ -76,8 +76,8 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J37 | Previous actor had operator/target | Select a different actor *(auto: J37)* | Execution record starts empty | Operator `""`, Target `""` | **Pass** |
 | J38 | `GET /api/session` returns 500 | *(auto: J38)* | Actionable failure with a retry | `ATT&CK cache is unreadable` shown; chip `setup needs attention`; **Retry setup** present | **Pass** |
 | J39 | Fault cleared | Click **Retry setup** *(auto: J38, second half)* | Session recovers without a reload | Actor grid rendered; chip back to `<n> actors · Enterprise` | **Pass** |
-| J40 | Service running | `GET /api/actors?domains=bogus` *(auto: `test_j40…`; manual curl)* | 400 with the standard envelope | `HTTP 400 {"error":"bad_request","message":"Unknown ATT&CK domain(s): bogus","version":"0.3.0"}` | **Pass** |
-| J41 | Service running | `GET /api/workflow/intrusion-set--nope` *(auto: `test_j41…`; manual curl)* | 404 with error, message and version | `HTTP 404 {"error":"actor_not_found","message":"No ATT&CK group or campaign matches intrusion-set--nope in the selected domains.","version":"0.3.0"}` | **Pass** |
+| J40 | Service running | `GET /api/actors?domains=bogus` *(auto: `test_j40…`; manual curl)* | 400 with the standard envelope | `HTTP 400 {"error":"bad_request","message":"Unknown ATT&CK domain(s): bogus","version":"0.4.0"}` | **Pass** |
+| J41 | Service running | `GET /api/workflow/intrusion-set--nope` *(auto: `test_j41…`; manual curl)* | 404 with error, message and version | `HTTP 404 {"error":"actor_not_found","message":"No ATT&CK group or campaign matches intrusion-set--nope in the selected domains.","version":"0.4.0"}` | **Pass** |
 | J42 | Service running | `POST /api/refresh` with no CSRF header *(auto: `test_j42…`)* | 403 | `403 {"error":"forbidden"}` | **Pass** |
 | J43 | Service running | `POST /api/refresh?domains=bogus`, then a valid refresh *(auto: `test_j43…`)* | The rejected call does not wedge the endpoint | First 400; `_refresh_lock.locked()` False; valid refresh 200 | **Pass** |
 | J44 | Service running | Two valid refreshes inside 5 s *(auto: `test_j44…`)* | Second is throttled | 200 then `429 {"error":"refresh_rate_limited"}` | **Pass** |
@@ -216,7 +216,7 @@ The live offline service run produced:
 
 ```text
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.3.0: http://127.0.0.1:5055
+AdversaryFlow 0.4.0: http://127.0.0.1:5055
 health=ready ready=True phase=ready
 actors=227 contract_violations=0
 APT29: techniques=66 curated=66 fallback=0 stages=13 commands_missing=0

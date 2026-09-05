@@ -32,7 +32,7 @@ After you build a wheel (`python -m build`) or download a GitHub Release
 asset, install that file with pipx:
 
 ~~~bash
-pipx install ./adversaryflow-0.3.0-py3-none-any.whl
+pipx install ./adversaryflow-0.4.0-py3-none-any.whl
 adversaryflow --open
 ~~~
 

@@ -86,7 +86,7 @@ AdversaryFlow installed and verified. Start it with ./run.sh
 Windows uses `.\install.ps1`, which performs the same checks via `py -3`.
 
 The package declares an `adversaryflow` console script. In a verified source
-installation, `adversaryflow --version` prints `AdversaryFlow 0.3.0`.
+installation, `adversaryflow --version` prints `AdversaryFlow 0.4.0`.
 
 ### Step 2 — Launch
 
@@ -102,7 +102,7 @@ with `--open`.
 
 ```
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.3.0: http://127.0.0.1:5000
+AdversaryFlow 0.4.0: http://127.0.0.1:5000
 ```
 
 The HTTP service accepts requests immediately; ATT&CK data loads in a
@@ -129,23 +129,27 @@ before it is used. Subsequent launches reuse the disk cache for 7 days.
 ### Step 4 — Welcome screen
 
 **Observable result:** the heading *"Turn a threat actor into an end-to-end
-emulation plan"*, a **Begin emulation plan** button, a **Resume JSON plan**
+emulation plan"*, a **Begin emulation plan** button, a **Start with &lt;actor&gt;**
+button for a recommended first plan, a **Resume JSON plan**
 button, and the footer *"Built for disposable development labs.
 AdversaryFlow creates plans; it does not execute commands."* If this browser
 already has an in-progress plan, **Resume saved plan** is also shown with the actor name.
 The header status chip turns green and reads `<count> actors · Enterprise`.
+The **?** control opens in-app help. If ATT&CK setup failed, a banner on every
+screen reads the failure and offers **Retry setup**.
 
 ### Step 5 — Choose a threat actor
 
 Click **Begin emulation plan** → screen *"Choose a threat actor"*.
 
 You can search by name, alias, or ATT&CK ID; filter by **All / Groups /
-Campaigns**; sort by **Name (A–Z)** or **Most TTPs**; and switch or combine the
+Campaigns**; sort by **Name (A–Z)** or **Most techniques**; and switch or combine the
 **Enterprise / ICS-OT / Mobile** domains. Eight popular actors appear as
-quick-pick chips under *Popular:*.
+quick-pick chips under *Start here:*. The gallery shows the first 24 matches
+with **Show all** when more remain.
 
 **Observable result:** each card shows the actor name, ATT&CK ID, a
-`group`/`campaign` tag, aliases, a one-line description, and a TTP count.
+`group`/`campaign` tag, aliases, a one-line description, and a technique count.
 Selecting one marks it `Selected` and the footer bar reads
 **`Selected: APT29`**. **Continue** becomes enabled.
 
@@ -174,7 +178,8 @@ target, and a curated/fallback split bar. The footer reads
 
 Click **Build plan** → the *Emulation plan* screen, headed
 `APT29 · G0016` with the subtitle *"development-lab emulation plan · commands
-target **Windows**"*.
+target **Windows**"*. The plan opens on the first stage that has a runnable
+command, with copyable tests listed before unsupported ones.
 
 A left rail lists every stage in kill-chain order with a colour-coded number.
 Each technique card shows:
@@ -239,7 +244,7 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 
 | Card | File | Contents |
 |---|---|---|
-| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
+| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
 | **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json` |
 | **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
@@ -282,7 +287,7 @@ came from a file rather than from the ATT&CK catalog.
 
 | Situation | What the user sees | Recovery |
 |---|---|---|
-| Setup fails (unreadable cache, network failure) | Status chip `setup needs attention`; the actor grid is replaced by the error message and a **Retry setup** button | Click **Retry setup** |
+| Setup fails (unreadable cache, network failure) | Status chip `setup needs attention`; a banner shows the error message and a **Retry setup** button on every screen | Click **Retry setup** |
 | Bootstrap cannot be started (401/403) | The loader stops and the failure message is shown, rather than spinning forever | Reload; check the token in remote mode |
 | Bootstrap never completes | After 15 minutes: *"Preparing ATT&CK data timed out. Check the service log, then retry setup."* | Inspect the JSON service log, then **Retry setup** |
 | Backend unreachable mid-session | Status chip `backend offline` and the error panel | Restart the service, click **Retry setup** |
@@ -347,7 +352,7 @@ one envelope: `{"error", "message", "version"}`.
 
 | Command | Purpose | Result |
 |---|---|---|
-| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.3.0` |
+| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.4.0` |
 | `adversaryflow doctor` | Check Python, frontend assets, dependencies, cache writability | JSON report; exit 0 healthy, exit 1 otherwise |
 | `adversaryflow cache-status` | Inspect cache provenance per domain | JSON with path, age, freshness, ETag, SHA-256 |
 | `adversaryflow cache-refresh --domains enterprise` | Force a re-download | Prints refreshed cache status |
@@ -363,9 +368,9 @@ table directly.
 | ID | Step | User action | System response | Success criterion |
 |---|---|---|---|---|
 | J1 | Install | `./install.sh` | Verifies Python ≥ 3.10, builds `.venv`, installs pinned sets, runs `doctor` | stdout contains `AdversaryFlow installed and verified.` and exit code is 0 |
-| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.3.0` |
+| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.4.0` |
 | J3 | Diagnose | `adversaryflow doctor` | Emits a JSON health report | Exit code 0 and `"ok": true`, `"frontend_available": true`, `"cache_writable": true` |
-| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.3.0: http://127.0.0.1:5000` |
+| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.4.0: http://127.0.0.1:5000` |
 | J5 | Serve UI | `GET /` | Returns the wizard page | HTTP 200 and body contains `AdversaryFlow — Adversary Emulation Planner` |
 | J6 | Harden responses | Any HTTP request | Security headers applied | Response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-origin`, a non-empty `X-Request-ID`, and a CSP containing `frame-ancestors 'none'` |
 | J7 | Get a session token | `GET /api/session` | Issues a CSRF token | HTTP 200 and body has non-empty `csrf_token` and `version` |
@@ -399,7 +404,7 @@ table directly.
 | J35 | Reject a foreign plan | Resume a file with `schema_version` ≠ `2.0` | Refuses | Toast reads `This is not an AdversaryFlow 2.0 plan export` |
 | J36 | Plan another actor | Click **Plan another actor**, then **Begin emulation plan** | Resets the session and returns to the welcome screen | Domain filter is Enterprise only, type filter All, sort Name (A–Z), and the footer reads `Select a threat actor to continue` |
 | J37 | Fresh actor context | Select a different actor | Starts with a clean record | Operator and Target fields are empty |
-| J38 | Setup failure | Break `GET /api/session` | Surfaces an actionable error | Status chip reads `setup needs attention`, the failure message is shown, and a **Retry setup** button appears |
+| J38 | Setup failure | Break `GET /api/session` | Surfaces an actionable error | Status chip reads `setup needs attention`, the failure message is shown in the setup banner, and a **Retry setup** button appears |
 | J39 | Retry setup | Click **Retry setup** after the fault clears | Recovers without a reload | The actor grid renders and the status chip returns to `<n> actors · Enterprise` |
 | J40 | Reject an unknown domain | `GET /api/actors?domains=bogus` | Rejects with the standard envelope | HTTP 400 with `error = bad_request` and a message naming `bogus` |
 | J41 | Reject an unknown actor | `GET /api/workflow/intrusion-set--nope` | Rejects with the standard envelope | HTTP 404 with `error = actor_not_found` plus `message` and `version` |

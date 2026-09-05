@@ -131,14 +131,14 @@ class ApiContractTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_execution_kit_rejects_mac_without_generating_an_archive(self):
+    def test_execution_kit_accepts_macos_plans(self):
         response = self.client.post(
             "/api/execution-kit",
             json=plan_fixture("macos"),
             headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Windows and Linux", response.get_json()["message"])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("macOS", response.headers.get("Content-Disposition", ""))
 
     @patch("backend.app.attack_data.refresh_index", return_value=FakeIndex())
     def test_refresh_uses_serialized_index_transition(self, refresh_index):
@@ -153,7 +153,11 @@ class ApiContractTests(unittest.TestCase):
 
     def test_non_loopback_binding_requires_explicit_opt_in(self):
         self.assertTrue(app_module._is_loopback_host("127.0.0.1"))
+        self.assertTrue(app_module._is_loopback_host("127.0.0.2"))
+        self.assertTrue(app_module._is_loopback_host("::1"))
+        self.assertTrue(app_module._is_loopback_host("[::1]"))
         self.assertFalse(app_module._is_loopback_host("0.0.0.0"))
+        self.assertFalse(app_module._is_loopback_host("192.168.1.10"))
         self.assertEqual(app_module.main(["--host", "0.0.0.0", "--no-preload"]), 2)
         self.assertEqual(app_module.main(["--host", "0.0.0.0", "--allow-remote", "--no-preload"]), 2)
 
@@ -191,7 +195,7 @@ class ApiContractTests(unittest.TestCase):
         app_module._runtime.update(ready=True, loading=False, phase="ready", error=None)
         response = self.client.get("/api/actors")
         self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.get_json()["error"], "request failed")
+        self.assertEqual(response.get_json()["error"], "request_failed")
         self.assertTrue(app_module._runtime["ready"])
         self.assertEqual(app_module._runtime["phase"], "ready")
 
@@ -258,6 +262,23 @@ class RefreshLockTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertFalse(app_module._refresh_lock.locked())
         self.assertFalse(app_module._runtime["loading"])
+
+    def test_a_failed_refresh_keeps_health_ready_when_an_index_still_exists(self):
+        app_module._last_refresh = 0
+        app_module._runtime.update(ready=True, loading=False, phase="ready", error=None)
+        with patch("backend.app.attack_data.refresh_index", side_effect=RuntimeError("boom")), \
+                patch("backend.app.attack_data.loaded_index_status", return_value={"ready": True}):
+            response = self.client.post("/api/refresh?domains=enterprise", headers=self.headers)
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(app_module._runtime["ready"])
+        self.assertEqual(app_module._runtime["phase"], "ready")
+
+    def test_mutating_requests_reject_a_foreign_origin(self):
+        app_module._last_refresh = 0
+        headers = {**self.headers, "Origin": "https://evil.example"}
+        response = self.client.post("/api/refresh", headers=headers)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "forbidden")
 
     def test_refresh_is_rate_limited(self):
         app_module._last_refresh = 0

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import io
+import ipaddress
 import json
 import os
 import re
@@ -19,6 +20,7 @@ import sysconfig
 import tempfile
 import threading
 import time
+import urllib.parse
 import uuid
 import webbrowser
 from pathlib import Path
@@ -198,7 +200,12 @@ def refresh():
         try:
             idx = attack_data.refresh_index(domains)
         except Exception as exc:
-            _mark_error(exc)
+            # A failed download must not strand health at 503 when a previous
+            # index is still in memory and can keep serving plans.
+            if attack_data.loaded_index_status().get("ready"):
+                _mark_ready()
+            else:
+                _mark_error(exc)
             raise
         _mark_ready()
         _last_refresh = time.monotonic()
@@ -366,6 +373,12 @@ def _runtime_snapshot() -> Dict[str, Any]:
 
 
 def _require_csrf() -> None:
+    origin = request.headers.get("Origin")
+    if origin:
+        host = urllib.parse.urlparse(origin).hostname
+        expected = (request.host or "").split(":")[0]
+        if host and host != expected:
+            abort(403, description="Cross-origin request refused")
     if not secrets.compare_digest(request.headers.get("X-AdversaryFlow-CSRF", ""), _csrf_token):
         abort(403, description="Missing or invalid same-origin request token")
 
@@ -420,7 +433,7 @@ def api_error(exc: Exception):
     _log_event("request_failed", level="error", error=type(exc).__name__,
                request_id=getattr(g, "request_id", "unknown"))
     return jsonify({
-        "error": "request failed",
+        "error": "request_failed",
         "message": "The request failed. Check the server log with the request ID.",
         "request_id": getattr(g, "request_id", "unknown"),
         "version": __version__,
@@ -489,6 +502,8 @@ def main(argv: List[str] | None = None) -> int:
 
     REMOTE_MODE = not _is_loopback_host(args.host)
     API_TOKEN = args.api_token
+    if args.api_token and os.environ.get("ADVERSARYFLOW_API_TOKEN") != args.api_token:
+        print("WARNING: --api-token is visible in process listings; prefer ADVERSARYFLOW_API_TOKEN.")
 
     if not args.no_preload:
         _start_bootstrap()
@@ -502,12 +517,31 @@ def main(argv: List[str] | None = None) -> int:
         print("WARNING: remote binding is enabled; every API request requires the configured bearer token.")
     if args.open_browser:
         threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
-    serve(app, host=args.host, port=args.port)
+    serve(
+        app,
+        host=args.host,
+        port=args.port,
+        threads=8,
+        channel_timeout=120,
+        ident=f"AdversaryFlow/{__version__}",
+    )
     return 0
 
 
 def _is_loopback_host(host: str) -> bool:
-    return host.lower() in {"127.0.0.1", "localhost", "::1"}
+    name = host.strip().lower()
+    if name in {"localhost"}:
+        return True
+    if name.startswith("[") and name.endswith("]"):
+        name = name[1:-1]
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    mapped = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+    if mapped is not None:
+        return mapped.is_loopback
+    return address.is_loopback
 
 
 def _open_when_ready(url: str) -> None:

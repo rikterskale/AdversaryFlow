@@ -19,4 +19,7 @@ if (-not (Test-Path ".venv")) {
 & .\.venv\Scripts\python.exe -m pip install --require-hashes --requirement requirements-build.lock
 & .\.venv\Scripts\python.exe -m pip install --no-build-isolation --no-deps --editable .
 & .\.venv\Scripts\adversaryflow.exe doctor
+if ($LASTEXITCODE -ne 0) {
+    throw "AdversaryFlow doctor failed. Fix the reported issue, then retry."
+}
 Write-Host "AdversaryFlow installed and verified. Start it with .\run.ps1"

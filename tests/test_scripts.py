@@ -230,6 +230,7 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("--require-hashes --requirement requirements.lock", install)
         self.assertIn("--require-hashes --requirement requirements-build.lock", install)
         self.assertIn("adversaryflow.exe doctor", install)
+        self.assertIn("$LASTEXITCODE -ne 0", install)
         self.assertIn("adversaryflow.exe --open @args", run)
         self.assertIn("& .\\install.ps1", run)
 

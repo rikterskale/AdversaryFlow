@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AdversaryFlow API
-  version: 0.3.0
+  version: 0.4.0
   description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication.
 servers:
   - url: http://127.0.0.1:5000
@@ -252,7 +252,7 @@ components:
         command: { type: string }
         note: { type: string }
         cleanup: { type: string }
-        risk: { enum: [low, medium, high] }
+        risk: { enum: [none, low, medium, high] }
         side_effects: { type: array, items: { type: string } }
         requires_admin: { type: boolean }
         requires_network: { type: boolean }
@@ -265,7 +265,7 @@ components:
         cleanup_required: { type: boolean }
         acknowledgment_required: { type: boolean }
         exercise_kind: { enum: [technique_relevant_bounded] }
-        fidelity: { enum: [bounded_synthetic] }
+        fidelity: { enum: [direct, bounded_synthetic, lab_proxy] }
         evidence_source: { enum: [self_reported_receipt] }
         unsupported: { type: boolean }
         restricted: { type: boolean }

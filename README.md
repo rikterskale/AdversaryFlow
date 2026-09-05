@@ -20,7 +20,7 @@ steps are reached:
 
 1. **Choose a threat actor** — a searchable, filterable gallery of 220+ ATT&CK
    groups (`APT29`, `FIN7`, `Lazarus`, …) and named campaigns, with popular
-   actors surfaced as quick-pick chips. Filter by name / alias / ATT&CK ID.
+   actors surfaced as **Start here** chips. Filter by name / alias / ATT&CK ID.
 2. **Scope the engagement** — pick the command platform (Windows / Linux /
    macOS), toggle kill-chain stages on/off, include or drop pre-compromise
    tactics, and see a live plan preview update as you go.
@@ -82,6 +82,7 @@ AdversaryFlow/
 │   ├── ext_helper.py                # shared helper for the part files
 │   ├── command_safety.py             # structured risk and cleanup metadata
 │   ├── lab_exercises.py              # 146 bounded exercises + evidence receipts
+│   ├── telemetry.py                  # independent endpoint/SIEM correlation CLI
 │   └── ext_part1..14.py              # technique-indexed lab exercises, one reviewable slice each
 ├── frontend/
 │   ├── index.html
@@ -132,7 +133,7 @@ dependencies. Use **↻ Refresh feed** (or
 To install an isolated copy from a built or GitHub Release wheel:
 
 ```bash
-pipx install ./adversaryflow-0.3.0-py3-none-any.whl
+pipx install ./adversaryflow-0.4.0-py3-none-any.whl
 adversaryflow --open
 ```
 
