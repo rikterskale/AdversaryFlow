@@ -18,9 +18,10 @@ AdversaryFlow is a **fully guided, 4-step wizard** — no dead ends, every scree
 tells you what to do next, with a progress stepper you can navigate freely once
 steps are reached:
 
-1. **Choose a threat actor** — a searchable, filterable gallery of 220+ ATT&CK
-   groups (`APT29`, `FIN7`, `Lazarus`, …) and named campaigns, with popular
-   actors surfaced as **Start here** chips. Filter by name / alias / ATT&CK ID.
+1. **Choose a threat actor** — a searchable, filterable gallery of every
+   ATT&CK group and named campaign mapped in the selected domains. Filter by
+   name / alias / ATT&CK ID. ICS and Mobile actors appear when those domains
+   are turned on.
 2. **Scope the engagement** — pick the command platform (Windows / Linux /
    macOS), toggle kill-chain stages on/off, include or drop pre-compromise
    tactics, and see a live plan preview update as you go.
@@ -51,8 +52,8 @@ Under the hood:
 * **Kill-chain order is derived from the live STIX matrix**, not hardcoded, so
   the tool stays correct as ATT&CK evolves its tactics — including the current
   split of *Defense Evasion* into **Stealth** and **Defense Impairment**.
-* **Lab exercise per TTP** — a curated library of **533 technique keys and 848 platform records**
-  covers **every technique used by any of the 227 actors**, so a real actor
+* **Lab exercise per TTP** — a curated library of **540 technique keys and 856 platform records**
+  covers **every technique used by any of the 232 actors**, so a real actor
   workflow comes back 100% `curated` with 0 `fallback`. Entries use direct
   technique-specific commands where the behaviour is safe; behaviours that
   require targeting people, destructive actions, or external adversary

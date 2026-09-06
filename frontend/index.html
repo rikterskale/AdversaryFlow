@@ -80,7 +80,7 @@
           detections would fire. <strong>It never runs those commands for you.</strong></p>
 
         <div class="welcome__steps">
-          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Start with APT29, or search 220+ groups.</span></div></div>
+          <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-target"/></svg></span><div><b>Pick an actor</b><span>Search the ATT&amp;CK catalog and choose any group or campaign.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
           <div class="ministep"><span class="ministep__n"><svg class="icon"><use href="#i-sliders"/></svg></span><div><b>Set scope</b><span>Pick your lab OS. Risky commands stay off.</span></div></div>
           <div class="ministep__arrow"><svg class="icon"><use href="#i-arrow-r"/></svg></div>
@@ -91,7 +91,6 @@
 
         <div class="welcome__actions">
           <button type="button" class="btn btn--primary btn--lg" id="startBtn">Begin emulation plan <svg class="icon"><use href="#i-arrow-r"/></svg></button>
-          <button type="button" class="btn btn--secondary btn--lg" id="recommendedBtn" hidden>Start with a recommended actor</button>
           <button type="button" class="btn btn--ghost btn--lg" id="resumeSessionBtn" hidden>Resume saved plan</button>
           <button type="button" class="btn btn--ghost" id="resumeJsonBtn">Resume JSON plan</button>
           <input id="importPlan" type="file" accept="application/json,.json" hidden />
@@ -105,7 +104,7 @@
       <div class="screen__head">
         <div>
           <h2 class="screen__title" tabindex="-1">Choose a threat actor</h2>
-          <p class="screen__hint">Pick the adversary whose campaign you want to emulate. This drives the entire plan. New here? Use a Start here chip, then Continue.</p>
+          <p class="screen__hint">Pick any group or campaign from the live ATT&amp;CK catalog. Search by name, alias, or ATT&amp;CK ID, then Continue.</p>
         </div>
       </div>
 
@@ -139,19 +138,14 @@
         <span class="domainbar__hint">Leave Enterprise on unless you need ICS or mobile coverage.</span>
       </div>
 
-      <div class="featured" id="featured">
-        <span class="featured__label">Start here:</span>
-        <div class="featured__chips" id="featuredChips"></div>
+      <div class="pickerstatus">
         <span class="featured__count" id="actorResults" role="status" aria-live="polite"></span>
       </div>
 
       <div class="actorgrid" id="actorGrid"></div>
       <div class="emptystate" id="actorEmpty" hidden>
         No actors match your search.
-        <span class="emptystate__hint">Try APT29, FIN7, or an ATT&amp;CK ID such as G0016.</span>
-      </div>
-      <div class="showmore" id="actorMore" hidden>
-        <button type="button" class="btn" id="actorShowAll">Show all actors</button>
+        <span class="emptystate__hint">Search by group, campaign, alias, or ATT&amp;CK ID.</span>
       </div>
     </section>
 
@@ -168,7 +162,7 @@
         <div class="scope__main">
           <div class="panel">
             <div class="panel__head"><svg class="icon"><use href="#i-terminal"/></svg><h3>Command platform</h3></div>
-            <p class="panel__desc">Which OS should the lab commands target? There is no cross-OS substitution.</p>
+            <p class="panel__desc">Which OS should the lab commands target? This starts as the OS of this browser. There is no cross-OS substitution.</p>
             <div class="segmented segmented--wide" id="cmdPlatform" role="group" aria-label="Command platform">
               <button type="button" class="segmented__btn is-on" data-plat="windows" aria-pressed="true">Windows</button>
               <button type="button" class="segmented__btn" data-plat="linux" aria-pressed="false">Linux</button>
@@ -250,6 +244,7 @@
         <li><b>Paste</b> it on your authorized lab host — never production.</li>
         <li><b>Record</b> whether it ran and whether a detection fired.</li>
       </ol>
+      <p class="firstlab" id="firstLabHint" hidden></p>
 
       <div class="plan">
         <nav class="plan__rail" id="stageRail" aria-label="Kill-chain stages"></nav>
@@ -283,7 +278,7 @@
           </button>
           <button type="button" class="expcard" data-export="json">
             <span class="expcard__ico"><svg class="icon"><use href="#i-download"/></svg></span>
-            <b>JSON</b><span>Versioned structured data for pipelines and custom integrations.</span>
+            <b>JSON</b><span>Schema 2.0 plan you can resume later in AdversaryFlow.</span>
           </button>
           <button type="button" class="expcard" data-export="script">
             <span class="expcard__ico"><svg class="icon"><use href="#i-terminal"/></svg></span>
@@ -337,9 +332,9 @@
       <span class="authdialog__icon"><svg class="icon"><use href="#i-help"/></svg></span>
       <h2 id="helpTitle">How to use AdversaryFlow</h2>
       <ol class="help__steps">
-        <li><b>Pick a threat actor</b> such as APT29. That choice builds the whole plan.</li>
+        <li><b>Pick any threat actor</b> from the ATT&amp;CK catalog. Search by name, alias, or ATT&amp;CK ID.</li>
         <li><b>Set the lab OS</b> to the machine you will type on. Leave the safety switches off for a first run.</li>
-        <li><b>Copy a command</b>, paste it only on an authorized disposable lab host, then record the result.</li>
+        <li><b>Copy a command</b> from the card marked Try this first, paste it only on an authorized disposable lab host, then record the result.</li>
         <li><b>Export</b> the operator kit or JSON when you are done. JSON lets you resume later.</li>
       </ol>
       <p class="help__note">AdversaryFlow never executes catalog commands. High-risk copy asks you to confirm first.</p>

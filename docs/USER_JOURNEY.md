@@ -26,9 +26,9 @@ harmful attack or its real-world impact.
 
 It is built for people who need to answer *"would we actually see this
 adversary?"* and want an answer grounded in evidence rather than a coverage
-spreadsheet. The audited catalog has **533 technique keys and 848 command
-records**. The audited enterprise dataset mapped 529 unique techniques across
-227 groups and campaigns, and those mapped techniques resolve to catalog
+spreadsheet. The audited catalog has **540 technique keys and 856 command
+records**. The audited enterprise dataset mapped 536 unique techniques across
+232 groups and campaigns, and those mapped techniques resolve to catalog
 records rather than the runtime fallback. This is coverage of catalog records,
 not proof of full attack-behaviour fidelity: **146 catalog techniques are
 explicitly marked bounded synthetic exercises** and mapped to 25
@@ -129,8 +129,7 @@ before it is used. Subsequent launches reuse the disk cache for 7 days.
 ### Step 4 — Welcome screen
 
 **Observable result:** the heading *"Turn a threat actor into an end-to-end
-emulation plan"*, a **Begin emulation plan** button, a **Start with &lt;actor&gt;**
-button for a recommended first plan, a **Resume JSON plan**
+emulation plan"*, a **Begin emulation plan** button, a **Resume JSON plan**
 button, and the footer *"Built for disposable development labs.
 AdversaryFlow creates plans; it does not execute commands."* If this browser
 already has an in-progress plan, **Resume saved plan** is also shown with the actor name.
@@ -144,14 +143,14 @@ Click **Begin emulation plan** → screen *"Choose a threat actor"*.
 
 You can search by name, alias, or ATT&CK ID; filter by **All / Groups /
 Campaigns**; sort by **Name (A–Z)** or **Most techniques**; and switch or combine the
-**Enterprise / ICS-OT / Mobile** domains. Eight popular actors appear as
-quick-pick chips under *Start here:*. The gallery shows the first 24 matches
-with **Show all** when more remain.
+**Enterprise / ICS-OT / Mobile** domains. The gallery lists every mapped
+group and campaign in the selected domains. There is no prescribed first
+actor.
 
 **Observable result:** each card shows the actor name, ATT&CK ID, a
 `group`/`campaign` tag, aliases, a one-line description, and a technique count.
 Selecting one marks it `Selected` and the footer bar reads
-**`Selected: APT29`**. **Continue** becomes enabled.
+**`Selected: <name>`**. **Continue** becomes enabled.
 
 ### Step 6 — Scope the engagement
 
@@ -160,7 +159,7 @@ engagement"*.
 
 | Control | Effect |
 |---|---|
-| **Command platform** — Windows / Linux / macOS | Selects commands for that OS exactly; no cross-OS substitution ever happens |
+| **Command platform** — Windows / Linux / macOS | Selects commands for that OS exactly; no cross-OS substitution ever happens. A fresh visit pre-selects this browser's OS. |
 | **Execution record** — Operator, Target | Optional context stamped onto every evidence record and export |
 | **Kill-chain stages** | Per-tactic chips with technique counts, plus **Select all** / **Clear all** |
 | **Include pre-compromise tactics** | Keeps or drops Reconnaissance and Resource Development |
@@ -178,8 +177,10 @@ target, and a curated/fallback split bar. The footer reads
 
 Click **Build plan** → the *Emulation plan* screen, headed
 `APT29 · G0016` with the subtitle *"development-lab emulation plan · commands
-target **Windows**"*. The plan opens on the first stage that has a runnable
-command, with copyable tests listed before unsupported ones.
+target **Windows**"* (or Linux / macOS). The plan opens on the first stage
+that has a low-risk, copyable **lab proxy** or **direct** command — skipping
+bounded-synthetic-only stages such as Resource Development — and marks that
+card **Try this first**, with copyable tests listed before unsupported ones.
 
 A left rail lists every stage in kill-chain order with a colour-coded number.
 Each technique card shows:
@@ -246,7 +247,7 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 |---|---|---|
 | **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
-| **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json` |
+| **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
 | **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
 
 The runbook remains a deliberately non-executable review format. The execution
@@ -378,7 +379,7 @@ table directly.
 | J9 | Report readiness | `GET /api/health` | Reports readiness and provenance | HTTP 200 with `"status":"ready"` once loaded; HTTP 503 with `"status":"degraded"` before |
 | J10 | Welcome screen | Open `http://127.0.0.1:5000` | Renders step 0 | Heading *Turn a threat actor…* visible and **Begin emulation plan** is enabled |
 | J11 | Data status | Wait for load | Status chip updates | `#dataStatus` matches `^\d+ actors? · Enterprise$` |
-| J12 | List actors | `GET /api/actors` | Returns mapped actors | HTTP 200, `actors` length is 227, and every entry has `stix_id`, `attack_id`, `name`, `type`, `aliases`, `description`, `technique_count` |
+| J12 | List actors | `GET /api/actors` | Returns mapped actors | HTTP 200; every entry has `stix_id`, `attack_id`, `name`, `type`, `aliases`, `description`, `technique_count`; the live enterprise catalog includes every non-deprecated group and campaign ATT&CK maps to techniques (directly or via software they use) |
 | J13 | Choose an actor | Click **Begin emulation plan**, then an actor card | Selects it | Footer reads `Selected: <name>` and **Continue** is enabled |
 | J14 | Search | Type `APT29` in the search box | Filters the grid | Only matching cards remain; the ✕ clear button appears |
 | J15 | Empty search | Type a string matching nothing | Shows the empty state | `No actors match your search.` is visible |
@@ -388,7 +389,7 @@ table directly.
 | J19 | Toggle stages | Click **Clear all** | Empties the plan | Footer reads `No techniques in scope — enable a stage`, **Build plan** is disabled, and the button label becomes `Select all` |
 | J20 | Safety scope | Leave *Allow high-risk commands* off with a high-risk command in scope | Blocks the command | Command text reads `Restricted by scope: high-risk commands are disabled.`; **Copy command** and **Copy cleanup** are both disabled |
 | J21 | Unblock safety scope | Enable the matching option | Restores the command | Real command text is shown and the footer runnable count increases |
-| J22 | Build the plan | Click **Build plan** | Renders step 3 | Heading reads `<name> · <attack_id>`; every in-scope stage appears in the rail and every technique card shows either the exact-platform command or an explicit unsupported message |
+| J22 | Build the plan | Click **Build plan** | Renders step 3 | Heading reads `<name> · <attack_id>`; the plan opens on the first low-risk lab-proxy/direct command (marked **Try this first**); every in-scope stage appears in the rail and every technique card shows either the exact-platform command or an explicit unsupported message |
 | J23 | Command safety metadata | Inspect any curated card | Shows the classification | A risk badge, **Effects**, **Expected** telemetry, ATT&CK detection text, and data-source chips are visible on every supported command |
 | J24 | Navigate stages | Click **Next stage** / **Previous stage** / a rail item | Moves through the kill chain | The stage title changes; **Previous stage** is disabled on the first stage and **Next stage** on the last |
 | J25 | Copy a command | Click **Copy command** | Copies after acknowledgement for medium/high risk | For a high-risk command an in-app dialog titled *Copy this high risk lab command?* shows the command; on **Copy command** the toast reads `Command copied to clipboard` |
@@ -420,7 +421,7 @@ table directly.
 | J51 | Reject an unknown CLI domain | `adversaryflow cache-refresh --domains bogus` | Refuses | Exit code 2 and stdout contains `Unknown ATT&CK domain(s): bogus` |
 | J52 | Operate offline | `adversaryflow --offline` with a seeded cache | Serves without network access | Actors load and no upstream request is made |
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
-| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 529 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 533 technique keys, 848 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
+| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 856 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
 | J55 | Accessibility | Load the welcome screen | No serious accessibility violations | axe-core reports zero `serious` or `critical` violations |
 
 ---

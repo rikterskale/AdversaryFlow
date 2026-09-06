@@ -173,12 +173,12 @@ is the verification step, not a second install.
 
 ## 3. First verified proof of concept
 
-This PoC proves **the planner works**. It does not emulate APT29 against a
-network. You will:
+This PoC proves **the planner works**. It does not emulate a named actor
+against a network. You will:
 
 1. start the local service;
 2. confirm liveness and ATT&CK readiness over HTTP;
-3. build an APT29 plan in the wizard;
+3. pick **any** ATT&CK group or campaign in the wizard and build a plan;
 4. export schema 2.0 JSON.
 
 An optional, low-risk lab one-liner is at the end of this section. Skip it
@@ -269,99 +269,104 @@ degraded with `"error": "ATT&CK data has not been loaded"` and
 ### 3.4 Prove actors loaded
 
 ```bash
-curl -sS http://127.0.0.1:5000/api/actors | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['actors']), d['data_version']); print(next(a for a in d['actors'] if a['attack_id']=='G0016')['name'])"
+curl -sS http://127.0.0.1:5000/api/actors | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['actors']), d['data_version']); print(sum(a['type']=='group' for a in d['actors']), 'groups'); print(sum(a['type']=='campaign' for a in d['actors']), 'campaigns')"
 ```
 
 Windows PowerShell:
 
 ```powershell
-curl.exe -sS http://127.0.0.1:5000/api/actors | py -3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['actors']), d['data_version']); print(next(a for a in d['actors'] if a['attack_id']=='G0016')['name'])"
+curl.exe -sS http://127.0.0.1:5000/api/actors | py -3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['actors']), d['data_version']); print(sum(a['type']=='group' for a in d['actors']), 'groups'); print(sum(a['type']=='campaign' for a in d['actors']), 'campaigns')"
 ```
 
-Against the enterprise bundle this handbook used, that prints:
+Against the enterprise bundle this handbook used, that prints a
+three-digit actor count, a `groups` line, and a `campaigns` line, plus a
+`data_version` that starts with `enterprise:bundle--`. Your exact count
+changes when MITRE publishes a new STIX bundle. The check is: the catalog
+is non-empty and includes both groups and campaigns. The header chip in
+the UI should read `<n> actors · Enterprise` (or `1 actor` when only one
+row is loaded). Turn on **ICS / OT** or **Mobile** in the gallery if you
+need those domains too.
 
-```text
-227 enterprise:bundle--6198013c-6f02-42a4-9713-38ea1301a1aa
-APT29
-```
-
-Your `data_version` string will change when MITRE publishes a new STIX
-bundle. The actor count and `APT29` line are the check. The header chip in
-the UI should read `227 actors · Enterprise` (or `1 actor` when only one
-row is loaded).
-
-### 3.5 Build an APT29 plan in the wizard
+### 3.5 Build a plan in the wizard
 
 In the browser at <http://127.0.0.1:5000>:
 
-1. Click **Start with APT29** (or **Begin emulation plan**, then search
-   `APT29` / `G0016` and select it). The footer should read
-   `Selected: APT29`. Click **Continue** if you used the gallery.
-3. On **Scope the engagement**:
-   - Set **Command platform** to the OS of the lab host you will type on
-     (**Linux**, **Windows**, or **macOS**). There is no cross-OS fallback:
-     a Windows-only command is unsupported on Linux, and copy is disabled.
+1. Click **Begin emulation plan**. Search or scroll the gallery and select
+   **any** group or campaign. The footer should read `Selected: <name>`.
+   Click **Continue**.
+2. On **Scope the engagement**:
+   - Confirm **Command platform** is the OS of the lab host you will type
+     on (**Linux**, **Windows**, or **macOS**). A fresh visit pre-selects
+     this browser's OS. There is no cross-OS fallback: a Windows-only
+     command is unsupported on Linux, and copy is disabled.
    - Leave **Allow network-active commands**, **Allow administrator
      commands**, and **Allow high-risk commands** **off**.
    - Optional: fill **Operator** and **Target** (lab names only; no
      secrets).
-4. Confirm the preview is non-zero runnable, then click **Build plan**.
+3. Confirm the preview is non-zero runnable, then click **Build plan**.
 
-Against the checked bundle, APT29 is **66** techniques across **13**
-stages, all curated (`fallback_commands` is `0`). The plan opens on
-**Reconnaissance**. Use **Next stage** until **Execution**.
+The plan opens on the first stage that has a low-risk copyable **lab
+proxy** or **direct** command, marked **Try this first**. That card
+depends on the actor and OS you picked — it is not a prescribed technique.
 
-You now have a verified planner PoC if the Execution stage shows lab
-commands. Continue to export even if you do not run anything.
+You now have a verified planner PoC if that first card shows a lab
+command and **Copy command** is enabled. Continue to export even if you
+do not run anything.
 
 ### 3.6 Optional: one low-risk lab command
 
 Only on an authorized disposable lab. AdversaryFlow still does not execute
 this; you do.
 
-Stay on the **Execution** stage with high-risk / admin / network **off**.
+Leave high-risk / admin / network **off**. Copy the **Try this first**
+card. Examples you might see:
 
-| Lab OS | Technique to open | Fidelity you should see | Command the card shows |
+| Lab OS | Example technique | Fidelity | Example command |
 | --- | --- | --- | --- |
 | Linux | **T1059.006** Python | lab proxy | `python3 -c "print('AdversaryFlow lab python exec test')"` |
+| macOS | **T1059.006** Python | lab proxy | `python3 -c "print('AdversaryFlow lab python exec test')"` |
 | Windows | **T1059.001** PowerShell | lab proxy | `powershell.exe -NoProfile -Command "Write-Host 'AdversaryFlow lab PowerShell exec test'"` |
+| Linux | **T1033** System Owner/User Discovery | direct | `id && whoami` |
 
-1. Click **Copy command** on that card (no acknowledgement dialog; these
-   are low risk).
+The technique on the card is the one to copy. There is no acknowledgement
+dialog for these low-risk commands.
+
+1. Click **Copy command**.
 2. Paste into a terminal **on the lab host**, not into a production jump
    box.
-3. You should see `AdversaryFlow lab python exec test` or
-   `AdversaryFlow lab PowerShell exec test`.
+3. Confirm the output matches what the card's **Expected output** describes.
 4. On the card, set **Command** to **Ran**, set **Detection** to whatever
    your lab actually did (**Not assessed** is honest if you did not look),
    and optionally tick **cleanup verified** if the card has cleanup.
 
 Do not paste a command from a **bounded synthetic** card into this first
 PoC. Those need Python 3.10+ and `python -m backend.lab_exercises <id>`
-(Windows) or `python3 -m backend.lab_exercises <id>` (Linux). Direct
-`T1059.006` is **not** a `lab_exercises` id; that module will reject it
-with `invalid choice`.
+(Windows) or `python3 -m backend.lab_exercises <id>` (Linux / macOS). A
+direct ATT&CK ID such as `T1059.006` is **not** a `lab_exercises` id; that
+module will reject it with `invalid choice`.
 
 ### 3.7 Export JSON and check it
 
 1. Click **Finish & export**. The footer reads `Plan complete`.
 2. Click **JSON**. The file name is
-   `AdversaryFlow_G0016_APT29.json`.
+   `AdversaryFlow_<ATTACK-ID>_<Name>.json`.
 3. In the folder where the browser saved it:
 
 ```bash
-python3 -c "import json; p=json.load(open('AdversaryFlow_G0016_APT29.json')); print(p['schema_version'], p['tool'], p['actor']['attack_id'], p['actor']['name'], p['summary']['techniques'], p['summary']['runnable'])"
+python3 -c "import json,glob; p=json.load(open(glob.glob('AdversaryFlow_*.json')[0])); print(p['schema_version'], p['tool'], p['actor']['attack_id'], p['actor']['name'], p['summary']['techniques'], p['summary']['runnable'])"
 ```
 
 Windows PowerShell:
 
 ```powershell
-py -3 -c "import json; p=json.load(open('AdversaryFlow_G0016_APT29.json')); print(p['schema_version'], p['tool'], p['actor']['attack_id'], p['actor']['name'], p['summary']['techniques'], p['summary']['runnable'])"
+py -3 -c "import json,glob; p=json.load(open(glob.glob('AdversaryFlow_*.json')[0])); print(p['schema_version'], p['tool'], p['actor']['attack_id'], p['actor']['name'], p['summary']['techniques'], p['summary']['runnable'])"
 ```
 
-You should see `2.0 AdversaryFlow G0016 APT29` followed by technique counts
-(66 and a runnable count that depends on the platform you picked). Keep this
-file. It is the portable backup of the plan.
+You should see `2.0 AdversaryFlow` followed by the ATT&CK ID and name of
+the actor you picked, then technique counts (a runnable count that
+depends on the platform you picked — with the safety defaults left off,
+expect a non-zero runnable count). Keep this file. It is the portable
+backup of the plan.
 
 ### PoC success checklist
 
@@ -369,8 +374,8 @@ file. It is the portable backup of the plan.
 - [ ] `adversaryflow doctor` has `"ok": true`
 - [ ] `GET /api/live` returns `"status":"live"`
 - [ ] `GET /api/health` returns HTTP 200 `"ready": true`
-- [ ] `GET /api/actors` lists **APT29** / **G0016**
-- [ ] The wizard built an APT29 plan and exported schema **2.0** JSON
+- [ ] `GET /api/actors` lists both **groups** and **campaigns**
+- [ ] The wizard built a plan for the actor you chose and exported schema **2.0** JSON
 
 That is a verified PoC of the product you installed. It is not a detection
 coverage claim.
@@ -516,7 +521,7 @@ strings are exact CLI or HTTP output.
 | `offline mode requires a cached enterprise ATT&CK bundle at …` | `--offline` with an empty cache | Start **online** once, or copy a known-good cache into `--cache-dir` |
 | Header chip `setup needs attention` / `Could not prepare ATT&CK data` | Session or bootstrap failed | Click **Retry setup**. Confirm `GET /api/session` returns `csrf_token` and `version` |
 | `{"error":"forbidden","message":"Missing or invalid same-origin request token"}` | `POST` without `X-AdversaryFlow-CSRF` | Use the UI, or `GET /api/session` and send that token. Ordinary `GET /api/live` and `GET /api/health` do not need it |
-| `{"error":"actor_not_found",…}` | Wrong STIX id or domain | Search the gallery; APT29 is `G0016` / `intrusion-set--899ce53f-13a0-479b-a0e4-67d46e241542` on enterprise |
+| `{"error":"actor_not_found",…}` | Wrong STIX id or domain | Search the gallery by name, alias, or ATT&CK ID. Confirm the matching domain is selected |
 | `{"error":"bad_request","message":"Unknown ATT&CK domain(s): bogus"}` | Typo in `?domains=` | Use `enterprise`, `ics`, `mobile` only |
 | Card says **unsupported** / copy disabled | Platform mismatch or scope filter | Switch **Command platform**, or enable the matching Allow-* toggle. Do not expect a Windows command on Linux |
 | In-app dialog **Copy this high risk lab command?** | Medium/high-risk copy | Read the command, prerequisites, and cleanup. Cancel if this is not your lab |

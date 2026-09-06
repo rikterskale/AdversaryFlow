@@ -225,6 +225,9 @@ def stix_bundle() -> dict:
              "external_references": [{"source_name": "mitre-attack", "external_id": "G0003"}]},
             {"type": "intrusion-set", "id": "intrusion-set--idle", "name": "Idle Group",
              "external_references": [{"source_name": "mitre-attack", "external_id": "G0004"}]},
+            {"type": "intrusion-set", "id": "intrusion-set--soft", "name": "Software Group",
+             "external_references": [{"source_name": "mitre-attack", "external_id": "G0005"}]},
+            {"type": "malware", "id": "malware--dropper", "name": "Fixture Dropper"},
             {"type": "intrusion-set", "id": "intrusion-set--nameless", "name": "Unreferenced Group"},
             {"type": "attack-pattern", "id": "attack-pattern--ps", "name": "PowerShell",
              "description": "Adversaries may abuse PowerShell.\n\nMore detail.",
@@ -263,6 +266,12 @@ def stix_bundle() -> dict:
             {"type": "relationship", "relationship_type": "mitigates",
              "id": "relationship--6", "source_ref": "intrusion-set--idle",
              "target_ref": "attack-pattern--ps"},
+            {"type": "relationship", "relationship_type": "uses",
+             "id": "relationship--7", "source_ref": "intrusion-set--soft",
+             "target_ref": "malware--dropper"},
+            {"type": "relationship", "relationship_type": "uses",
+             "id": "relationship--8", "source_ref": "malware--dropper",
+             "target_ref": "attack-pattern--ps"},
         ],
     }
 
@@ -283,8 +292,8 @@ class AttackIndexTests(unittest.TestCase):
 
     def test_list_actors_returns_only_mapped_non_deprecated_actors(self):
         actors = self.index.list_actors()
-        self.assertEqual([a["attack_id"] for a in actors], ["C0001", "G0002"])
-        self.assertEqual([a["type"] for a in actors], ["campaign", "group"])
+        self.assertEqual([a["attack_id"] for a in actors], ["C0001", "G0005", "G0002"])
+        self.assertEqual([a["type"] for a in actors], ["campaign", "group", "group"])
 
     def test_list_actors_strips_the_self_alias_and_first_description_line(self):
         zeta = next(a for a in self.index.list_actors() if a["attack_id"] == "G0002")
@@ -325,6 +334,12 @@ class AttackIndexTests(unittest.TestCase):
 
     def test_only_uses_relationships_build_the_actor_map(self):
         self.assertNotIn("intrusion-set--idle", self.index.actor_uses)
+
+    def test_actors_that_only_use_software_still_resolve_techniques(self):
+        techniques = self.index.actor_techniques("intrusion-set--soft")
+        self.assertEqual([t["attack_id"] for t in techniques], ["T1059.001"])
+        software = next(a for a in self.index.list_actors() if a["attack_id"] == "G0005")
+        self.assertEqual(software["technique_count"], 1)
 
     def test_attack_id_and_url_helpers_tolerate_missing_references(self):
         self.assertIsNone(attack_data.AttackIndex._attack_id({"external_references": []}))

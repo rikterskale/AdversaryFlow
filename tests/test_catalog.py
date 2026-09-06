@@ -8,7 +8,7 @@ from backend.lab_exercises import TECHNIQUE_SCENARIOS
 class CatalogIntegrityTests(unittest.TestCase):
     def test_expected_catalog_size(self):
         self.assertEqual(len(EXTENDED), 437)
-        self.assertEqual(len(command_catalog.CURATED), 533)
+        self.assertEqual(len(command_catalog.CURATED), 540)
 
     def test_entries_have_complete_shape(self):
         for technique_id, commands in command_catalog.CURATED.items():
@@ -69,7 +69,29 @@ class CatalogIntegrityTests(unittest.TestCase):
             self.assertEqual({command["platform"] for command in records}, {"windows", "linux", "macos"})
 
     def test_catalog_record_counts_are_explicit(self):
-        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 848)
+        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 856)
+
+    def test_first_poc_lab_commands_are_copyable_on_each_os(self):
+        """The getting-started one-liner must exist as a low-risk lab proxy on every OS."""
+
+        def record(technique_id, platform):
+            return next((command for command in command_catalog.CURATED[technique_id] if command["platform"] == platform), None)
+
+        first_commands = {
+            "windows": record("T1059.001", "windows"),
+            "linux": record("T1059.006", "linux"),
+            "macos": record("T1059.006", "macos"),
+        }
+        self.assertIsNotNone(record("T1059.006", "windows"))
+        for platform, command in first_commands.items():
+            with self.subTest(platform=platform):
+                self.assertIsNotNone(command)
+                self.assertEqual(command["risk"], "low")
+                self.assertEqual(command["fidelity"], "lab_proxy")
+                self.assertFalse(command["acknowledgment_required"])
+                self.assertFalse(command["requires_admin"])
+                self.assertFalse(command["requires_network"])
+                self.assertIn("AdversaryFlow lab", command["command"])
 
 
 if __name__ == "__main__":

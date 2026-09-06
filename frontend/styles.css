@@ -236,6 +236,29 @@ body {
   padding: 12px 14px; font-size: 13px; color: var(--text-dim); counter-increment: coach;
 }
 .coach li b { color: var(--text); }
+.firstlab {
+  margin: -6px 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(52,211,153,.08);
+  border: 1px solid rgba(52,211,153,.28);
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+.firstlab b { color: var(--text); }
+.firstlabbadge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(52,211,153,.16);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.techcard.is-firstlab { border-color: rgba(52,211,153,.45); }
 .nextsteps {
   margin: 0 0 18px; padding: 14px 18px 14px 36px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -244,9 +267,6 @@ body {
 .nextsteps li + li { margin-top: 6px; }
 .nextsteps b { color: var(--text); }
 .emptystate__hint { display: block; margin-top: 8px; font-size: 13px; }
-.showmore { display: flex; justify-content: center; margin: 18px 0 8px; }
-.featured.is-empty .featured__label,
-.featured.is-empty .featured__chips { display: none; }
 .help__steps { margin: 0 0 14px; padding-left: 20px; color: var(--text-dim); }
 .help__steps li + li { margin-top: 8px; }
 .help__steps b { color: var(--text); }
@@ -285,11 +305,8 @@ body {
   background: var(--surface); color: var(--text); border: 1px solid var(--border); cursor: pointer; outline: none;
 }
 
-/* Featured chips */
-.featured { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-.featured__label { font-size: 12.5px; color: var(--text-faint); }
-.featured__chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.featured__count { margin-left: auto; color: var(--text-faint); font-size: 12px; white-space: nowrap; }
+.pickerstatus { display: flex; justify-content: flex-end; margin: -6px 0 12px; }
+.featured__count { color: var(--text-faint); font-size: 12px; white-space: nowrap; }
 .domainbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: -6px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
@@ -297,11 +314,6 @@ body {
 }
 .domainbar__label { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
 .domainbar__hint { margin-left: auto; font-size: 12px; color: var(--text-faint); }
-.fchip {
-  font-size: 12.5px; font-weight: 600; padding: 6px 13px; border-radius: 20px; cursor: pointer;
-  background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); transition: all .15s var(--ease);
-}
-.fchip:hover { color: #fff; border-color: var(--brand); background: rgba(244,63,94,.12); transform: translateY(-1px); }
 
 /* Actor grid */
 .actorgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }

@@ -4,6 +4,17 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Listed every mapped ATT&CK group and campaign, including actors that
+  ATT&CK records only through the malware or tools they use.
+- Removed the prescribed first actor: the welcome screen no longer skips
+  the gallery, Start here chips are gone, and Getting started has the
+  operator pick any actor.
+- Made the first plan land on a copyable lab command: a fresh visit
+  pre-selects this browser's OS, the plan skips bounded-synthetic-only
+  stages, and the first low-risk lab-proxy or direct card is marked
+  **Try this first**.
+- Added a macOS lab-proxy for T1059.006 so the getting-started one-liner
+  exists on every OS.
 - Stopped install and release copy from treating PyPI as a coming install
   path. Distribution is a source checkout or a GitHub Release wheel.
 - Removed the optional PyPI trusted-publishing steps from the release

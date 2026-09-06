@@ -347,15 +347,43 @@ class AttackIndex:
                 # Later domains should not clobber earlier identical ids; first wins.
                 self.objects_by_id.setdefault(oid, obj)
 
+        self._index_uses()
+
+    def _index_uses(self) -> None:
+        """Map groups and campaigns to techniques they use.
+
+        ATT&CK records some actors only as using malware or tools, not
+        techniques directly. Those actors still belong in the gallery, so
+        when an actor has no direct technique `uses` edges, techniques are
+        taken from the software they use. Actors that already have direct
+        technique mappings keep that ATT&CK-published set.
+        """
+        software_uses: Dict[str, List[str]] = {}
+        actor_software: Dict[str, List[str]] = {}
         for obj in list(self.objects_by_id.values()):
-            if obj.get("type") != "relationship":
-                continue
-            if obj.get("relationship_type") != "uses":
+            if obj.get("type") != "relationship" or obj.get("relationship_type") != "uses":
                 continue
             src = obj.get("source_ref", "")
             tgt = obj.get("target_ref", "")
             if src.startswith(("intrusion-set--", "campaign--")) and tgt.startswith("attack-pattern--"):
                 self.actor_uses.setdefault(src, []).append(tgt)
+            elif src.startswith(("intrusion-set--", "campaign--")) and tgt.startswith(("malware--", "tool--")):
+                actor_software.setdefault(src, []).append(tgt)
+            elif src.startswith(("malware--", "tool--")) and tgt.startswith("attack-pattern--"):
+                software_uses.setdefault(src, []).append(tgt)
+        for actor_id, software_ids in actor_software.items():
+            if self.actor_uses.get(actor_id):
+                continue
+            seen: set[str] = set()
+            for software_id in software_ids:
+                software = self.objects_by_id.get(software_id) or {}
+                if self._is_deprecated(software):
+                    continue
+                for technique_id in software_uses.get(software_id, []):
+                    if technique_id in seen:
+                        continue
+                    seen.add(technique_id)
+                    self.actor_uses.setdefault(actor_id, []).append(technique_id)
 
     def _build_tactics(self) -> None:
         """Derive the ordered kill chain from the x-mitre-matrix / tactic objects.

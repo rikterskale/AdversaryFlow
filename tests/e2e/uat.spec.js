@@ -217,6 +217,8 @@ test("J22 — the plan opens on the first kill-chain stage", async ({ page }) =>
   await expect(page.locator(".railitem")).toHaveCount(3);
   await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
   await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
+  await expect(page.locator(".firstlabbadge")).toHaveText("Try this first");
+  await expect(page.locator("#firstLabHint")).toContainText("T1059.001");
 });
 
 test("J23 — every supported command shows its safety classification", async ({ page }) => {

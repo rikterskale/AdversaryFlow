@@ -37,8 +37,11 @@ function tacticTitle(tactic) {
   return titleCase(tactic);
 }
 
-const FEATURED = ["G0016", "G0032", "G0007", "G0046", "G1017", "G0096", "G0008", "G1006"];
-const ACTOR_PAGE_SIZE = 24;
+const FIRST_LAB_IDS = {
+  windows: ["T1059.001", "T1059.003", "T1059.006"],
+  linux: ["T1059.006", "T1059.004"],
+  macos: ["T1059.006", "T1059.004"],
+};
 const SESSION_KEY = "af_session_v1";
 const FIDELITY_VALUES = ["direct", "bounded_synthetic", "lab_proxy"];
 const DETECTION_RESULTS = ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"];
@@ -54,11 +57,25 @@ const DETECTION_LABELS = {
 // an actionable error instead of spinning forever.
 const BOOTSTRAP_TIMEOUT_MS = 15 * 60 * 1000;
 
+function guessPlatform() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  const uaData = ((navigator.userAgentData && navigator.userAgentData.platform) || "").toLowerCase();
+  const plat = (navigator.platform || "").toLowerCase();
+  const haystack = `${uaData} ${ua} ${plat}`;
+  if (/windows|win32|win64/.test(haystack)) return "windows";
+  if (/mac/.test(haystack)) return "macos";
+  if (/linux|cros/.test(haystack)) return "linux";
+  return "";
+}
+function defaultCommandPlatform() {
+  return guessPlatform() || "windows";
+}
+
 const state = {
   actors: [], filtered: [], selectedId: null, selectedActor: null,
   workflow: null,
   domains: ["enterprise"], dataVersion: "unknown",
-  scope: { cmdPlatform: "windows", tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false },
+  scope: { cmdPlatform: defaultCommandPlatform(), tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false },
   run: new Set(),
   records: {},
   recordContext: { operator: "", target: "" },
@@ -68,7 +85,6 @@ const state = {
   focusedTech: 0,
   step: 0, stage: 0, maxStep: 0,
   typeFilter: "all", sort: "name",
-  actorShowAll: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -90,13 +106,11 @@ document.addEventListener("DOMContentLoaded", () => {
   boot();
 
   el("startBtn").addEventListener("click", () => goTo(1));
-  el("recommendedBtn").addEventListener("click", startRecommended);
   el("brandHome").addEventListener("click", () => restart());
   el("refreshBtn").addEventListener("click", refreshFeed);
   el("helpBtn").addEventListener("click", openHelp);
   el("helpClose").addEventListener("click", () => el("helpDialog").close());
   el("retryLoad").addEventListener("click", boot);
-  el("actorShowAll").addEventListener("click", () => { state.actorShowAll = true; renderActorGrid(); });
   el("backBtn").addEventListener("click", () => goTo(state.step - 1));
   el("nextBtn").addEventListener("click", onNext);
   el("restartBtn").addEventListener("click", () => restart());
@@ -312,8 +326,6 @@ function showLoadFailure(error) {
   setStatus("setup needs attention", "err");
   el("setupErrorText").textContent = error.message || "Could not prepare ATT&CK data";
   el("setupError").hidden = false;
-  const rec = el("recommendedBtn");
-  if (rec) rec.hidden = true;
 }
 
 /* ============================================================
@@ -327,7 +339,6 @@ async function loadActors(throwOnError = false, { busy = false } = {}) {
     if (!Array.isArray(data.actors)) throw new Error("Actor response is missing its actors array");
     state.actors = data.actors;
     state.dataVersion = data.data_version || "unknown";
-    renderFeatured();
     applyFilter();
     const count = data.actors.length;
     setStatus(`${count} actor${count === 1 ? "" : "s"} · ${state.domains.map(titleCase).join(" + ")}`, "ok");
@@ -388,7 +399,7 @@ function toggleDomain(domain) {
   state.selectedId = null; state.selectedActor = null; state.workflow = null;
   state.run = new Set(); state.maxStep = 1; state.stage = 0;
   state.actors = []; state.filtered = []; state.dataVersion = "unknown";
-  renderFeatured(); renderActorGrid(); updateStepper(); updateActionBar();
+  renderActorGrid(); updateStepper(); updateActionBar();
   loadActors(false, { busy: true });
 }
 function setStatus(text, cls) {
@@ -424,7 +435,30 @@ function goTo(step) {
   });
 }
 
+function firstLabCommand() {
+  const plan = filteredPlan();
+  const preferred = FIRST_LAB_IDS[state.scope.cmdPlatform] || FIRST_LAB_IDS.linux;
+  const candidates = [];
+  plan.stages.forEach((stage, stageIndex) => {
+    stage.techniques.forEach(technique => {
+      const command = technique._cmd;
+      if (!command || command.unsupported) return;
+      if (command.fidelity === "bounded_synthetic") return;
+      if (command.risk === "high" || command.acknowledgment_required || command.requires_admin || command.requires_network) return;
+      const preferredIndex = preferred.indexOf(technique.attack_id);
+      candidates.push({
+        stageIndex,
+        tech: technique,
+        pref: preferredIndex < 0 ? 100 : preferredIndex,
+      });
+    });
+  });
+  candidates.sort((a, b) => a.pref - b.pref || a.stageIndex - b.stageIndex);
+  return candidates[0] || null;
+}
 function firstRunnableStage() {
+  const first = firstLabCommand();
+  if (first) return first.stageIndex;
   const p = filteredPlan();
   const index = p.stages.findIndex(stage => stage.techniques.some(technique => !technique._cmd.unsupported));
   return index < 0 ? 0 : index;
@@ -497,9 +531,8 @@ async function restart() {
   state.recordContext = { operator: "", target: "" };
   state.maxStep = 0; state.stage = 0;
   state.typeFilter = "all"; state.sort = "name";
-  state.actorShowAll = false;
   state.domains = ["enterprise"];
-  state.scope = { cmdPlatform: "windows", tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false };
+  state.scope = { cmdPlatform: defaultCommandPlatform(), tactics: new Set(TACTIC_ORDER), includePre: true, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false };
   el("actorSearch").value = "";
   el("searchClear").hidden = true;
   el("sortSel").value = "name";
@@ -512,7 +545,7 @@ async function restart() {
   $$(".actorcard").forEach(c => c.classList.remove("is-selected"));
   if (domainsWereChanged) {
     state.actors = []; state.filtered = []; state.dataVersion = "unknown";
-    renderFeatured(); renderActorGrid();
+    renderActorGrid();
     loadActors();
   } else applyFilter();
   goTo(0);
@@ -728,27 +761,13 @@ function applyFilter() {
   });
   list.sort(state.sort === "ttps" ? (a, b) => b.technique_count - a.technique_count : (a, b) => a.name.localeCompare(b.name));
   state.filtered = list;
-  if (list.length <= ACTOR_PAGE_SIZE) state.actorShowAll = false;
   renderActorGrid();
-}
-function renderFeatured() {
-  const wrap = el("featuredChips");
-  const chips = FEATURED.map(id => state.actors.find(a => a.attack_id === id)).filter(Boolean);
-  wrap.innerHTML = chips.map(a => `<button type="button" class="fchip" data-id="${escapeHtml(a.stix_id)}">${escapeHtml(a.name)}</button>`).join("");
-  $$(".fchip", wrap).forEach(c => c.addEventListener("click", () => { selectActor(c.dataset.id); }));
-  el("featured").classList.toggle("is-empty", chips.length === 0);
 }
 function renderActorGrid() {
   const grid = el("actorGrid");
-  const visible = state.actorShowAll || state.filtered.length <= ACTOR_PAGE_SIZE
-    ? state.filtered
-    : state.filtered.slice(0, ACTOR_PAGE_SIZE);
   el("actorEmpty").hidden = state.filtered.length > 0;
   el("actorResults").textContent = `${state.filtered.length} ${state.filtered.length === 1 ? "result" : "results"}`;
-  const more = el("actorMore");
-  more.hidden = state.filtered.length <= ACTOR_PAGE_SIZE || state.actorShowAll;
-  el("actorShowAll").textContent = `Show all ${state.filtered.length} actors`;
-  grid.innerHTML = visible.map(a => `
+  grid.innerHTML = state.filtered.map(a => `
     <button type="button" class="actorcard ${state.selectedId === a.stix_id ? "is-selected" : ""}" data-id="${escapeHtml(a.stix_id)}" aria-label="Select ${escapeHtml(a.name)}, ${escapeHtml(a.attack_id)}, ${a.technique_count} techniques" aria-pressed="${state.selectedId === a.stix_id}">
       <div class="actorcard__top">
         <div>
@@ -772,24 +791,6 @@ function renderActorGrid() {
     });
   });
 }
-function recommendedActor() {
-  for (const id of FEATURED) {
-    const actor = state.actors.find(a => a.attack_id === id);
-    if (actor) return actor;
-  }
-  return state.actors[0] || null;
-}
-function startRecommended() {
-  if (!el("setupError").hidden) return;
-  const actor = recommendedActor();
-  if (!actor) { toast("No actors are loaded yet", "error"); return; }
-  const changed = state.selectedId !== actor.stix_id;
-  state.selectedId = actor.stix_id;
-  state.selectedActor = actor;
-  if (changed) { state.workflow = null; state.stage = 0; state.maxStep = 1; }
-  persistSession();
-  goTo(2);
-}
 function selectActor(id) {
   const changed = state.selectedId !== id;
   state.selectedId = id;
@@ -800,7 +801,6 @@ function selectActor(id) {
   updateActionBar();
   if (state.step === 0) goTo(1);
   persistSession();
-  // Smooth scroll the selected card into view when chosen via chip
   const card = document.querySelector(`.actorcard[data-id="${CSS.escape(id)}"]`);
   if (card && state.step === 1) card.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -872,14 +872,6 @@ function pickCommand(t, plat) {
     };
 }
 
-function guessPlatform() {
-  const ua = (navigator.userAgent || "").toLowerCase();
-  const plat = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "").toLowerCase();
-  if (/mac/.test(plat) || /mac os/.test(ua)) return "macos";
-  if (/win/.test(plat) || /windows/.test(ua)) return "windows";
-  if (/linux/.test(plat) || /linux/.test(ua) || /cros/.test(ua)) return "linux";
-  return "";
-}
 function renderPlatformHint() {
   const hint = el("platformHint");
   if (!hint) return;
@@ -899,6 +891,7 @@ function renderPlatformHint() {
   });
 }
 function renderScope() {
+  syncStaticScopeControls();
   buildTacticGrid();
   renderPlatformHint();
   const p = filteredPlan();
@@ -1070,11 +1063,6 @@ function renderWelcomeActions() {
       button.textContent = `Resume ${session.selectedActor.name} plan`;
     }
   }
-  const rec = el("recommendedBtn");
-  if (!rec) return;
-  const actor = recommendedActor();
-  rec.hidden = !actor || !el("setupError").hidden;
-  rec.textContent = actor ? `Start with ${actor.name}` : "Start with a recommended actor";
 }
 function restoreScopeFromSession(session) {
   const scope = session.scope || {};
@@ -1171,6 +1159,12 @@ function enterPlan() {
   el("planActorMeta").innerHTML = (a.aliases.length ? `aka ${escapeHtml(a.aliases.slice(0, 3).join(", "))} · ` : "") +
     `development-lab emulation plan · commands target <b>${titleCase(state.scope.cmdPlatform)}</b>`;
   if (state.stage >= filteredPlan().stages.length) state.stage = 0;
+  const first = firstLabCommand();
+  if (first && first.stageIndex === state.stage) {
+    const techniques = stageTechniques(filteredPlan().stages[state.stage]);
+    const index = techniques.findIndex(technique => technique.attack_id === first.tech.attack_id);
+    if (index >= 0) state.focusedTech = index;
+  }
   renderRail();
   renderStage();
   updateProgress();
@@ -1192,14 +1186,26 @@ function renderRail() {
   $$(".railitem", rail).forEach(b => b.addEventListener("click", () => { state.stage = +b.dataset.i; state.focusedTech = 0; renderRail(); renderStage(); }));
 }
 function stageTechniques(stage) {
-  return [...stage.techniques].sort((a, b) => Number(Boolean(a._cmd.unsupported)) - Number(Boolean(b._cmd.unsupported)));
+  const first = firstLabCommand();
+  const firstId = first && first.stageIndex === state.stage ? first.tech.attack_id : "";
+  return [...stage.techniques].sort((a, b) => {
+    const unsupported = Number(Boolean(a._cmd.unsupported)) - Number(Boolean(b._cmd.unsupported));
+    if (unsupported) return unsupported;
+    if (!firstId) return 0;
+    if (a.attack_id === firstId) return -1;
+    if (b.attack_id === firstId) return 1;
+    return 0;
+  });
 }
 function renderStage() {
   const p = filteredPlan();
   const s = p.stages[state.stage];
   const body = el("stageBody");
-  if (!s) { body.innerHTML = `<div class="emptystate">No techniques in scope.</div>`; return; }
+  if (!s) { renderFirstLabHint(null); body.innerHTML = `<div class="emptystate">No techniques in scope.</div>`; return; }
   const techniques = stageTechniques(s);
+  const first = firstLabCommand();
+  const firstLabId = first && first.stageIndex === state.stage ? first.tech.attack_id : "";
+  renderFirstLabHint(firstLabId ? first : null);
   const color = tacticColor(s.tactic);
   body.innerHTML = `
     <div class="stagepanel__head">
@@ -1208,7 +1214,7 @@ function renderStage() {
     </div>
     <p class="stagepanel__desc">${escapeHtml(TACTIC_META[s.tactic] || "")} · ${s.techniques.length} technique${s.techniques.length !== 1 ? "s" : ""}</p>
     <p class="kbdhint">On this stage: copy a command, run it on your lab host, then record the result. j / k move · c copies.</p>
-    <div class="techlist">${techniques.map(renderTech).join("")}</div>
+    <div class="techlist">${techniques.map(technique => renderTech(technique, firstLabId)).join("")}</div>
     <div class="stagenav">
       <button type="button" class="btn btn--ghost" ${state.stage === 0 ? "disabled" : ""} id="prevStage"><svg class="icon"><use href="#i-arrow-l"/></svg> Previous stage</button>
       <button type="button" class="btn" ${state.stage >= p.stages.length - 1 ? "disabled" : ""} id="nextStage">Next stage <svg class="icon"><use href="#i-arrow-r"/></svg></button>
@@ -1242,11 +1248,22 @@ function renderStage() {
   if (prev) prev.addEventListener("click", () => { if (state.stage > 0) { state.stage--; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
   if (next) next.addEventListener("click", () => { if (state.stage < p.stages.length - 1) { state.stage++; state.focusedTech = 0; renderRail(); renderStage(); scrollPlanTop(); } });
   setPlanFocus(Math.min(state.focusedTech, Math.max(0, techniques.length - 1)));
+  const focused = document.querySelector(".techcard.is-focused");
+  if (focused) focused.scrollIntoView({ block: "nearest" });
 }
 function scrollPlanTop() { el("stage").scrollTo({ top: 0, behavior: "smooth" }); }
+function renderFirstLabHint(first) {
+  const hint = el("firstLabHint");
+  if (!hint) return;
+  if (!first) { hint.hidden = true; hint.textContent = ""; return; }
+  const technique = first.tech;
+  hint.hidden = false;
+  hint.innerHTML = `<b>Try this first:</b> ${escapeHtml(technique.attack_id)} ${escapeHtml(technique.name)} is a low-risk ${titleCase(state.scope.cmdPlatform)} lab command. Copy it, paste it only on your authorized lab host, then record whether it ran.`;
+}
 
-function renderTech(t) {
+function renderTech(t, firstLabId = "") {
   const c = t._cmd;
+  const isFirstLab = Boolean(firstLabId) && t.attack_id === firstLabId;
   const run = state.run.has(t.attack_id);
   const record = state.records[t.attack_id] || {};
   const unsupported = Boolean(c.unsupported);
@@ -1256,7 +1273,7 @@ function renderTech(t) {
   const risk = c.risk || "unknown";
   const tid = escapeHtml(t.attack_id);
   return `
-  <div class="techcard ${run ? "is-run" : ""}" data-tid="${tid}">
+  <div class="techcard ${run ? "is-run" : ""} ${isFirstLab ? "is-firstlab" : ""}" data-tid="${tid}">
     <div class="techcard__main">
       <button type="button" class="techcard__check" data-id="${tid}" title="${unsupported ? "No test available for this platform" : "Mark as run"}" aria-label="${unsupported ? `No ${tid} test available for this platform` : `Mark ${tid} as run`}" aria-pressed="${run}" ${unsupported ? "disabled" : ""}><svg class="icon"><use href="#i-check"/></svg></button>
       <div class="techcard__info">
@@ -1264,6 +1281,7 @@ function renderTech(t) {
           <a class="techcard__id" href="${safeUrl(t.url)}" target="_blank" rel="noopener">${tid} <svg class="icon"><use href="#i-external"/></svg></a>
           <span class="techcard__name">${escapeHtml(t.name)}</span>
           ${t.is_subtechnique ? '<span class="techcard__sub">sub-technique</span>' : ""}
+          ${isFirstLab ? '<span class="firstlabbadge">Try this first</span>' : ""}
         </div>
         ${(t.platforms || []).length ? `<div class="techcard__plats">${t.platforms.slice(0, 5).map(p => `<span class="plat">${escapeHtml(p)}</span>`).join("")}</div>` : ""}
       </div>

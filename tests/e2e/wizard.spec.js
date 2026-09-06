@@ -141,7 +141,8 @@ test("guided workflow records evidence and exports JSON", async ({ page }) => {
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
   await page.getByRole("button", { name: /Build plan/ }).click();
-  await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
+  await expect(page.locator(".techcard__name")).toHaveText("System Owner/User Discovery");
+  await expect(page.locator("#firstLabHint")).toContainText("T1033");
   await page.getByLabel("Evidence note for T1033").fill("Expected process event observed");
   await page.getByLabel("Outcome for T1033").selectOption("passed");
   await page.getByLabel("Detection for T1033").selectOption("silent");
@@ -593,10 +594,67 @@ test("the plan opens on the first stage that has a runnable command", async ({ p
   await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
 });
 
-test("a recommended start builds a scoped plan for the first available actor", async ({ page }) => {
+test("the plan skips bounded-synthetic stages and marks the first lab command", async ({ page }) => {
+  const bounded = {
+    ...command,
+    command: "python -m backend.lab_exercises T1595",
+    fidelity: "bounded_synthetic",
+    exercise_kind: "technique_relevant_bounded",
+    note: "Technique-relevant bounded exercise.",
+  };
+  const recon = {
+    stix_id: "attack-pattern--recon", attack_id: "T1595", name: "Active Scanning",
+    description: "Fixture technique", tactics: ["reconnaissance"], platforms: ["Windows"],
+    is_subtechnique: false, url: "https://attack.mitre.org/techniques/T1595/",
+    commands: [bounded], command_source: "curated",
+  };
+  const body = workflowBody();
+  body.summary.total_techniques = 2;
+  body.summary.unique_stages = 2;
+  body.summary.curated_commands = 2;
+  body.kill_chain = [{ tactic: "reconnaissance", title: "Reconnaissance" }, { tactic: "execution", title: "Execution" }];
+  body.stages = [
+    { tactic: "reconnaissance", title: "Reconnaissance", techniques: [recon] },
+    body.stages[0],
+  ];
+  await interceptApi(page);
+  await page.route("**/api/workflow/**", route => route.fulfill({ json: body }));
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
+  await expect(page.locator("#firstLabHint")).toContainText("T1033");
+  await expect(page.locator(".firstlabbadge")).toHaveText("Try this first");
+  await expect(page.locator(".techcard").first()).toContainText("whoami");
+  await expect(page.locator(".techcard").first()).toHaveClass(/is-firstlab/);
+});
+
+test.describe("linux browser first run", () => {
+  test.use({
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  });
+
+  test("command platform starts as Linux and copies the Linux lab command", async ({ page }) => {
+    const linuxCmd = { ...command, platform: "linux", command: "id" };
+    await interceptApi(page, [command, linuxCmd]);
+    await buildPlan(page);
+    await expect(page.locator("#cmdPlatform .is-on")).toHaveText("Linux");
+    await expect(page.locator("#scopeSummary")).toContainText("Runnable on Linux");
+    await expect(page.locator("#platformHint")).toBeHidden();
+    await page.getByRole("button", { name: /Build plan/ }).click();
+    await expect(page.locator("pre.cmd__code").first()).toHaveText("id");
+    await expect(page.locator("#planActorMeta")).toContainText("Linux");
+  });
+});
+
+test("the operator chooses any actor from the full gallery", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /Start with Test Actor/ }).click();
+  await expect(page.getByRole("button", { name: /Start with / })).toHaveCount(0);
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  await expect(page.getByRole("heading", { name: "Choose a threat actor" })).toBeVisible();
+  await page.getByRole("button", { name: /Test Actor/ }).click();
+  await expect(page.locator("#actionbarCtx")).toHaveText("Selected: Test Actor");
+  await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
   await expect(page.locator("#scopeSummary")).toContainText("Test Actor");
   await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
@@ -618,13 +676,13 @@ test("help explains the four-step path", async ({ page }) => {
   await page.getByRole("button", { name: "How to use AdversaryFlow" }).click();
   const dialog = page.getByRole("dialog", { name: "How to use AdversaryFlow" });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Pick a threat actor");
+  await expect(dialog).toContainText("Pick any threat actor");
   await expect(dialog).toContainText("never executes catalog commands");
   await dialog.getByRole("button", { name: "Got it" }).click();
   await expect(dialog).toBeHidden();
 });
 
-test("the actor gallery paginates large result sets", async ({ page }) => {
+test("the actor gallery lists every loaded actor", async ({ page }) => {
   const actors = Array.from({ length: 30 }, (_, i) => ({
     stix_id: `intrusion-set--${i}`, attack_id: `G${String(i).padStart(4, "0")}`,
     name: `Actor ${String(i).padStart(2, "0")}`, type: "group", aliases: [],
@@ -636,7 +694,7 @@ test("the actor gallery paginates large result sets", async ({ page }) => {
   }));
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
-  await expect(page.locator(".actorcard")).toHaveCount(24);
-  await page.getByRole("button", { name: "Show all 30 actors" }).click();
   await expect(page.locator(".actorcard")).toHaveCount(30);
+  await expect(page.locator("#actorResults")).toHaveText("30 results");
+  await expect(page.getByRole("button", { name: /Show all/ })).toHaveCount(0);
 });

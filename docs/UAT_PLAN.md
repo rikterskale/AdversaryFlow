@@ -19,7 +19,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | Python | 3.14.4 (CPython, Linux) |
 | Node | v24.19.0, Playwright 1.62.1, Chromium |
 | PowerShell | 7.6.5 (`Core`, Linux host) |
-| ATT&CK data | `enterprise:bundle--6198013c-6f02-42a4-9713-38ea1301a1aa` (227 actors) |
+| ATT&CK data | `enterprise:bundle--6198013c-6f02-42a4-9713-38ea1301a1aa` (232 actors) |
 | Service under test | `http://127.0.0.1:5055`, loopback, offline mode against the cached bundle |
 | Suites | `python -m unittest discover`, `npm run test:e2e`, Ruff, mypy, JavaScript/Bash/PowerShell syntax and launcher checks |
 
@@ -40,7 +40,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J9 | Before / after load | `test_j09_health_is_degraded_before_data_is_ready`, `…_ready_once_data_is_loaded` *(auto)*; live curl *(manual)* | 503 `degraded`, then 200 `ready` | 503 `degraded`; live service `status = ready, ready = True, phase = ready, version = 0.4.0` | **Pass** |
 | J10 | UI reachable | `uat.spec.js` J10 *(auto)* | Welcome heading and enabled start button | Heading, enabled button, and the "does not execute commands" footer all visible | **Pass** |
 | J11 | Actors loaded | `uat.spec.js` J11 *(auto)* | `#dataStatus` matches `^\d+ actors? · Enterprise$` | Matched | **Pass** |
-| J12 | Data loaded | `test_j12_actor_records_carry_the_published_contract` *(auto)*; live curl *(manual)* | Every actor carries the seven published fields; live count 227 | Contract violations = 0; `actors = 227`; `G0016 = APT29, technique_count = 66` | **Pass** |
+| J12 | Data loaded | `test_j12_actor_records_carry_the_published_contract` *(auto)*; live curl *(manual)* | Every actor carries the seven published fields; live enterprise catalog includes every mapped group and campaign | Contract violations = 0; `actors = 232`; `groups = 176`; `campaigns = 56` | **Pass** |
 | J13 | On step 1 | `uat.spec.js` J13 *(auto)* | Footer changes to `Selected: <name>`; Continue enabled | `Select a threat actor to continue` → `Selected: UAT Actor`; Continue enabled | **Pass** |
 | J14 | On step 1 | `uat.spec.js` J14 *(auto)* | Search narrows the grid; clear restores it | 2 cards → 1 card → 2 cards | **Pass** |
 | J15 | On step 1 | `uat.spec.js` J15 *(auto)* | Empty state shown, no cards | `No actors match your search.` visible; 0 cards | **Pass** |
@@ -56,7 +56,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J30 | On step 4 | `uat.spec.js` J30 *(auto)* | Markdown report with heading, technique, outcome, command | `# AdversaryFlow — UAT Actor (G0001)`, `### T1059.001 — PowerShell`, `**Outcome:** failed`, `**Detection:** not_assessed`, `whoami` | **Pass** |
 | J31 | On step 4 | `uat.spec.js` J31 *(auto)* | Non-executable `.txt` runbook with every command commented | `AdversaryFlow_G0001_UAT_Actor_runbook.cmd.txt` contained `REM AdversaryFlow runbook`, `REM ===== 1. EXECUTION =====`, `REM Outcome: not_run`, `REM Detection: not_assessed`, and `REM COMMAND: whoami`; no line equalled `whoami` | **Pass** |
 | J32 | A saved JSON plan exists | `uat.spec.js` J32 *(auto)* | Plan restored with evidence intact | Toast `Plan imported as high-risk…`; heading `UAT Actor · G0001`; outcome `passed`; note `Script block logging fired` | **Pass** |
-| J54 | Real bundle and catalog available | Resolve every actor-mapped technique, inspect the exercise registry, and execute every bounded exercise *(manual plus `test_catalog.py` / `test_lab_exercises.py` auto)* | 0 mapped techniques use the runtime fallback; every one of the 146 bounded entries has a technique-relevant scenario and valid receipt | `actors=227 mapped=529 fallback=0`; `533` technique keys, `848` command records; `146` exercise IDs each available on Windows/Linux/macOS across `25` scenario families; all 146 passed, cleaned up, and produced a valid SHA-256 receipt | **Pass** |
+| J54 | Real bundle and catalog available | Resolve every actor-mapped technique, inspect the exercise registry, and execute every bounded exercise *(manual plus `test_catalog.py` / `test_lab_exercises.py` auto)* | 0 mapped techniques use the runtime fallback; every one of the 146 bounded entries has a technique-relevant scenario and valid receipt | `actors=232 mapped=536 fallback=0`; `540` technique keys, `856` command records; `146` exercise IDs each available on Windows/Linux/macOS across `25` scenario families; all 146 passed, cleaned up, and produced a valid SHA-256 receipt | **Pass** |
 
 ---
 
@@ -88,7 +88,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J49 | CLI available | `cache-clear` with no `--yes` *(auto: `test_j49…`)* | Refuses | exit 2, `Refusing to clear the cache without --yes.` | **Pass** |
 | J50 | Cache dir holds a bundle and an unrelated file | `cache-clear --yes` *(auto: `test_j50…`)* | Only AdversaryFlow files removed | exit 0; bundle listed in `removed` and deleted; `operator-notes.txt` survived unchanged | **Pass** |
 | J51 | CLI available | `cache-refresh --domains bogus` *(auto: `test_j51…`)* | Refuses | exit 2, `Unknown ATT&CK domain(s): bogus` | **Pass** |
-| J52 | Cache seeded, `--offline` | Serve and query the API *(manual)* | Served from cache with no upstream request | `offline = True`, `enterprise cached = True, fresh = True`; 227 actors served | **Pass** |
+| J52 | Cache seeded, `--offline` | Serve and query the API *(manual)* | Served from cache with no upstream request | `offline = True`, `enterprise cached = True, fresh = True`; 232 actors served | **Pass** |
 | J53 | Empty cache dir, `--offline` | `load_bundle("enterprise")` *(auto: `test_j53…`)* | Actionable error | `RuntimeError: offline mode requires a cached enterprise ATT&CK bundle at <path>` | **Pass** |
 | J55 | UI reachable | axe-core scan of step 0 *(auto: `uat.spec.js` J55)* | No serious or critical violations | `[]` | **Pass** |
 
@@ -150,7 +150,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | B39 | Service running | `POST /api/refresh` with a body under the limit | Accepted | HTTP 200 | **Pass** |
 | B40 | Catalog loaded | `get_commands("T9999", …, ["execution"])` | Exactly one fallback command naming the technique | `source = fallback`, 1 command containing `T9999` | **Pass** |
 | B41 | Catalog loaded | `get_commands("T9999", …, [])` | Still returns a runnable command | `source = fallback`, non-empty command | **Pass** |
-| B42 | Catalog loaded | Inspect all 848 command records | Every risk is low/medium/high; medium and high require acknowledgement | All records conform | **Pass** |
+| B42 | Catalog loaded | Inspect all 856 command records | Every risk is low/medium/high; medium and high require acknowledgement | All records conform | **Pass** |
 
 ---
 
@@ -218,9 +218,9 @@ The live offline service run produced:
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
 AdversaryFlow 0.4.0: http://127.0.0.1:5055
 health=ready ready=True phase=ready
-actors=227 contract_violations=0
+actors=232 contract_violations=0
 APT29: techniques=66 curated=66 fallback=0 stages=13 commands_missing=0
-actors=227 mapped=529 fallback=0 technique_keys=533 command_records=848
+actors=232 mapped=536 fallback=0 technique_keys=540 command_records=856
 exercise_ids=146 scenario_families=25 receipts_valid=146 cleanup_verified=146
 ```
 
