@@ -2,17 +2,33 @@ $ErrorActionPreference = "Stop"
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoDir
 
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-    throw "AdversaryFlow requires Python 3.10 or newer. Install Python, then retry."
+$PythonCommand = $null
+$PythonPrefix = @()
+$PyLauncher = Get-Command py -ErrorAction SilentlyContinue
+if ($PyLauncher) {
+    & $PyLauncher.Source -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $PythonCommand = $PyLauncher.Source
+        $PythonPrefix = @("-3")
+    }
 }
-
-& py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
-if ($LASTEXITCODE -ne 0) {
-    throw "AdversaryFlow requires Python 3.10 or newer. Run 'py -3 --version' to inspect the selected interpreter."
+if (-not $PythonCommand) {
+    foreach ($CandidateName in @("python", "python3")) {
+        $Candidate = Get-Command $CandidateName -ErrorAction SilentlyContinue
+        if (-not $Candidate) { continue }
+        & $Candidate.Source -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $PythonCommand = $Candidate.Source
+            break
+        }
+    }
+}
+if (-not $PythonCommand) {
+    throw "AdversaryFlow requires Python 3.10 or newer. Install Python, ensure py or python is on PATH, then retry."
 }
 
 if (-not (Test-Path ".venv")) {
-    py -3 -m venv .venv
+    & $PythonCommand @PythonPrefix -m venv .venv
 }
 
 & .\.venv\Scripts\python.exe -m pip install --require-hashes --requirement requirements.lock

@@ -22,6 +22,39 @@ from backend.execution_kit import (
 )
 
 
+def _usable_bash() -> str:
+    candidates = [shutil.which("bash")]
+    if os.name == "nt":
+        candidates.extend([
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+        ])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            result = subprocess.run(
+                [candidate, "--version"], capture_output=True, text=True, timeout=5, check=False
+            )
+        except OSError:
+            continue
+        if result.returncode == 0:
+            return candidate
+    return ""
+
+
+BASH = _usable_bash()
+
+
+def _bash_env(overrides=None):
+    env = {**os.environ, **(overrides or {})}
+    if os.name == "nt" and BASH:
+        git_root = Path(BASH).parent.parent
+        utility_paths = [str(git_root / "usr" / "bin"), str(git_root / "bin")]
+        env["PATH"] = os.pathsep.join([env.get("PATH", ""), *utility_paths])
+    return env
+
+
 def plan_fixture(platform="linux", *, duplicate=False, command="printf 'hello from AdversaryFlow\\n'", cleanup=""):
     command_record = {
         "platform": platform,
@@ -180,7 +213,6 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         self.assertNotIn("adversaryflow-telemetry", script)
         self.assertNotIn(" ? ", script)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is unavailable")
     def test_windows_runner_parses_and_completes_a_fixture_session(self):
         archive_bytes, _filename = archive_execution_kit(normalize_plan(
             plan_fixture("windows", command="Write-Output 'hello from AdversaryFlow'")))
@@ -211,7 +243,6 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         self.assertEqual(summary["status"], "completed")
         self.assertEqual(summary["completed_steps"], 1)
 
-    @unittest.skipIf(os.name == "nt", "Bash runner smoke test runs on POSIX CI hosts")
     def test_linux_runner_executes_offline_and_writes_complete_evidence(self):
         archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture("linux")))
         directory = tempfile.TemporaryDirectory()
@@ -221,17 +252,17 @@ class ExecutionKitArchiveTests(unittest.TestCase):
             archive.extractall(directory.name)
         root = Path(directory.name)
         script_path = root / next(name for name in names if name.endswith("-execute.sh"))
-        syntax = subprocess.run(["bash", "-n", str(script_path)], capture_output=True, text=True, check=False)
+        syntax = subprocess.run([BASH, "-n", str(script_path)], capture_output=True, text=True, check=False)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
         result = subprocess.run(
-            ["bash", str(script_path)],
-            input="\n\nY\nR\nY\nN\n",
+            [BASH, str(script_path)],
+            input=b"\n\nY\nR\nY\nN\n",
+            env=_bash_env(),
             capture_output=True,
-            text=True,
             check=False,
             timeout=30,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         result_dirs = list(script_path.parent.glob("AdversaryFlow-results-*"))
         self.assertEqual(len(result_dirs), 1)
         evidence = result_dirs[0]
@@ -247,17 +278,17 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         self.assertIn("Detection assessment:** passed", report)
         self.assertEqual(len(list((evidence / "stdout").glob("*.log"))), 1)
 
-    @unittest.skipIf(os.name == "nt", "Bash runner integrity test runs on POSIX CI hosts")
     def test_runner_refuses_a_changed_csv(self):
         root, _filename, names, _modes = self.extract("linux")
         script_path = root / next(name for name in names if name.endswith("-execute.sh"))
         csv_path = root / next(name for name in names if name.endswith("-plan.csv"))
         csv_path.write_text("changed", encoding="utf-8")
-        result = subprocess.run(["bash", str(script_path)], capture_output=True, text=True, check=False, timeout=10)
+        result = subprocess.run(
+            [BASH, str(script_path)], capture_output=True, text=True, env=_bash_env(), check=False, timeout=10
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("integrity check failed", result.stderr)
 
-    @unittest.skipIf(os.name == "nt", "Bash edit workflow runs on POSIX CI hosts")
     def test_linux_runner_audits_an_edit_and_cleanup(self):
         archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture(
             "linux",
@@ -273,15 +304,17 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         editor.write_text("#!/bin/sh\nprintf \"printf 'edited command\\\\n'\\n\" > \"$1\"\n", encoding="utf-8")
         editor.chmod(0o755)
         result = subprocess.run(
-            ["bash", str(script_path)],
-            input="\n\nY\nE\nLab path adjustment\nR\nY\nY\nN\n",
-            env={**os.environ, "EDITOR": str(editor)},
+            [BASH, str(script_path)],
+            input=b"\n\nY\nE\nLab path adjustment\nR\nY\nY\nN\n",
+            env=_bash_env({
+                "EDITOR": editor.name,
+                "PATH": f"{editor.parent}{os.pathsep}{os.environ.get('PATH', '')}",
+            }),
             capture_output=True,
-            text=True,
             check=False,
             timeout=30,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         evidence = next(script_path.parent.glob("AdversaryFlow-results-*"))
         with (evidence / "execution-results.csv").open(encoding="utf-8") as stream:
             rows = list(csv.DictReader(stream))

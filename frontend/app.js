@@ -61,10 +61,18 @@ function guessPlatform() {
   const ua = (navigator.userAgent || "").toLowerCase();
   const uaData = ((navigator.userAgentData && navigator.userAgentData.platform) || "").toLowerCase();
   const plat = (navigator.platform || "").toLowerCase();
-  const haystack = `${uaData} ${ua} ${plat}`;
-  if (/windows|win32|win64/.test(haystack)) return "windows";
-  if (/mac/.test(haystack)) return "macos";
-  if (/linux|cros/.test(haystack)) return "linux";
+  const detect = value => {
+    if (/windows|win32|win64/.test(value)) return "windows";
+    if (/mac/.test(value)) return "macos";
+    if (/linux|cros/.test(value)) return "linux";
+    return "";
+  };
+  // The user agent reflects an explicit browser override; platform fields are
+  // fallbacks because automation and compatibility modes can leave them stale.
+  for (const value of [ua, uaData, plat]) {
+    const detected = detect(value);
+    if (detected) return detected;
+  }
   return "";
 }
 function defaultCommandPlatform() {

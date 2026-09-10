@@ -1,3 +1,4 @@
+import os
 import re
 import shlex
 import shutil
@@ -5,6 +6,30 @@ import subprocess
 import unittest
 
 from backend import command_catalog
+
+
+def _usable_bash() -> str:
+    candidates = [shutil.which("bash")]
+    if os.name == "nt":
+        candidates.extend([
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+        ])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            result = subprocess.run(
+                [candidate, "--version"], capture_output=True, text=True, timeout=5, check=False
+            )
+        except OSError:
+            continue
+        if result.returncode == 0:
+            return candidate
+    return ""
+
+
+BASH = _usable_bash()
 
 FORBIDDEN_LIVE_PATTERNS = (
     r"reg save\b",
@@ -56,21 +81,20 @@ class CatalogSafetyTests(unittest.TestCase):
                     self.assertEqual(command["rollback"], command["cleanup"])
 
     def test_posix_commands_parse_without_execution(self):
-        bash = shutil.which("bash")
+        self.assertTrue(BASH, "A working Bash runtime is required to validate POSIX catalog commands")
         for technique_id, command in self.commands():
             if command["platform"] not in {"linux", "macos", "pre"}:
                 continue
             with self.subTest(technique_id=technique_id, command=command["command"]):
                 self.assertTrue(shlex.split(command["command"], posix=True))
-                if bash:
-                    result = subprocess.run(
-                        [bash, "-n", "-c", command["command"]],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        check=False,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                result = subprocess.run(
+                    [BASH, "-n", "-c", command["command"]],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ htmlcov/
 node_modules/
 playwright-report/
 test-results/
+.audit-cache/
 
 # Lint and type-checker caches (both tools also self-ignore, but be explicit)
 .mypy_cache/

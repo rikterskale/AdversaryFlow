@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ from backend.telemetry import (
     TECHNIQUE_ACCEPTANCE,
     collect_native,
     correlate,
+    main,
     normalize_event,
     read_events,
     verify_receipt,
@@ -17,6 +20,14 @@ from backend.telemetry import (
 
 
 class TelemetryAcceptanceTests(unittest.TestCase):
+    def test_criteria_cli_rejects_an_unknown_technique_without_a_traceback(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            main(["criteria", "T9999"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("invalid choice: 'T9999'", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_all_146_exercises_have_explicit_acceptance_criteria(self):
         self.assertEqual(len(TECHNIQUE_ACCEPTANCE), 146)
         for technique_id, criteria in TECHNIQUE_ACCEPTANCE.items():
@@ -134,6 +145,34 @@ class TelemetryAcceptanceTests(unittest.TestCase):
         self.assertEqual(command[0], "journalctl")
         self.assertNotIn("--vacuum", command)
         self.assertEqual(events[0]["host"], "lab")
+
+    @patch("backend.telemetry.subprocess.run")
+    def test_windows_native_collection_tolerates_inaccessible_event_channels(self, run: Mock):
+        run.return_value = Mock(returncode=0, stdout="", stderr="")
+        self.assertEqual(
+            collect_native("windows", "2026-09-04T11:59:00Z", "2026-09-04T12:01:00Z"),
+            [],
+        )
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], ["pwsh", "-NoProfile", "-NonInteractive"])
+        self.assertTrue(command[-1].endswith(";exit 0"))
+
+    @patch("backend.telemetry.collect_native", side_effect=RuntimeError("native collector unavailable"))
+    def test_collect_cli_reports_operational_errors_without_a_traceback(self, _collect: Mock):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            receipt = root / "receipt.json"
+            output = root / "events.json"
+            receipt.write_text(json.dumps({
+                "started_at": "2026-09-04T11:59:00Z",
+                "completed_at": "2026-09-04T12:01:00Z",
+            }), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                main(["collect", "--receipt", str(receipt), "--platform", "windows", "--output", str(output)])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("native collector unavailable", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_native_collection_rejects_non_iso_timestamps(self):
         with self.assertRaisesRegex(ValueError, "ISO 8601"):

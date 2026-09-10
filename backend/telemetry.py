@@ -226,7 +226,7 @@ def collect_native(platform_name: str, started_at: str, completed_at: str) -> Li
             "foreach($l in $logs){try{Get-WinEvent -FilterHashtable @{LogName=$l;StartTime=$s;EndTime=$e} "
             "-ErrorAction Stop|ForEach-Object{@{timestamp=$_.TimeCreated.ToUniversalTime().ToString('o');"
             "source='endpoint';event_id=$_.RecordId;host=$_.MachineName;event_type='provider_event';"
-            "message=$_.Message}|ConvertTo-Json -Compress}}catch{}}"
+            "message=$_.Message}|ConvertTo-Json -Compress}}catch{}};exit 0"
         )
         command = ["pwsh", "-NoProfile", "-NonInteractive", "-Command", script]
     elif system == "macos":
@@ -250,7 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect and correlate independent exercise telemetry")
     subparsers = parser.add_subparsers(dest="action", required=True)
     criteria_parser = subparsers.add_parser("criteria")
-    criteria_parser.add_argument("technique_id", nargs="?")
+    criteria_parser.add_argument("technique_id", nargs="?", choices=sorted(TECHNIQUE_ACCEPTANCE))
     correlate_parser = subparsers.add_parser("correlate")
     correlate_parser.add_argument("--receipt", type=Path, required=True)
     correlate_parser.add_argument("--telemetry", type=Path, action="append", required=True)
@@ -259,19 +259,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     collect_parser.add_argument("--platform", choices=("auto", "windows", "linux", "macos"), default="auto")
     collect_parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    if args.action == "criteria":
-        selected = TECHNIQUE_ACCEPTANCE if args.technique_id is None else {args.technique_id: TECHNIQUE_ACCEPTANCE[args.technique_id]}
-        print(json.dumps({key: asdict(value) for key, value in selected.items()}, indent=2, sort_keys=True))
-        return 0
-    receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
-    if args.action == "collect":
-        rows = collect_native(args.platform, receipt["started_at"], receipt["completed_at"])
-        args.output.write_text(json.dumps({"events": rows}, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"events_collected": len(rows), "output": str(args.output)}))
-        return 0
-    result = correlate(receipt, read_events(args.telemetry))
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["passed"] else 1
+    try:
+        if args.action == "criteria":
+            selected = TECHNIQUE_ACCEPTANCE if args.technique_id is None else {args.technique_id: TECHNIQUE_ACCEPTANCE[args.technique_id]}
+            print(json.dumps({key: asdict(value) for key, value in selected.items()}, indent=2, sort_keys=True))
+            return 0
+        receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
+        if args.action == "collect":
+            rows = collect_native(args.platform, receipt["started_at"], receipt["completed_at"])
+            args.output.write_text(json.dumps({"events": rows}, indent=2) + "\n", encoding="utf-8")
+            print(json.dumps({"events_collected": len(rows), "output": str(args.output)}))
+            return 0
+        result = correlate(receipt, read_events(args.telemetry))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["passed"] else 1
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, RuntimeError) as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

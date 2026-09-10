@@ -187,6 +187,12 @@ def refresh():
     _require_csrf()
     if _runtime["loading"]:
         return jsonify({"error": "bootstrap_in_progress", "message": "Wait for initial ATT&CK setup to finish.", "version": __version__}), 409
+    if attack_data.OFFLINE:
+        return jsonify({
+            "error": "offline_mode",
+            "message": "Refresh is unavailable while offline mode is enabled. Restart without --offline to update ATT&CK data.",
+            "version": __version__,
+        }), 409
     if time.monotonic() - _last_refresh < REFRESH_COOLDOWN_SECONDS:
         return jsonify({"error": "refresh_rate_limited", "message": "Wait a few seconds before refreshing again.", "version": __version__}), 429
     # Validate before taking the lock: aborting inside the guarded block would
@@ -483,7 +489,14 @@ def main(argv: List[str] | None = None) -> int:
         if invalid:
             print(f"Unknown ATT&CK domain(s): {', '.join(invalid)}")
             return 2
-        attack_data.refresh_index(domains)
+        if args.offline:
+            print("Refusing to refresh the ATT&CK cache while --offline is enabled.")
+            return 2
+        try:
+            attack_data.refresh_index(domains)
+        except Exception as exc:
+            print(f"ATT&CK cache refresh failed: {exc}", file=sys.stderr)
+            return 1
         print(json.dumps(attack_data.cache_status(), indent=2, sort_keys=True))
         return 0
     if args.command == "cache-clear":

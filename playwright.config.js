@@ -14,7 +14,7 @@ module.exports = defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "python3 -m http.server 4173 --directory frontend",
+    command: "node tests/e2e/static-server.js",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
   },

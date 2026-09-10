@@ -297,6 +297,16 @@ class RefreshLockTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.get_json()["error"], "bootstrap_in_progress")
 
+    def test_refresh_is_actionably_rejected_in_offline_mode(self):
+        with patch.object(attack_data, "OFFLINE", True), \
+                patch("backend.app.attack_data.refresh_index") as refresh_index:
+            response = self.client.post("/api/refresh", headers=self.headers)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["error"], "offline_mode")
+        self.assertIn("Restart without --offline", response.get_json()["message"])
+        refresh_index.assert_not_called()
+        self.assertFalse(app_module._refresh_lock.locked())
+
 
 class BootstrapEndpointTests(unittest.TestCase):
     def setUp(self):
@@ -572,6 +582,23 @@ class CommandLineTests(unittest.TestCase):
                                         "--cache-dir", directory])
         self.assertEqual(code, 0)
         refresh_index.assert_called_once_with(["enterprise", "ics"])
+
+    def test_cache_refresh_refuses_offline_mode_without_a_traceback(self):
+        with patch("backend.app.attack_data.refresh_index") as refresh_index:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = app_module.main(["cache-refresh", "--offline", "--domains", "enterprise"])
+        self.assertEqual(code, 2)
+        self.assertIn("Refusing to refresh", output.getvalue())
+        refresh_index.assert_not_called()
+
+    def test_cache_refresh_reports_download_failures_without_a_traceback(self):
+        with patch("backend.app.attack_data.refresh_index", side_effect=RuntimeError("feed unavailable")):
+            error = io.StringIO()
+            with contextlib.redirect_stderr(error):
+                code = app_module.main(["cache-refresh", "--domains", "enterprise"])
+        self.assertEqual(code, 1)
+        self.assertEqual(error.getvalue().strip(), "ATT&CK cache refresh failed: feed unavailable")
 
     def test_offline_flag_is_propagated_to_the_data_layer(self):
         with tempfile.TemporaryDirectory() as directory:

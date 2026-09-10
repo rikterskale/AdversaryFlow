@@ -33,10 +33,11 @@ def _default_cache_dir() -> str:
     configured = os.environ.get("ADVERSARYFLOW_CACHE_DIR")
     if configured:
         return os.path.abspath(os.path.expanduser(configured))
-    if sys.platform == "win32":
+    platform_name = str(sys.platform)
+    if platform_name == "win32":
         root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
         return os.path.join(root, "AdversaryFlow", "Cache")
-    if sys.platform == "darwin":
+    if platform_name == "darwin":
         return os.path.expanduser("~/Library/Caches/AdversaryFlow")
     root = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
     return os.path.join(root, "adversaryflow")
