@@ -84,6 +84,11 @@ AdversaryFlow installed and verified. Start it with ./run.sh
 ```
 
 Windows uses `.\install.ps1`, which performs the same checks via `py -3`.
+Each native PowerShell step is checked explicitly: virtual-environment
+creation, both pinned dependency installs, the editable package install, and
+`doctor` stop immediately with a step-specific error if the child process
+returns a non-zero exit code. The success message is therefore never printed
+after a failed native command.
 
 The package declares an `adversaryflow` console script. In a verified source
 installation, `adversaryflow --version` prints `AdversaryFlow 0.4.0`.
@@ -270,6 +275,14 @@ version before execution"*. Every imported command is re-classified as high
 risk and requires acknowledgement before it can be copied, because its contents
 came from a file rather than from the ATT&CK catalog.
 
+The importer accepts only a bounded schema 2.0 document: 1–32 non-empty
+stages, at most 2,000 techniques in any one stage, at most 4,000 technique
+records across the plan, ATT&CK-formatted technique IDs, and commands no longer
+than 10,000 characters. Runbook export treats all imported text as data: line
+breaks in stage titles, technique names, notes, commands, or cleanup text are
+normalized so every physical runbook line retains the platform's comment
+prefix.
+
 ---
 
 ## 4. Alternate and error paths
@@ -279,6 +292,7 @@ came from a file rather than from the ATT&CK catalog.
 | Situation | What the user sees | Recovery |
 |---|---|---|
 | Python missing or older than 3.10 | `AdversaryFlow requires Python 3.10 or newer.` (or `…; found Python 3.9.18.`) on stderr, exit 1 | Install Python 3.10+ and re-run `./install.sh` |
+| A native step in `.\install.ps1` fails | A step-specific terminating error names virtual-environment creation, runtime dependencies, build dependencies, package installation, or `doctor`; the success message is not printed | Correct the reported Python/package problem and re-run `.\install.ps1` |
 | Port already in use | `waitress` fails to bind | `adversaryflow --port 5050 --open` |
 | Non-loopback bind without opt-in | `Refusing a non-loopback bind without --allow-remote. Read docs/OPERATIONS.md first.` exit 2 | Add `--allow-remote` **and** a token |
 | `--allow-remote` with no token | `Refusing a non-loopback bind without --api-token or ADVERSARYFLOW_API_TOKEN.` exit 2 | Supply `--api-token` or the environment variable |
@@ -309,6 +323,7 @@ came from a file rather than from the ATT&CK catalog.
 | All stages deselected | Footer reads `No techniques in scope — enable a stage`; **Build plan** disabled | Click **Select all** |
 | Clipboard blocked by the browser | Toast *"Clipboard access was denied"* | Select the command text manually |
 | Local storage unavailable (private mode, quota) | Toast *"Progress can't be saved in this browser — export the plan to keep your records"*, shown once | Export the JSON plan to preserve records |
+| Operator execution kit generation fails | A toast shows the API's error message, or `Execution kit could not be generated (<status>)` when no JSON message is available; the export button is restored | Correct the reported plan/session problem and click the execution-kit card again |
 | Refresh while a plan is open | Confirm dialog *"Refreshing can change technique mappings and will rebuild the current plan. Continue?"*; on success, toast *"ATT&CK feed refreshed; the plan was rebuilt"* | Cancel to keep the current plan |
 | Refresh twice within 5 seconds | `429 refresh_rate_limited` | Wait a few seconds |
 | Refresh while another refresh or bootstrap runs | `409 refresh_in_progress` / `409 bootstrap_in_progress` | Wait for it to finish |
@@ -327,11 +342,12 @@ half-imported.
 | Unknown ATT&CK domain | `Plan contains an invalid ATT&CK domain` |
 | Bad platform or safety flags | `Plan scope is invalid` |
 | Bad operator/target block | `Plan execution context is invalid` |
-| More than 32 stages | `Plan stage count is invalid` |
-| Malformed stage | `Plan contains an invalid stage` |
-| Malformed technique | `Plan contains an invalid technique record` |
+| Zero stages, or more than 32 stages | `Plan stage count is invalid` |
+| Empty or malformed stage | `Plan contains an invalid stage` |
+| Malformed technique or non-ATT&CK technique ID | `Plan contains an invalid technique record` |
 | Missing command, or command over 10 000 characters | `Plan contains an invalid command record` |
-| More than 2 000 techniques | `Plan contains too many technique records` |
+| More than 2 000 techniques in one stage | `Plan contains too many technique records` |
+| More than 4 000 technique records across all stages | `Plan exceeds the 4000-technique limit` |
 
 ### API consumers
 
@@ -346,6 +362,7 @@ one envelope: `{"error", "message", "version"}`.
 | `GET /api/actors` while loading | Data not ready | `503 service_unavailable` |
 | `GET /api/workflow/<unknown>` | No such actor | `404 {"error":"actor_not_found","message":"No ATT&CK group or campaign matches … in the selected domains.",…}` |
 | `POST /api/refresh` without the token | Missing CSRF header | `403 forbidden` |
+| Mutating request with a correct token but a foreign, opaque, wrong-scheme, or wrong-port `Origin` | Origin does not exactly match scheme, host, and effective port | `403 forbidden`; matching IPv4/hostname/IPv6 origins continue normally |
 | Any `/api/*` in remote mode without a bearer token | Unauthorised | `401 unauthorized` |
 | `GET /api/health` before data is ready | Degraded | `503` with `status: "degraded"` and the failure phase |
 
@@ -379,7 +396,7 @@ table directly.
 | J9 | Report readiness | `GET /api/health` | Reports readiness and provenance | HTTP 200 with `"status":"ready"` once loaded; HTTP 503 with `"status":"degraded"` before |
 | J10 | Welcome screen | Open `http://127.0.0.1:5000` | Renders step 0 | Heading *Turn a threat actor…* visible and **Begin emulation plan** is enabled |
 | J11 | Data status | Wait for load | Status chip updates | `#dataStatus` matches `^\d+ actors? · Enterprise$` |
-| J12 | List actors | `GET /api/actors` | Returns mapped actors | HTTP 200; every entry has `stix_id`, `attack_id`, `name`, `type`, `aliases`, `description`, `technique_count`; the live enterprise catalog includes every non-deprecated group and campaign ATT&CK maps to techniques (directly or via software they use) |
+| J12 | List actors | `GET /api/actors` | Returns mapped actors | HTTP 200; every entry has `stix_id`, `attack_id`, `name`, `type`, `aliases`, `description`, `technique_count`; the live enterprise catalog includes every non-deprecated group and campaign ATT&CK maps to techniques (directly or via software they use), while revoked/deprecated actors, relationships, software, and techniques are omitted |
 | J13 | Choose an actor | Click **Begin emulation plan**, then an actor card | Selects it | Footer reads `Selected: <name>` and **Continue** is enabled |
 | J14 | Search | Type `APT29` in the search box | Filters the grid | Only matching cards remain; the ✕ clear button appears |
 | J15 | Empty search | Type a string matching nothing | Shows the empty state | `No actors match your search.` is visible |
@@ -398,7 +415,7 @@ table directly.
 | J28 | Export screen | Click **Finish & export** | Renders step 4 | Heading *Your emulation plan is ready* with tiles Techniques, Stages, Runnable tests, Marked run |
 | J29 | Export JSON | Click **JSON** | Downloads a schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
 | J30 | Export Markdown | Click **Markdown report** | Downloads a report | File named `AdversaryFlow_<ID>_<Name>.md` containing `# AdversaryFlow — <name> (<id>)`, a `### <technique>` section, and `**Outcome:**` |
-| J31 | Export runbook | Click **Runbook** | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; no command is left uncommented |
+| J31 | Export runbook | Click **Runbook**, including after importing fields containing line breaks | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; every physical metadata, command, and cleanup line retains `REM` on Windows or `#` on Linux/macOS |
 | J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with the actor heading, outcomes, and evidence notes restored; toast reads `Plan imported as high-risk; verify its data version before execution` |
 | J33 | Round-trip | Export with default scope, then resume that file | The plan is usable, not blocked by its own risk elevation | Command text is the real command (not `Restricted by scope`) and the runnable count is greater than 0 |
 | J34 | Reject a bad plan | Resume a file with an incomplete actor | Refuses and stays put | Toast reads `Plan actor record is invalid` and the welcome screen is still displayed |
@@ -423,6 +440,12 @@ table directly.
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
 | J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 856 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
 | J55 | Accessibility | Load the welcome screen | No serious accessibility violations | axe-core reports zero `serious` or `critical` violations |
+| J56 | Bound imported plans | Resume documents at and beyond each stage, per-stage technique, aggregate technique, command-length, and ATT&CK-ID boundary | Accepts valid boundary values and rejects values beyond them without changing screens | 1 and 32 non-empty stages, 2,000 techniques in a stage, 4,000 aggregate techniques, and a 10,000-character command are accepted; zero or 33 stages, an empty stage, 2,001 techniques in one stage, 4,001 in aggregate, a 10,001-character command, or a malformed technique ID produces the documented toast and leaves the welcome screen usable |
+| J57 | Enforce exact origins | Send a mutating request with a valid CSRF token and vary only `Origin` | Compares scheme, host, and effective port rather than hostname text alone | Foreign host, `null`, wrong scheme, and wrong port return HTTP 403 with `error = forbidden`; a matching `http://[::1]:5000` origin is accepted when the request host is `[::1]:5000` |
+| J58 | Propagate Windows install failures | Run `.\install.ps1` with each native child command forced to return non-zero | Stops at the failed step | PowerShell exits non-zero with the matching step-specific error and never prints `AdversaryFlow installed and verified.` |
+| J59 | Publish remote authentication | Inspect `docs/openapi.yaml` | Describes the bearer-token condition and unauthorised responses | `components.securitySchemes.BearerToken` is HTTP bearer; the contract says it is required for all `/api/*` requests in remote mode, and every documented API operation includes a `401` response |
+| J60 | Export operator kit | Click **Operator execution kit** | Builds and downloads a catalog-rebound ZIP without executing commands | HTTP 200 returns a `.zip` containing an `<actor>-plan.csv` and platform-matching `<actor>-execute.ps1` or `<actor>-execute.sh`; plans with bounded exercises also contain `AdversaryFlow-exercises.py`; the toast reads `Execution kit ready: <filename>` |
+| J61 | Recover from kit export failure | Make `POST /api/execution-kit` return an error, then click the execution-kit card | Surfaces the failure and restores the control | A toast shows the API message or the status fallback, no download begins, and the execution-kit button is enabled again |
 
 ---
 
