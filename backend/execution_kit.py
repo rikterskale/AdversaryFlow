@@ -24,6 +24,7 @@ SUPPORTED_PLATFORMS = {"windows", "linux", "macos"}
 PLATFORM_TITLES = {"windows": "Windows", "linux": "Linux", "macos": "macOS"}
 EXERCISE_RUNNER_NAME = "AdversaryFlow-exercises.py"
 FIDELITY_VALUES = {"direct", "bounded_synthetic", "lab_proxy"}
+ATTACK_TECHNIQUE_ID_PATTERN = re.compile(r"T[0-9]{4}(?:\.[0-9]{3})?")
 
 
 class ExecutionKitError(ValueError):
@@ -194,13 +195,16 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
     curated_only = bool(scope.get("curated_only"))
 
     for stage in stages:
-        if not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list):
+        if (not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list)
+                or not stage["techniques"]):
             raise ExecutionKitError("Plan contains an invalid stage")
         tactic = _string(stage.get("tactic"), "stage.tactic", maximum=120, required=True)
         for technique in stage["techniques"]:
             if not isinstance(technique, dict):
                 raise ExecutionKitError("Plan contains an invalid technique")
             technique_id = _string(technique.get("id"), "technique.id", maximum=64, required=True)
+            if not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id):
+                raise ExecutionKitError("technique.id must be an ATT&CK technique ID")
             technique_name = _string(technique.get("name"), "technique.name", maximum=500, required=True)
             result = command_catalog.get_commands(technique_id, technique_name, [tactic])
             source = result["source"]
@@ -261,7 +265,8 @@ def normalize_plan(document: Any) -> ExecutionPlan:
 
     rows: List[PlanStep] = []
     for stage in stages:
-        if not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list):
+        if (not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list)
+                or not stage["techniques"]):
             raise ExecutionKitError("Plan contains an invalid stage")
         tactic = _string(stage.get("tactic"), "stage.tactic", maximum=120, required=True)
         tactic_title = _string(stage.get("title"), "stage.title", maximum=200, required=True)
@@ -272,6 +277,8 @@ def normalize_plan(document: Any) -> ExecutionPlan:
                 raise ExecutionKitError("Plan contains an invalid technique")
             command = technique["command"]
             technique_id = _string(technique.get("id"), "technique.id", maximum=64, required=True)
+            if not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id):
+                raise ExecutionKitError("technique.id must be an ATT&CK technique ID")
             technique_name = _string(technique.get("name"), "technique.name", maximum=500, required=True)
             command_platform = _string(command.get("platform"), "command.platform", maximum=20, required=True).lower()
             if command_platform != platform:
@@ -320,7 +327,7 @@ def normalize_plan(document: Any) -> ExecutionPlan:
             ))
 
     if not any(step.supported for step in rows):
-        raise ExecutionKitError("Plan has no executable Windows or Linux steps")
+        raise ExecutionKitError("Plan has no executable Windows, Linux, or macOS steps")
     canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return ExecutionPlan(
         actor_id=actor_id,

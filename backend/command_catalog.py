@@ -14,9 +14,12 @@ tactic-aware fallback, so every technique has an explicit catalog result.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from .command_safety import command_record, technique_exercise_record
+
+ATTACK_TECHNIQUE_ID_PATTERN = re.compile(r"T[0-9]{4}(?:\.[0-9]{3})?")
 
 
 def _c(platform: str, command: str, note: str = "", cleanup: str = "", **metadata: Any) -> Dict[str, Any]:
@@ -340,6 +343,8 @@ def get_commands(technique_id: str, technique_name: str, tactics: List[str],
     Result: {"source": "curated"|"fallback", "commands": [ {platform, command,
     note, cleanup}, ... ]}. Always returns at least one runnable command.
     """
+    if not isinstance(technique_id, str) or not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id):
+        raise ValueError("technique_id must be an ATT&CK technique ID")
     if technique_id in CURATED:
         return {"source": "curated", "commands": CURATED[technique_id]}
 
@@ -352,7 +357,11 @@ def get_commands(technique_id: str, technique_name: str, tactics: List[str],
 
 
 def _format_fallback(template: str, technique_id: str, technique_name: str, target_domain: str) -> str:
-    """Substitute fallback placeholders without interpreting braces in ATT&CK names."""
+    """Substitute inert display text into a Windows-shell fallback command."""
     def _plain(value: str) -> str:
-        return str(value).replace("{", "").replace("}", "")
-    return template.format(tid=_plain(technique_id), name=_plain(technique_name), domain=_plain(target_domain))
+        # Fallback values are displayed by an echo command. Keep only text that
+        # cannot terminate quoting or introduce a cmd.exe control operator.
+        cleaned = re.sub(r"[^A-Za-z0-9 ._-]+", " ", str(value))
+        return " ".join(cleaned.split())[:500]
+
+    return template.format(tid=technique_id, name=_plain(technique_name), domain=_plain(target_domain))

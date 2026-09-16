@@ -29,11 +29,23 @@ if (-not $PythonCommand) {
 
 if (-not (Test-Path ".venv")) {
     & $PythonCommand @PythonPrefix -m venv .venv
+    if ($LASTEXITCODE -ne 0) {
+        throw "Creating the AdversaryFlow virtual environment failed with exit code $LASTEXITCODE."
+    }
 }
 
 & .\.venv\Scripts\python.exe -m pip install --require-hashes --requirement requirements.lock
+if ($LASTEXITCODE -ne 0) {
+    throw "Installing runtime dependencies failed with exit code $LASTEXITCODE."
+}
 & .\.venv\Scripts\python.exe -m pip install --require-hashes --requirement requirements-build.lock
+if ($LASTEXITCODE -ne 0) {
+    throw "Installing build dependencies failed with exit code $LASTEXITCODE."
+}
 & .\.venv\Scripts\python.exe -m pip install --no-build-isolation --no-deps --editable .
+if ($LASTEXITCODE -ne 0) {
+    throw "Installing AdversaryFlow failed with exit code $LASTEXITCODE."
+}
 & .\.venv\Scripts\adversaryflow.exe doctor
 if ($LASTEXITCODE -ne 0) {
     throw "AdversaryFlow doctor failed. Fix the reported issue, then retry."

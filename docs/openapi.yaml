@@ -5,6 +5,9 @@ info:
   description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication.
 servers:
   - url: http://127.0.0.1:5000
+security:
+  - {}
+  - BearerToken: []
 paths:
   /api/session:
     get:
@@ -20,12 +23,14 @@ paths:
                 properties:
                   csrf_token: { type: string }
                   version: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
   /api/bootstrap:
     get:
       summary: Report background ATT&CK bootstrap progress
       responses:
         "200": { description: Data is ready }
         "202": { description: Bootstrap is running }
+        "401": { $ref: "#/components/responses/Error" }
         "503": { description: Bootstrap has not started or failed }
     post:
       summary: Start or retry background ATT&CK bootstrap
@@ -34,6 +39,7 @@ paths:
       responses:
         "200": { description: Data is ready }
         "202": { description: Bootstrap started or is already running }
+        "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
   /api/live:
     get:
@@ -50,6 +56,7 @@ paths:
                 properties:
                   status: { const: live }
                   version: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
   /api/health:
     get:
       summary: Report ATT&CK readiness
@@ -64,6 +71,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Health" }
+        "401": { $ref: "#/components/responses/Error" }
   /api/actors:
     get:
       summary: List groups and campaigns with mapped techniques
@@ -83,6 +91,7 @@ paths:
                   data_version: { type: string }
                   version: { type: string }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /api/workflow/{stix_id}:
@@ -101,6 +110,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Workflow" }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
@@ -131,6 +141,7 @@ paths:
             application/zip:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
   /api/refresh:
@@ -153,6 +164,7 @@ paths:
                   data_version: { type: string }
                   cache: { type: object }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }

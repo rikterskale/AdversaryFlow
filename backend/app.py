@@ -378,13 +378,25 @@ def _runtime_snapshot() -> Dict[str, Any]:
         return dict(_runtime)
 
 
+def _canonical_origin(value: str) -> tuple[str, str, int] | None:
+    """Return a comparable HTTP origin, including its effective port."""
+    try:
+        parsed = urllib.parse.urlparse(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment):
+        return None
+    effective_port = port if port is not None else (443 if parsed.scheme == "https" else 80)
+    return parsed.scheme, parsed.hostname.lower(), effective_port
+
+
 def _require_csrf() -> None:
     origin = request.headers.get("Origin")
-    if origin:
-        host = urllib.parse.urlparse(origin).hostname
-        expected = (request.host or "").split(":")[0]
-        if host and host != expected:
-            abort(403, description="Cross-origin request refused")
+    if origin is not None and _canonical_origin(origin) != _canonical_origin(request.host_url):
+        abort(403, description="Cross-origin request refused")
     if not secrets.compare_digest(request.headers.get("X-AdversaryFlow-CSRF", ""), _csrf_token):
         abort(403, description="Missing or invalid same-origin request token")
 

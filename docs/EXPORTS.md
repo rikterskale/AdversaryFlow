@@ -58,6 +58,9 @@ commands or requires the destination runner to call back to the service.
 Schema 2.0 JSON exports conform to the checked-in
 schemas/adversaryflow-plan.schema.json contract and include:
 
+- between 1 and 32 non-empty stages, with no more than 2,000 techniques per
+  stage or 4,000 technique records across the plan;
+
 - tool, schema, and ATT&CK data versions;
 - actor, domains, platform, stage, network/admin, and risk scope;
 - structured command safety metadata and exact-platform support;

@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+PWSH = shutil.which("pwsh") or "pwsh"
 
 
 def _usable_bash() -> str:
@@ -269,6 +270,21 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("$LASTEXITCODE -ne 0", install)
         self.assertIn("adversaryflow.exe --open @args", run)
         self.assertIn("& .\\install.ps1", run)
+
+    def test_powershell_installer_stops_after_a_native_pip_failure(self):
+        shutil.copy2(ROOT / "install.ps1", self.root / "install.ps1")
+        scripts = self.root / ".venv" / "Scripts"
+        scripts.mkdir(parents=True)
+        python = scripts / "python.exe"
+        shutil.copy2(sys.executable, python)
+
+        result = subprocess.run(
+            [PWSH, "-NoProfile", "-File", str(self.root / "install.ps1")],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Installing runtime dependencies failed", result.stderr)
 
 
 if __name__ == "__main__":

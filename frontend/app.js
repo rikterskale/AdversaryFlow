@@ -43,6 +43,7 @@ const FIRST_LAB_IDS = {
   macos: ["T1059.006", "T1059.004"],
 };
 const SESSION_KEY = "af_session_v1";
+const MAX_PLAN_STEPS = 4000;
 const FIDELITY_VALUES = ["direct", "bounded_synthetic", "lab_proxy"];
 const DETECTION_RESULTS = ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"];
 const DETECTION_LABELS = {
@@ -659,14 +660,17 @@ function validateImportedPlan(data) {
   if (!onlyKeys(data.summary, summaryKeys)
     || summaryKeys.slice(0, 6).some(key => !nonNegativeInteger(data.summary[key]))
     || !uniqueStrings(data.summary.marked_run)) throw new Error("Plan summary is invalid");
-  if (!Array.isArray(data.stages) || data.stages.length > 32) throw new Error("Plan stage count is invalid");
+  if (!Array.isArray(data.stages) || !data.stages.length || data.stages.length > 32) throw new Error("Plan stage count is invalid");
+  let totalTechniqueRecords = 0;
   data.stages.forEach(stage => {
     if (plainObject(stage) && Array.isArray(stage.techniques) && stage.techniques.length > 2000) throw new Error("Plan contains too many technique records");
     if (!onlyKeys(stage, ["tactic", "title", "techniques"]) || !nonEmptyString(stage.tactic)
-      || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques)) throw new Error("Plan contains an invalid stage");
+      || !nonEmptyString(stage.title) || !Array.isArray(stage.techniques) || !stage.techniques.length) throw new Error("Plan contains an invalid stage");
+    totalTechniqueRecords += stage.techniques.length;
+    if (totalTechniqueRecords > MAX_PLAN_STEPS) throw new Error(`Plan exceeds the ${MAX_PLAN_STEPS}-technique limit`);
     stage.techniques.forEach(technique => {
       const techniqueKeys = ["id", "name", "url", "platforms", "command_source", "supported", "command", "run", "execution"];
-      if (!onlyKeys(technique, techniqueKeys, ["data_sources", "detection"]) || !nonEmptyString(technique.id) || !nonEmptyString(technique.name)
+      if (!onlyKeys(technique, techniqueKeys, ["data_sources", "detection"]) || !/^T[0-9]{4}(?:\.[0-9]{3})?$/.test(technique.id) || !nonEmptyString(technique.name)
         || !uriOrNull(technique.url) || !stringArray(technique.platforms)
         || !["curated", "fallback"].includes(technique.command_source)
         || typeof technique.supported !== "boolean" || typeof technique.run !== "boolean"
@@ -1658,10 +1662,10 @@ function toRunbook(p) {
   out += `${comment} Data version: ${runbookSafe(state.workflow.metadata.data_version)}\n`;
   out += `${comment} Operator: ${runbookSafe(state.recordContext.operator) || "not recorded"}\n${comment} Target: ${runbookSafe(state.recordContext.target) || "not recorded"}\n`;
   p.stages.forEach((s, i) => {
-    out += `\n${comment} ===== ${i + 1}. ${s.title.toUpperCase()} =====\n`;
+    out += `\n${comment} ===== ${i + 1}. ${runbookSafe(s.title).toUpperCase()} =====\n`;
     s.techniques.forEach(t => {
       const c = t._cmd;
-      out += `\n${comment} ${t.attack_id} ${t.name} [${c.platform}]${state.run.has(t.attack_id) ? " (run)" : ""}\n`;
+      out += `\n${comment} ${runbookSafe(t.attack_id)} ${runbookSafe(t.name)} [${runbookSafe(c.platform)}]${state.run.has(t.attack_id) ? " (run)" : ""}\n`;
       out += `${comment} Fidelity: ${c.fidelity === "bounded_synthetic" ? "bounded synthetic" : c.fidelity === "lab_proxy" ? "lab proxy" : "direct"}\n`;
       const record = state.records[t.attack_id] || { outcome: "not_run" };
       out += `${comment} Outcome: ${record.outcome}${record.updated_at ? ` at ${record.updated_at}` : ""}\n`;
@@ -1671,12 +1675,12 @@ function toRunbook(p) {
       if (record.receipt_sha256) out += `${comment} Receipt SHA-256: ${runbookSafe(record.receipt_sha256)} (${record.receipt_verified ? "digest verified; self-reported" : "not verified"})\n`;
       (record.telemetry_refs || []).forEach(ref => { out += `${comment} Telemetry: ${runbookSafe(ref)}\n`; });
       if (c.unsupported) {
-        out += `${comment} UNSUPPORTED: ${c.note}\n`;
+        out += `${comment} UNSUPPORTED: ${runbookSafe(c.note)}\n`;
         return;
       }
-      if (c.note) out += `${comment}   ${c.note}\n`;
+      if (c.note) out += `${comment}   ${runbookSafe(c.note)}\n`;
       out += `${comment} COMMAND: ${runbookSafe(c.command)}\n`;
-      if (c.cleanup) out += `${comment} MANUAL CLEANUP: ${c.cleanup}\n`;
+      if (c.cleanup) out += `${comment} MANUAL CLEANUP: ${runbookSafe(c.cleanup)}\n`;
     });
   });
   return out;

@@ -359,6 +359,25 @@ test("J31 — the runbook export is a review-only commented artifact", async ({ 
   expect(text.split(/\r?\n/)).not.toContain("whoami");
 });
 
+test("J31 — imported multiline fields cannot add executable runbook lines", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  const plan = validPlan();
+  plan.stages[0].title = "Execution\necho STAGE_INJECTION";
+  plan.stages[0].techniques[0].name = "PowerShell\necho NAME_INJECTION";
+  plan.stages[0].techniques[0].command = {
+    ...lowRisk,
+    note: "Review this\necho NOTE_INJECTION",
+    cleanup: "echo cleanup\necho CLEANUP_INJECTION",
+  };
+  await page.setInputFiles("#importPlan", planFile(plan));
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  const { text } = await exportAndRead(page, /Runbook/);
+  const executableLines = text.split(/\r?\n/).filter(line => line.trim() && !line.startsWith("REM"));
+  expect(executableLines).toEqual([]);
+  expect(text).toContain("CLEANUP_INJECTION");
+});
+
 test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
@@ -488,6 +507,10 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
     const manyStages = n => Array.from({ length: n }, (_, i) => ({ tactic: `t${i}`, title: `T${i}`, techniques: [tech()] }));
     const manyTechniques = n => [{ tactic: "execution", title: "Execution",
       techniques: Array.from({ length: n }, (_, i) => tech(`T${1000 + i}`)) }];
+    const aggregateTechniques = (...counts) => counts.map((count, stageIndex) => ({
+      tactic: `t${stageIndex}`, title: `T${stageIndex}`,
+      techniques: Array.from({ length: count }, (_, i) => tech(`T${1000 + i}`)),
+    }));
     const scope = extra => ({ ...base().scope, ...extra });
 
     const cases = [
@@ -512,9 +535,12 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
       ["non-string execution context", base({ execution_context: { operator: 1, target: 2 } }), "Plan execution context is invalid"],
       ["operator over 120 chars", base({ execution_context: { operator: "x".repeat(121), target: "" } }), "Plan execution context is invalid"],
       ["negative summary count", base({ summary: { ...base().summary, runnable: -1 } }), "Plan summary is invalid"],
+      ["zero stages", base({ stages: [] }), "Plan stage count is invalid"],
       ["32 stages (limit)", base({ stages: manyStages(32) }), null],
       ["33 stages (over)", base({ stages: manyStages(33) }), "Plan stage count is invalid"],
+      ["empty stage", base({ stages: [{ tactic: "execution", title: "Execution", techniques: [] }] }), "Plan contains an invalid stage"],
       ["stage without a title", base({ stages: [{ tactic: "execution", techniques: [tech()] }] }), "Plan contains an invalid stage"],
+      ["invalid technique id", base({ stages: [{ tactic: "execution", title: "E", techniques: [tech('T9999" & whoami')] }] }), "Plan contains an invalid technique record"],
       ["technique without a name", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), name: "" }] }] }), "Plan contains an invalid technique record"],
       ["platforms not an array", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), platforms: "Windows" }] }] }), "Plan contains an invalid technique record"],
       ["invalid technique URL", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), url: "not a uri" }] }] }), "Plan contains an invalid technique record"],
@@ -524,6 +550,8 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
       ["invalid execution outcome", base({ stages: [{ tactic: "execution", title: "E", techniques: [{ ...tech(), execution: { outcome: "maybe" } }] }] }), "Plan execution record is invalid"],
       ["2000 techniques (limit)", base({ stages: manyTechniques(2000) }), null],
       ["2001 techniques (over)", base({ stages: manyTechniques(2001) }), "Plan contains too many technique records"],
+      ["4000 aggregate techniques (limit)", base({ stages: aggregateTechniques(2000, 2000) }), null],
+      ["4001 aggregate techniques (over)", base({ stages: aggregateTechniques(2000, 2000, 1) }), "Plan exceeds the 4000-technique limit"],
     ];
 
     return cases.map(([name, plan, expected]) => {
@@ -533,7 +561,7 @@ test("J34/J35 boundaries — the import contract holds at every documented limit
     });
   });
 
-  expect(results).toHaveLength(33);
+  expect(results).toHaveLength(38);
   for (const { name, expected, actual } of results) {
     expect(actual, `boundary case: ${name}`).toBe(expected);
   }

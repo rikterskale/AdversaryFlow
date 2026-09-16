@@ -462,6 +462,8 @@ class AttackIndex:
         obj = self.objects_by_id.get(stix_id)
         if not obj or obj.get("type") not in ("intrusion-set", "campaign"):
             return None
+        if self._is_deprecated(obj):
+            return None
         return obj
 
     def technique(self, stix_id: str) -> Optional[Dict[str, Any]]:

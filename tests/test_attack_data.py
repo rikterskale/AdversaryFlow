@@ -309,6 +309,9 @@ class AttackIndexTests(unittest.TestCase):
         self.assertIsNone(self.index.get_actor("does-not-exist"))
         self.assertEqual(present(self.index.get_actor("campaign--alpha"))["name"], "Alpha Campaign")
 
+    def test_get_actor_rejects_deprecated_actors(self):
+        self.assertIsNone(self.index.get_actor("intrusion-set--gone"))
+
     def test_technique_parses_the_published_fields(self):
         technique = present(self.index.technique("attack-pattern--ps"))
         self.assertEqual(technique["attack_id"], "T1059.001")

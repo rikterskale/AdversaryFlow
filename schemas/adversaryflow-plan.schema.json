@@ -15,7 +15,7 @@
     "scope": { "$ref": "#/$defs/scope" },
     "execution_context": { "$ref": "#/$defs/executionContext" },
     "summary": { "$ref": "#/$defs/summary" },
-    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" }, "maxItems": 32 }
+    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" }, "minItems": 1, "maxItems": 32, "x-maxTotalTechniques": 4000 }
   },
   "$defs": {
     "actor": {
@@ -59,7 +59,7 @@
       "type": "object",
       "required": ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"],
       "properties": {
-        "techniques": { "type": "integer", "minimum": 0 },
+        "techniques": { "type": "integer", "minimum": 0, "maximum": 4000 },
         "runnable": { "type": "integer", "minimum": 0 },
         "unsupported": { "type": "integer", "minimum": 0 },
         "stages": { "type": "integer", "minimum": 0 },
@@ -75,7 +75,7 @@
       "properties": {
         "tactic": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
-        "techniques": { "type": "array", "items": { "$ref": "#/$defs/technique" }, "maxItems": 2000 }
+        "techniques": { "type": "array", "items": { "$ref": "#/$defs/technique" }, "minItems": 1, "maxItems": 2000 }
       },
       "additionalProperties": false
     },
@@ -83,7 +83,7 @@
       "type": "object",
       "required": ["id", "name", "url", "platforms", "command_source", "supported", "command", "run", "execution"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
         "name": { "type": "string", "minLength": 1 },
         "url": { "type": ["string", "null"], "format": "uri" },
         "platforms": { "type": "array", "items": { "type": "string" } },

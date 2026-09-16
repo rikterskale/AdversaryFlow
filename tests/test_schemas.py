@@ -15,8 +15,13 @@ class SchemaTests(unittest.TestCase):
                          ["direct", "bounded_synthetic", "lab_proxy"])
         self.assertIn("data_sources", schema["$defs"]["technique"]["properties"])
         self.assertIn("detection", schema["$defs"]["technique"]["properties"])
+        self.assertEqual(schema["properties"]["stages"]["minItems"], 1)
         self.assertEqual(schema["properties"]["stages"]["maxItems"], 32)
+        self.assertEqual(schema["properties"]["stages"]["x-maxTotalTechniques"], 4000)
+        self.assertEqual(schema["$defs"]["stage"]["properties"]["techniques"]["minItems"], 1)
         self.assertEqual(schema["$defs"]["stage"]["properties"]["techniques"]["maxItems"], 2000)
+        self.assertEqual(schema["$defs"]["technique"]["properties"]["id"]["pattern"],
+                         r"^T[0-9]{4}(\.[0-9]{3})?$")
         self.assertEqual(schema["$defs"]["command"]["properties"]["command"]["maxLength"], 10000)
         execution = schema["$defs"]["execution"]["properties"]
         for field in ("run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source"):
@@ -34,6 +39,11 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/api/session:", contract)
         self.assertIn("/api/bootstrap:", contract)
         self.assertIn('"403"', contract)
+
+    def test_openapi_documents_conditional_bearer_auth_and_every_401(self):
+        contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
+        self.assertIn("security:\n  - {}\n  - BearerToken: []", contract)
+        self.assertEqual(contract.count('"401"'), 9)
 
     def test_openapi_command_contract_matches_the_plan_schema(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")

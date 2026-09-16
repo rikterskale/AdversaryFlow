@@ -280,6 +280,24 @@ class RefreshLockTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "forbidden")
 
+    def test_mutating_requests_reject_wrong_scheme_port_and_opaque_origins(self):
+        for origin in ("https://localhost", "http://localhost:5001", "null"):
+            with self.subTest(origin=origin):
+                response = self.client.post(
+                    "/api/refresh", headers={**self.headers, "Origin": origin}
+                )
+                self.assertEqual(response.status_code, 403)
+
+    def test_ipv6_same_origin_is_accepted(self):
+        app_module._last_refresh = 0
+        headers = {**self.headers, "Origin": "http://[::1]:5000"}
+        with patch("backend.app.attack_data.refresh_index", return_value=FakeIndex()), \
+                patch("backend.app.attack_data.cache_status", return_value={}):
+            response = self.client.post(
+                "/api/refresh", base_url="http://[::1]:5000", headers=headers
+            )
+        self.assertEqual(response.status_code, 200)
+
     def test_refresh_is_rate_limited(self):
         app_module._last_refresh = 0
         with patch("backend.app.attack_data.refresh_index", return_value=FakeIndex()), \

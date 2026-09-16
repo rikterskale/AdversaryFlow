@@ -48,6 +48,19 @@ class CatalogIntegrityTests(unittest.TestCase):
         self.assertIn("T9999", result["commands"][0]["command"])
         self.assertIn("Name with broken braces", result["commands"][0]["command"])
 
+    def test_fallback_rejects_a_non_attack_technique_id(self):
+        with self.assertRaisesRegex(ValueError, "ATT&CK technique ID"):
+            command_catalog.get_commands('T9999" & whoami & echo "', "Fixture", [])
+
+    def test_fallback_neutralizes_shell_metacharacters_in_a_technique_name(self):
+        result = command_catalog.get_commands(
+            "T9999", 'Fixture" & whoami | echo injected > file', []
+        )
+        command = result["commands"][0]["command"]
+        self.assertEqual(command.count('"'), 2)
+        for operator in ("&", "|", ">"):
+            self.assertNotIn(operator, command)
+
     def test_bounded_exercises_are_technique_specific_and_disclosed(self):
         exercises = {}
         for technique_id, commands in command_catalog.CURATED.items():
