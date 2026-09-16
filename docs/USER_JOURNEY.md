@@ -305,7 +305,7 @@ prefix.
 | Setup fails (unreadable cache, network failure) | Status chip `setup needs attention`; a banner shows the error message and a **Retry setup** button on every screen | Click **Retry setup** |
 | Bootstrap cannot be started (401/403) | The loader stops and the failure message is shown, rather than spinning forever | Reload; check the token in remote mode |
 | Bootstrap never completes | After 15 minutes: *"Preparing ATT&CK data timed out. Check the service log, then retry setup."* | Inspect the JSON service log, then **Retry setup** |
-| Backend unreachable mid-session | Status chip `backend offline` and the error panel | Restart the service, click **Retry setup** |
+| Backend unreachable mid-session | Status chip `setup needs attention` and the error panel contains the backend message | Restart the service, click **Retry setup** |
 | Download exceeds 128 MiB or is not a STIX bundle | The partial file is discarded; the cache is never replaced | Retry, or `adversaryflow cache-clear --yes` |
 | Refresh fails but a cache exists | The stale bundle is served and marked `stale` with the refresh error in `cache-status` | Reconnect and refresh |
 | Cached bundle is corrupt (online) | Repaired automatically by an unconditional re-download | None needed |

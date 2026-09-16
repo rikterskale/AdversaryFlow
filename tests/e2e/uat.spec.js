@@ -483,7 +483,7 @@ test("J38 — a failed setup is reported with a retry", async ({ page }) => {
 
 /* Boundary inputs accepted or refused by the plan-import contract. Driven
  * against the shipped validator in the loaded page, one case per limit. */
-test("J34/J35 boundaries — the import contract holds at every documented limit", async ({ page }) => {
+test("J56 — the import contract holds at every documented limit", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
 
@@ -572,4 +572,157 @@ test("J55 — the entry screen has no serious accessibility violations", async (
   await page.goto("/");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact))).toEqual([]);
+});
+
+test("J60 — the operator execution kit downloads from the export screen", async ({ page }) => {
+  let submittedPlan;
+  await page.route("**/api/execution-kit", async route => {
+    submittedPlan = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/zip",
+      headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_UAT_Actor_Windows.zip"' },
+      body: Buffer.from("fixture execution kit"),
+    });
+  });
+  await toScope(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Download Windows execution kit/ }).click();
+  const artifact = await download;
+
+  expect(artifact.suggestedFilename()).toBe("AdversaryFlow_G0001_UAT_Actor_Windows.zip");
+  expect(submittedPlan.schema_version).toBe("2.0");
+  expect(submittedPlan.actor.attack_id).toBe("G0001");
+  await expect(page.getByRole("status").filter({ hasText: "Execution kit ready:" })).toBeVisible();
+});
+
+test("J61 — an execution-kit failure is actionable and leaves retry enabled", async ({ page }) => {
+  await page.route("**/api/execution-kit", route => route.fulfill({
+    status: 400,
+    json: { error: "bad_request", message: "Plan contains no executable Windows steps" },
+  }));
+  await toScope(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+
+  let downloads = 0;
+  page.on("download", () => { downloads += 1; });
+  const kit = page.getByRole("button", { name: /Download Windows execution kit/ });
+  await kit.click();
+
+  await expect(page.getByRole("status").filter({ hasText: "Plan contains no executable Windows steps" })).toBeVisible();
+  await expect(kit).toBeEnabled();
+  expect(downloads).toBe(0);
+});
+
+test("E4 — a rejected bootstrap start stops with an actionable setup error", async ({ page }) => {
+  await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "uat-token", version: "0.4.0" } }));
+  await page.route("**/api/bootstrap", route => route.request().method() === "POST"
+    ? route.fulfill({ status: 403, json: { error: "forbidden", message: "Missing or invalid same-origin request token" } })
+    : route.fulfill({ status: 503, json: { status: "not_started", runtime: { ready: false, phase: "not_started" }, cache: { domains: {} } } }));
+  await page.goto("/");
+  await expect(page.getByText("Missing or invalid same-origin request token")).toBeVisible();
+  await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
+  await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
+});
+
+test("E5 — bootstrap polling reports its fifteen-minute deadline", async ({ page }) => {
+  await page.addInitScript(() => {
+    const readings = [0, 900001];
+    Date.now = () => readings.length ? readings.shift() : 900001;
+  });
+  await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "uat-token", version: "0.4.0" } }));
+  await page.route("**/api/bootstrap", route => route.fulfill({
+    status: 202,
+    json: { status: "loading", runtime: { ready: false, phase: "loading" }, cache: { domains: {} } },
+  }));
+  await page.goto("/");
+  await expect(page.getByText("Preparing ATT&CK data timed out. Check the service log, then retry setup.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
+});
+
+test("E6 — an actor API outage is visible and retry recovers", async ({ page }) => {
+  let actorCalls = 0;
+  let fail = false;
+  await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "uat-token", version: "0.4.0" } }));
+  await page.route("**/api/bootstrap", route => route.fulfill({ json: {
+    status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} },
+  } }));
+  await page.route("**/api/actors?*", route => {
+    actorCalls += 1;
+    if (fail) return route.fulfill({
+      status: 503, json: { error: "service_unavailable", message: "ATT&CK backend unavailable", version: "0.4.0" },
+    });
+    return route.fulfill({ json: {
+      actors: ACTORS, domains: ["enterprise"], data_version: "enterprise:bundle--uat", version: "0.4.0",
+    } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  fail = true;
+  await page.locator('[data-domain="ics"]').click();
+  await expect(page.getByText("ATT&CK backend unavailable")).toBeVisible();
+  await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
+
+  fail = false;
+  await page.getByRole("button", { name: "Retry setup" }).click();
+  await expect(page.locator("#dataStatus")).toHaveText(/\d+ actors? · Enterprise \+ Ics/);
+  expect(actorCalls).toBeGreaterThanOrEqual(3);
+});
+
+test("E11 — the last selected ATT&CK domain cannot be removed", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  const enterprise = page.locator('[data-domain="enterprise"]');
+  await enterprise.click();
+  await expect(page.getByRole("status").filter({ hasText: "Keep at least one ATT&CK domain selected" })).toBeVisible();
+  await expect(enterprise).toHaveAttribute("aria-pressed", "true");
+});
+
+test("E12 — a denied clipboard write is reported", async ({ page }) => {
+  await toScope(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error("denied")) },
+    });
+  });
+  await page.getByRole("button", { name: /Copy command/ }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Clipboard access was denied" })).toBeVisible();
+});
+
+test("E13 — refreshing an open plan requires confirmation and rebuilds it", async ({ page }) => {
+  await page.route("**/api/refresh?*", route => route.fulfill({
+    json: { status: "refreshed", domains: ["enterprise"], data_version: "enterprise:bundle--new", cache: {} },
+  }));
+  await toScope(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+
+  await page.getByRole("button", { name: "Refresh the live ATT&CK feed" }).click();
+  const dialog = page.getByRole("dialog", { name: "Refresh the ATT&CK feed?" });
+  await expect(dialog).toContainText("Refreshing can change technique mappings and will rebuild the current plan.");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Refresh the live ATT&CK feed" }).click();
+  await dialog.getByRole("button", { name: "Refresh feed" }).click();
+  await expect(page.getByRole("heading", { name: "Choose a threat actor" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "ATT&CK feed refreshed; the plan was rebuilt" })).toBeVisible();
+});
+
+test("E15 — a plan file larger than five megabytes is refused before parsing", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.setInputFiles("#importPlan", {
+    name: "oversized-plan.json",
+    mimeType: "application/json",
+    buffer: Buffer.alloc(5 * 1024 * 1024 + 1, 0x20),
+  });
+  await expect(page.getByRole("status").filter({ hasText: "Plan file is larger than 5 MB" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
 });

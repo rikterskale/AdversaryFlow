@@ -259,6 +259,32 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("--no-build-isolation --no-deps --editable .", calls)
         self.assertIn("doctor", calls)
 
+    def test_install_script_rejects_missing_and_old_python(self):
+        shutil.copy2(ROOT / "install.sh", self.root / "install.sh")
+        missing = subprocess.run(
+            [BASH, "-c", "function command { return 1; }; source ./install.sh"],
+            cwd=self.root, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("AdversaryFlow requires Python 3.10 or newer.", missing.stderr)
+
+        fake_bin = self.root / "old-python"
+        fake_bin.mkdir()
+        python = fake_bin / "python3"
+        python.write_text(
+            '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Python 3.9.18"; fi\nexit 1\n',
+            encoding="utf-8",
+        )
+        python.chmod(0o755)
+        old = subprocess.run(
+            [BASH, str(self.root / "install.sh")], cwd=self.root,
+            env={**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}"},
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(old.returncode, 1)
+        self.assertIn("AdversaryFlow requires Python 3.10 or newer; found Python 3.9.18.",
+                      old.stderr)
+
     def test_powershell_launchers_preserve_install_and_argument_contracts(self):
         install = (ROOT / "install.ps1").read_text(encoding="utf-8")
         run = (ROOT / "run.ps1").read_text(encoding="utf-8")
@@ -271,20 +297,67 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("adversaryflow.exe --open @args", run)
         self.assertIn("& .\\install.ps1", run)
 
-    def test_powershell_installer_stops_after_a_native_pip_failure(self):
+    @unittest.skipIf(os.name == "nt", "POSIX executable stubs; native Windows install runs in CI")
+    def test_j58_powershell_installer_stops_after_every_native_failure(self):
         shutil.copy2(ROOT / "install.ps1", self.root / "install.ps1")
-        scripts = self.root / ".venv" / "Scripts"
-        scripts.mkdir(parents=True)
-        python = scripts / "python.exe"
-        shutil.copy2(sys.executable, python)
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        system_python = """#!/bin/sh
+case "$*" in
+  *"import sys"*) exit 0 ;;
+  *"-m venv .venv"*) exit 41 ;;
+esac
+exit 0
+"""
+        for name in ("python", "python3"):
+            candidate = fake_bin / name
+            candidate.write_text(system_python, encoding="utf-8")
+            candidate.chmod(0o755)
 
-        result = subprocess.run(
-            [PWSH, "-NoProfile", "-File", str(self.root / "install.ps1")],
-            capture_output=True, text=True, check=False, timeout=20,
-        )
+        venv_python = """#!/bin/sh
+case "$*" in
+  *"requirements.lock"*) [ "$AF_FAIL_STEP" = runtime ] && exit 42 ;;
+  *"requirements-build.lock"*) [ "$AF_FAIL_STEP" = build ] && exit 43 ;;
+  *"--editable ."*) [ "$AF_FAIL_STEP" = package ] && exit 44 ;;
+esac
+exit 0
+"""
+        doctor = """#!/bin/sh
+[ "$AF_FAIL_STEP" = doctor ] && exit 45
+exit 0
+"""
+        cases = {
+            "venv": "Creating the AdversaryFlow virtual environment failed",
+            "runtime": "Installing runtime dependencies failed",
+            "build": "Installing build dependencies failed",
+            "package": "Installing AdversaryFlow failed",
+            "doctor": "AdversaryFlow doctor failed",
+        }
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Installing runtime dependencies failed", result.stderr)
+        for step, expected in cases.items():
+            with self.subTest(step=step):
+                shutil.rmtree(self.root / ".venv", ignore_errors=True)
+                if step != "venv":
+                    scripts = self.root / ".venv" / "Scripts"
+                    scripts.mkdir(parents=True)
+                    for name, body in (("python.exe", venv_python),
+                                       ("adversaryflow.exe", doctor)):
+                        executable = scripts / name
+                        executable.write_text(body, encoding="utf-8")
+                        executable.chmod(0o755)
+                env = {
+                    **os.environ,
+                    "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+                    "AF_FAIL_STEP": step,
+                }
+                result = subprocess.run(
+                    [PWSH, "-NoProfile", "-File", str(self.root / "install.ps1")],
+                    capture_output=True, text=True, check=False, timeout=20, env=env,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
+                self.assertNotIn("AdversaryFlow installed and verified.", result.stdout)
 
 
 if __name__ == "__main__":

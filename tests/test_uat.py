@@ -9,6 +9,8 @@ server are executed from the terminal and recorded in docs/UAT_PLAN.md.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import socket
@@ -221,6 +223,42 @@ class ServiceUatTests(unittest.TestCase):
             app_module.REMOTE_MODE = False
             app_module.API_TOKEN = ""
 
+    def test_j57_mutations_require_an_exact_origin(self):
+        for origin in ("https://evil.example", "https://localhost",
+                       "http://localhost:5001", "null"):
+            with self.subTest(origin=origin):
+                response = self.client.post(
+                    "/api/refresh", headers={**self.csrf, "Origin": origin}
+                )
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.get_json()["error"], "forbidden")
+
+        app_module._last_refresh = 0
+        headers = {**self.csrf, "Origin": "http://[::1]:5000"}
+        with patch("backend.app.attack_data.refresh_index", return_value=UatIndex()), \
+                patch("backend.app.attack_data.cache_status", return_value={}):
+            accepted = self.client.post(
+                "/api/refresh", base_url="http://[::1]:5000", headers=headers
+            )
+        self.assertEqual(accepted.status_code, 200)
+
+    def test_e14_refresh_conflicts_name_the_active_operation(self):
+        app_module._runtime.update(loading=True)
+        try:
+            bootstrap_conflict = self.client.post("/api/refresh", headers=self.csrf)
+        finally:
+            app_module._runtime.update(loading=False)
+        self.assertEqual(bootstrap_conflict.status_code, 409)
+        self.assertEqual(bootstrap_conflict.get_json()["error"], "bootstrap_in_progress")
+
+        app_module._refresh_lock.acquire()
+        try:
+            refresh_conflict = self.client.post("/api/refresh", headers=self.csrf)
+        finally:
+            app_module._refresh_lock.release()
+        self.assertEqual(refresh_conflict.status_code, 409)
+        self.assertEqual(refresh_conflict.get_json()["error"], "refresh_in_progress")
+
 
 class CommandLineUatTests(unittest.TestCase):
     """Journey rows an operator drives from a terminal."""
@@ -303,6 +341,23 @@ class CommandLineUatTests(unittest.TestCase):
                          cache_dir=self.cache)
         self.assertEqual(result.returncode, 2)
         self.assertIn("Refusing a non-loopback bind without --api-token", result.stdout)
+
+    def test_e03_remote_mode_warns_before_serving(self):
+        output = io.StringIO()
+        try:
+            with patch("waitress.serve"), contextlib.redirect_stdout(output):
+                code = app_module.main([
+                    "--host", "0.0.0.0", "--allow-remote", "--api-token", "uat-secret",
+                    "--no-preload",
+                ])
+        finally:
+            app_module.REMOTE_MODE = False
+            app_module.API_TOKEN = ""
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "WARNING: remote binding is enabled; every API request requires the configured bearer token.",
+            output.getvalue(),
+        )
 
     def test_j48_cache_status_reports_every_domain(self):
         result = run_cli("cache-status", cache_dir=self.cache)
