@@ -419,6 +419,10 @@ def render_bash(plan: ExecutionPlan, csv_name: str, csv_sha256: str) -> str:
         _bash_array("TIMEOUTS", (str(step.timeout_seconds) for step in plan.steps)),
     ))
     template = r'''#!/usr/bin/env bash
+# errexit is deliberately not enabled. A lab step, or its cleanup, may exit
+# non-zero: that outcome is evidence and must reach the results CSV, summary,
+# and checksums rather than abort the session. Each operator-approved command is
+# additionally guarded by an explicit `set +e` immediately before it runs.
 set -u
 
 KIT_VERSION="1.0"
@@ -653,7 +657,6 @@ for index in "${!STEP_IDS[@]}"; do
     ( cd "$SCRIPT_DIR" && bash "$effective_file" ) >"$stdout_file" 2>"$stderr_file"
   fi
   exit_code=$?
-  set +e
   step_completed=$(now_utc)
   stdout_sha=$(sha_file "$stdout_file"); stderr_sha=$(sha_file "$stderr_file")
   execution_status=completed
@@ -670,7 +673,7 @@ for index in "${!STEP_IDS[@]}"; do
     if [ "$cleanup_choice" = Y ]; then
       cleanup_file="$RESULTS_DIR/commands/$step_id.cleanup.sh"
       printf '%s\n' "$cleanup_text" > "$cleanup_file"
-      set +e; ( cd "$SCRIPT_DIR" && bash "$cleanup_file" ) >>"$stdout_file" 2>>"$stderr_file"; cleanup_exit=$?; set +e
+      set +e; ( cd "$SCRIPT_DIR" && bash "$cleanup_file" ) >>"$stdout_file" 2>>"$stderr_file"; cleanup_exit=$?
       [ "$cleanup_exit" -eq 0 ] && cleanup_status=completed || cleanup_status=failed
       event "cleanup_completed" "$step_id" "status=$cleanup_status; exit_code=$cleanup_exit"
     else cleanup_status=declined; event "cleanup_declined" "$step_id" "operator declined cleanup"; fi

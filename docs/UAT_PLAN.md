@@ -3,7 +3,7 @@
 Covers every row of the journey map in [USER_JOURNEY.md](USER_JOURNEY.md),
 plus the boundary inputs the accepted behaviour depends on.
 
-**Case IDs** — `J1`–`J61` are the journey-map rows. `B1`–`B38` are plan-import
+**Case IDs** — `J1`–`J62` are the journey-map rows. `B1`–`B38` are plan-import
 boundaries. `B39`–`B47` are service and catalog boundaries. `E1`–`E16` cover
 the additional alternate and recovery paths documented outside the journey
 map.
@@ -98,6 +98,7 @@ ATT&CK enterprise bundle; their captured output is the Actual result.
 | J57 | Valid CSRF token | Send mutations with foreign host, wrong scheme, wrong port, `null`, then matching IPv6 origin *(auto: `test_j57_mutations_require_an_exact_origin`)* | Four mismatches rejected; exact IPv6 accepted | `403 forbidden` for all four mismatches; `http://[::1]:5000` with matching host returned 200 | **Pass** |
 | J58 | PowerShell 7 available | Force venv, runtime dependency, build dependency, editable package, and doctor child processes to fail *(auto: `test_j58_powershell_installer_stops_after_every_native_failure`)* | Every failure terminates at its step and no success message appears | Five subcases exited non-zero with their step-specific error; zero printed `AdversaryFlow installed and verified.` | **Pass** |
 | J61 | Export screen open; execution-kit API returns 400 | Click execution-kit card *(auto: `uat.spec.js` J61)* | API message shown, no download, retry remains enabled | Toast `Plan contains no executable Windows steps`; downloads = 0; button enabled | **Pass** |
+| J62 | A downloaded Linux kit whose step exits 3 and whose cleanup exits 4 | Run the kit to completion *(auto: `test_execution_kit.py::test_linux_runner_records_a_failing_step_and_cleanup_with_full_evidence`, `…::test_posix_runner_never_enables_errexit`; also run live from a terminal)* | The failure is recorded as evidence; the session completes and writes the full evidence set; the runner never enables errexit | Runner exit 0; evidence dir held `SHA256SUMS commands evidence-events.jsonl execution-report.html execution-report.md execution-results.csv execution-summary.json stdout stderr`; summary `status=completed failed_steps=1 completed_steps=0`; CSV row `exit_code=3 execution_status=completed assessment=failed cleanup_status=failed`; `set -e` statements in the generated runner = 0 | **Pass** |
 
 ---
 
@@ -211,14 +212,14 @@ Executed on the environment of record above.
 | Group | Cases | Pass | Fail |
 |---|---|---|---|
 | A. Happy path (journey rows) | 30 | 30 | 0 |
-| B. Alternate and error paths (journey rows) | 30 | 30 | 0 |
+| B. Alternate and error paths (journey rows) | 31 | 31 | 0 |
 | C.1 Journey boundary row | 1 | 1 | 0 |
 | C.1 Plan-import boundaries | 38 | 38 | 0 |
 | C.2 Service and catalog boundaries | 9 | 9 | 0 |
 | D. Additional alternate and error paths | 16 | 16 | 0 |
-| **Total** | **124** | **124** | **0** |
+| **Total** | **125** | **125** | **0** |
 
-Every journey-map row `J1`–`J61` is covered exactly once across groups A, B,
+Every journey-map row `J1`–`J62` is covered exactly once across groups A, B,
 and the J56 row in C.1. Every alternate/error row in `USER_JOURNEY.md` maps to
 one of those journey cases or E1–E16.
 
@@ -227,7 +228,7 @@ one of those journey cases or E1–E16.
 ```text
 $ env PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s tests
 ----------------------------------------------------------------------
-Ran 274 tests in 19.981s
+Ran 276 tests in 20.826s
 
 OK
 
@@ -273,11 +274,23 @@ occupied_port_exit=1 error="OSError: [Errno 98] Address already in use"
 alternate_port_live={"status":"live","version":"0.4.0"}
 ```
 
+A downloaded Linux kit was then run from a terminal with a deliberately failing
+step and a deliberately failing cleanup (J62):
+
+```text
+runner exit code: 0
+evidence files: SHA256SUMS commands evidence-events.jsonl execution-report.html
+                execution-report.md execution-results.csv execution-summary.json stdout stderr
+summary: status=completed failed_steps=1 completed_steps=0
+csv row: exit_code=3 execution_status=completed assessment=failed cleanup_status=failed
+set -e statements in generated runner: 0
+```
+
 ### Where each case runs
 
 | Cases | Executor | Re-run by CI |
 |---|---|---|
-| J2, J3, J5–J9, J12, J16, J40–J53, J57–J59, B39–B47, E1, E7–E10, E14, E16 | Python unit/integration suites | yes — `test` job |
+| J2, J3, J5–J9, J12, J16, J40–J53, J57–J59, J62, B39–B47, E1, E7–E10, E14, E16 | Python unit/integration suites | yes — `test` job |
 | J10, J11, J13–J15, J17–J39, J55, J56, J60, J61, B1–B38, E3–E6, E11–E13, E15 | Playwright browser suites | yes — `browser` job |
 | J1, J4, J52, J54, plus live-bundle runs of J5, J6, J9, J12, J16, J40, J41 | terminal against a running service and the cached real ATT&CK bundle | no — needs the 54 MB bundle and a bound port |
 | `E2` | Two local service processes | no — requires binding the same real port twice |

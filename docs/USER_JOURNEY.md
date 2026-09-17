@@ -349,6 +349,23 @@ half-imported.
 | More than 2 000 techniques in one stage | `Plan contains too many technique records` |
 | More than 4 000 technique records across all stages | `Plan exceeds the 4000-technique limit` |
 
+### Operator execution kit, on the destination host
+
+The kit runs on the lab machine after the handoff, with no AdversaryFlow
+installation and no network. A lab step that fails is an expected outcome and is
+recorded as evidence — the runner never aborts the session on a non-zero exit,
+so the summary, results CSV, event log, and checksums are always written.
+
+| Situation | What the operator sees | Recovery |
+|---|---|---|
+| The plan CSV was edited or is missing | `Plan integrity check failed. The CSV does not match this runner.` (or `The matching plan CSV is missing: <path>`), exit 2 | Re-download the kit; keep the CSV and runner together |
+| A required standard utility is absent | `Required standard utility not found: <name>` (or `sha256sum or shasum`), exit 2 | Install the named utility, or run the kit on a host that has it |
+| A lab step exits non-zero | The exit code is printed and recorded; the session continues to the next step | None needed — the failure is the finding; `failed_steps` counts it in the summary |
+| A step exceeds its timeout | Exit code `124` recorded with `execution_status = timed_out` | Raise the step timeout or shorten the command |
+| A cleanup command fails | `cleanup_status = failed` recorded with its exit code | Reverse the change manually; the rollback text is in the CSV |
+| The operator edits a command | A reason is required and the edited command needs a second approval; both original and effective SHA-256 are recorded | Skip or abort instead if the edit is wrong |
+| The operator interrupts the session | `Execution interrupted. Evidence retained in: <dir>`, exit 130 | Evidence already written is kept and checksummed |
+
 ### API consumers
 
 Every response carries `X-Request-ID`, `X-Content-Type-Options: nosniff`,
@@ -446,6 +463,7 @@ table directly.
 | J59 | Publish remote authentication | Inspect `docs/openapi.yaml` | Describes the bearer-token condition and unauthorised responses | `components.securitySchemes.BearerToken` is HTTP bearer; the contract says it is required for all `/api/*` requests in remote mode, and every documented API operation includes a `401` response |
 | J60 | Export operator kit | Click **Operator execution kit** | Builds and downloads a catalog-rebound ZIP without executing commands | HTTP 200 returns a `.zip` containing an `<actor>-plan.csv` and platform-matching `<actor>-execute.ps1` or `<actor>-execute.sh`; plans with bounded exercises also contain `AdversaryFlow-exercises.py`; the toast reads `Execution kit ready: <filename>` |
 | J61 | Recover from kit export failure | Make `POST /api/execution-kit` return an error, then click the execution-kit card | Surfaces the failure and restores the control | A toast shows the API message or the status fallback, no download begins, and the execution-kit button is enabled again |
+| J62 | Record a failing lab step | Run a downloaded kit whose step exits non-zero and whose cleanup also fails | Records the failure as evidence instead of aborting the session | The runner exits 0; `execution-summary.json`, `execution-results.csv`, `evidence-events.jsonl`, and `SHA256SUMS` are all written; the summary reports `failed_steps = 1` and `completed_steps = 0`; the CSV row records `exit_code = 3` and `cleanup_status = failed`; the generated runner contains no `set -e` statement |
 
 ---
 

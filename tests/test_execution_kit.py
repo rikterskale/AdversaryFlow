@@ -292,6 +292,55 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         self.assertIn("Detection assessment:** passed", report)
         self.assertEqual(len(list((evidence / "stdout").glob("*.log"))), 1)
 
+    def test_posix_runner_never_enables_errexit(self):
+        """A failing lab step is evidence, not a reason to abort the session.
+
+        The runner guards each approved command with `set +e`; enabling errexit
+        anywhere would let a non-zero exit in the evidence-writing tail kill the
+        session before the summary and checksums are written.
+        """
+        root, _filename, names, _modes = self.extract("linux")
+        script = (root / next(name for name in names if name.endswith("-execute.sh"))).read_text(encoding="utf-8")
+        statements = [line.strip() for line in script.splitlines() if not line.lstrip().startswith("#")]
+        self.assertFalse([line for line in statements if "set -e" in line or "set -o errexit" in line])
+        self.assertIn("set -u", statements)
+        # One guard before the approved command, one before its cleanup.
+        self.assertEqual(len([line for line in statements if "set +e" in line]), 2)
+
+    def test_linux_runner_records_a_failing_step_and_cleanup_with_full_evidence(self):
+        archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture(
+            "linux",
+            command="printf 'step failed\\n' >&2; exit 3",
+            cleanup="printf 'cleanup failed\\n' >&2; exit 4",
+        )))
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+            archive.extractall(directory.name)
+        script_path = next(Path(directory.name).rglob("*-execute.sh"))
+        result = subprocess.run(
+            [BASH, str(script_path)],
+            input=b"\n\nY\nR\nN\nY\nN\n",
+            env=_bash_env(),
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        evidence = next(script_path.parent.glob("AdversaryFlow-results-*"))
+        for name in ("execution-summary.json", "execution-results.csv", "evidence-events.jsonl", "SHA256SUMS"):
+            self.assertTrue((evidence / name).is_file(), name)
+        summary = json.loads((evidence / "execution-summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["status"], "completed")
+        self.assertEqual(summary["failed_steps"], 1)
+        self.assertEqual(summary["completed_steps"], 0)
+        with (evidence / "execution-results.csv").open(encoding="utf-8") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(rows[0]["exit_code"], "3")
+        self.assertEqual(rows[0]["execution_status"], "completed")
+        self.assertEqual(rows[0]["assessment"], "failed")
+        self.assertEqual(rows[0]["cleanup_status"], "failed")
+
     def test_runner_refuses_a_changed_csv(self):
         root, _filename, names, _modes = self.extract("linux")
         script_path = root / next(name for name in names if name.endswith("-execute.sh"))
