@@ -292,6 +292,13 @@ test("J27 — unavailable local storage is reported, not swallowed", async ({ pa
   await expect(page.getByRole("status").filter({ hasText: "Progress can't be saved in this browser" })).toBeVisible();
 });
 
+test("the review workspace has no serious accessibility violations", async ({ page }) => {
+  await toScope(page, { multiStage: true });
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
 test("J28 — the export screen summarises the finished plan", async ({ page }) => {
   await toScope(page, { multiStage: true });
   await page.getByRole("button", { name: /Build plan/ }).click();

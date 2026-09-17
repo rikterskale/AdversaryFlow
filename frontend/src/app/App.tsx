@@ -6,7 +6,7 @@ import type { SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
-import { PlanPlaceholder } from "../features/review/PlanPlaceholder";
+import { ReviewScreen } from "../features/review/ReviewScreen";
 import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
 import { useWizardStore } from "../state/wizardStore";
@@ -131,8 +131,10 @@ export function App(): JSX.Element {
     content = <section className="screen setup-screen"><ErrorState message={workflowQuery.error?.message ?? "The workflow response was empty."} onRetry={() => { void workflowQuery.refetch(); }} title="Could not build the actor workflow" /><Button onClick={() => setStep(1)} variant="ghost"><span aria-hidden="true">←</span> Back to threat actors</Button></section>;
   } else if (currentStep === 2) {
     content = <ScopeScreen actor={selectedActor} onBack={() => setStep(1)} onBuild={() => setStep(3)} workflow={workflowQuery.data} />;
+  } else if (currentStep === 3) {
+    content = <ReviewScreen actor={selectedActor} onBack={() => setStep(2)} onFinish={() => setStep(4)} onNotice={setNotice} workflow={workflowQuery.data} />;
   } else {
-    content = <PlanPlaceholder actor={selectedActor} onBack={() => setStep(2)} />;
+    content = <section className="screen placeholder-screen"><p className="eyebrow">Step 4 of 4</p><h1>Your emulation plan is ready</h1><p>Export formats and the operator execution kit arrive in the next reviewed checkpoint.</p><Button onClick={() => setStep(3)} variant="ghost"><span aria-hidden="true">←</span> Back to review</Button></section>;
   }
 
   return (

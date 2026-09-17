@@ -20,7 +20,7 @@ interface AppShellProps {
 const steps: { step: WizardStep; label: string; shortLabel: string }[] = [
   { step: 1, label: "Choose threat actor", shortLabel: "Threat actor" },
   { step: 2, label: "Scope engagement", shortLabel: "Scope" },
-  { step: 3, label: "Review and track plan", shortLabel: "Plan" },
+  { step: 3, label: "Review and track plan", shortLabel: "Emulation plan" },
   { step: 4, label: "Export kit", shortLabel: "Export" },
 ];
 
@@ -130,10 +130,10 @@ export function AppShell({ children, session, health, healthFailed, actors, doma
         </div>
       </header>
 
-      <div className="safety-banner" role="note">
+      <aside aria-label="Safety boundary" className="safety-banner">
         <Icon className="safety-icon" name="shield" />
         <p><strong>Authorized lab use only.</strong> AdversaryFlow creates plans; it does not execute commands.</p>
-      </div>
+      </aside>
 
       <main id="main-content" tabIndex={-1}>{children}</main>
 
