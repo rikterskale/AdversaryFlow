@@ -1,5 +1,5 @@
-import { isRecord, parseActors, parseBootstrap, parseHealth, parseSession, parseWorkflow } from "./guards";
-import type { ActorsResponse, AttackDomain, BootstrapResponse, HealthResponse, SessionResponse, WorkflowResponse } from "./contract";
+import { isRecord, parseActors, parseBootstrap, parseDoctor, parseHealth, parseSession, parseWorkflow } from "./guards";
+import type { ActorsResponse, AttackDomain, BootstrapResponse, DoctorResponse, HealthResponse, SessionResponse, WorkflowResponse } from "./contract";
 
 const TOKEN_KEY = "af_api_token";
 let apiToken = sessionStorage.getItem(TOKEN_KEY) ?? "";
@@ -69,6 +69,10 @@ export async function getActors(domains: AttackDomain[]): Promise<ActorsResponse
 
 export async function getHealth(): Promise<HealthResponse> {
   return parseHealth(await responseJson(await apiFetch("/api/health")));
+}
+
+export async function getDoctor(): Promise<DoctorResponse> {
+  return parseDoctor(await responseJson(await apiFetch("/api/doctor")));
 }
 
 export async function getWorkflow(stixId: string, domains: AttackDomain[]): Promise<WorkflowResponse> {

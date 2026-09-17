@@ -4,6 +4,7 @@ import type {
   BootstrapResponse,
   HealthPhase,
   HealthResponse,
+  DoctorResponse,
   SessionResponse,
   Command,
   Technique,
@@ -166,6 +167,32 @@ export function parseHealth(value: unknown): HealthResponse {
     attack_data: value.attack_data,
     service: value.service,
   };
+}
+
+export function parseDoctor(value: unknown): DoctorResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.version !== "string" ||
+    typeof value.generated_at !== "string" ||
+    typeof value.ok !== "boolean" ||
+    !isRecord(value.summary) ||
+    typeof value.summary.passed !== "number" ||
+    typeof value.summary.failed !== "number" ||
+    typeof value.summary.required_failed !== "number" ||
+    !Array.isArray(value.checks) ||
+    !value.checks.every((check) => (
+      isRecord(check) &&
+      typeof check.id === "string" &&
+      typeof check.label === "string" &&
+      (check.status === "PASS" || check.status === "FAIL") &&
+      typeof check.required === "boolean" &&
+      typeof check.detail === "string" &&
+      typeof check.fix === "string"
+    ))
+  ) {
+    throw new Error("The service returned an invalid diagnostics report.");
+  }
+  return value as unknown as DoctorResponse;
 }
 
 export function parseBootstrap(value: unknown): BootstrapResponse {

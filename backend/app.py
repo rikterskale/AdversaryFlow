@@ -8,7 +8,6 @@ lab commands.
 from __future__ import annotations
 
 import argparse
-import importlib.metadata
 import io
 import ipaddress
 import json
@@ -17,7 +16,6 @@ import re
 import secrets
 import sys
 import sysconfig
-import tempfile
 import threading
 import time
 import urllib.parse
@@ -29,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, attack_data, command_catalog, execution_kit
+from . import __version__, attack_data, command_catalog, diagnostics, execution_kit
 
 
 def _frontend_dir() -> str:
@@ -146,6 +144,22 @@ def health():
         "attack_data": index_status,
         "service": _runtime_snapshot(),
     }), 200 if ready else 503
+
+
+@app.route("/api/doctor")
+def doctor_report():
+    """Run the same host self-test exposed by the doctor CLI command."""
+    host = request.host.split(":", 1)[0].strip("[]") or "127.0.0.1"
+    try:
+        port = int(request.environ.get("SERVER_PORT", "5000"))
+    except (TypeError, ValueError):
+        port = 5000
+    return jsonify(diagnostics.collect_diagnostics(
+        FRONTEND_DIR,
+        host=host,
+        port=port,
+        port_is_service=True,
+    ))
 
 
 @app.route("/api/bootstrap", methods=["GET", "POST"])
@@ -491,7 +505,7 @@ def main(argv: List[str] | None = None) -> int:
     attack_data.configure_offline(args.offline)
 
     if args.command == "doctor":
-        return _doctor()
+        return _doctor(args.host, args.port)
     if args.command == "cache-status":
         print(json.dumps(attack_data.cache_status(), indent=2, sort_keys=True))
         return 0
@@ -578,31 +592,10 @@ def _open_when_ready(url: str) -> None:
         time.sleep(0.2)
 
 
-def _doctor() -> int:
-    checks: Dict[str, Any] = {
-        "version": __version__,
-        "python": sys.version.split()[0],
-        "frontend_dir": FRONTEND_DIR,
-        "frontend_available": all((Path(FRONTEND_DIR) / name).is_file() for name in ("index.html", "styles.css", "app.js")),
-        "cache": attack_data.cache_status(),
-        "dependencies": {},
-    }
-    for package in ("Flask", "waitress"):
-        try:
-            checks["dependencies"][package] = importlib.metadata.version(package)
-        except importlib.metadata.PackageNotFoundError:
-            checks["dependencies"][package] = None
-    try:
-        os.makedirs(attack_data.CACHE_DIR, exist_ok=True)
-        with tempfile.NamedTemporaryFile(prefix=".adversaryflow-doctor-", dir=attack_data.CACHE_DIR):
-            checks["cache_writable"] = True
-    except OSError as exc:
-        checks["cache_writable"] = False
-        checks["cache_error"] = str(exc)
-    ok = checks["frontend_available"] and checks["cache_writable"] and all(checks["dependencies"].values())
-    checks["ok"] = ok
-    print(json.dumps(checks, indent=2, sort_keys=True))
-    return 0 if ok else 1
+def _doctor(host: str = "127.0.0.1", port: int = 5000) -> int:
+    report = diagnostics.collect_diagnostics(FRONTEND_DIR, host=host, port=port)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report["ok"] else 1
 
 
 if __name__ == "__main__":

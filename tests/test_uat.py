@@ -97,7 +97,7 @@ class ServiceUatTests(unittest.TestCase):
         response = self.client.get("/")
         try:
             self.assertEqual(response.status_code, 200)
-            self.assertIn("AdversaryFlow — Adversary Emulation Planner",
+            self.assertIn("AdversaryFlow — Authorized Adversary Emulation Planner",
                           response.get_data(as_text=True))
         finally:
             response.close()
@@ -282,6 +282,12 @@ class CommandLineUatTests(unittest.TestCase):
         self.assertTrue(report["cache_writable"])
         self.assertEqual(report["version"], app_module.__version__)
         self.assertTrue(all(report["dependencies"].values()))
+        self.assertEqual(
+            {check["id"] for check in report["checks"]},
+            {"python", "docker", "frontend", "dependencies", "port", "cache_writable", "cache_integrity", "disk_space", "attack_feed"},
+        )
+        self.assertTrue(all(check["status"] in {"PASS", "FAIL"} for check in report["checks"]))
+        self.assertTrue(all(check["fix"] for check in report["checks"]))
 
     def test_j04_the_process_answers_liveness_before_attack_data_is_ready(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -313,7 +319,7 @@ class CommandLineUatTests(unittest.TestCase):
             self.assertEqual(body["version"], app_module.__version__)
             with urllib.request.urlopen(url, timeout=2) as homepage:
                 html = homepage.read().decode("utf-8")
-            self.assertIn("AdversaryFlow — Adversary Emulation Planner", html)
+            self.assertIn("AdversaryFlow — Authorized Adversary Emulation Planner", html)
             try:
                 with urllib.request.urlopen(f"{url}/api/health", timeout=2) as health:
                     self.fail(f"health should be degraded before ATT&CK data loads: {health.status}")

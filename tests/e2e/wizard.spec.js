@@ -124,6 +124,20 @@ async function interceptApi(page, commands = [command]) {
   }));
 }
 
+async function interceptDoctor(page) {
+  await page.route("**/api/doctor", route => route.fulfill({ json: {
+    version: "0.4.0",
+    generated_at: "2026-09-17T00:00:00.000Z",
+    ok: true,
+    summary: { passed: 2, failed: 1, required_failed: 0 },
+    checks: [
+      { id: "python", label: "Python runtime", status: "PASS", required: true, detail: "Python 3.12.14; minimum supported version is 3.10.", fix: "No action required." },
+      { id: "docker", label: "Docker and Compose", status: "FAIL", required: false, detail: "Docker was not found on PATH.", fix: "Install Docker Engine or Docker Desktop with the Compose v2 plugin, then ensure docker is on PATH." },
+      { id: "port", label: "Service port", status: "PASS", required: true, detail: "This AdversaryFlow service is listening on 127.0.0.1:5000.", fix: "No action required." },
+    ],
+  } }));
+}
+
 async function buildPlan(page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
@@ -167,6 +181,24 @@ test("welcome screen has no serious accessibility violations", async ({ page }) 
   await page.goto("/");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
+});
+
+test("system health exposes the guided doctor report and fixes", async ({ page }) => {
+  await interceptApi(page);
+  await interceptDoctor(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open system health" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "System health" });
+  await expect(dialog.getByRole("heading", { name: "Host self-test" })).toBeVisible();
+  await expect(dialog.getByText("2/3 pass · 1 advisory")).toBeVisible();
+  await expect(dialog.getByText("Python runtime")).toBeVisible();
+  await expect(dialog.getByText("Docker and Compose")).toBeVisible();
+  await expect(dialog.getByText("Advisory", { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/Install Docker Engine or Docker Desktop/)).toBeVisible();
+
+  const results = await new AxeBuilder({ page }).include("[role=dialog]").analyze();
+  expect(results.violations).toEqual([]);
 });
 
 test("mobile screens never create page-level horizontal scrolling", async ({ page }) => {

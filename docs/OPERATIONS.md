@@ -81,8 +81,13 @@ Do not put secrets in execution notes or exports.
 
 ## Diagnostics
 
-Run **adversaryflow doctor** to verify the Python/runtime versions, frontend
-assets, cache visibility, and cache write access. For a support request attach:
+Run **adversaryflow doctor** to verify Python and Docker/Compose versions, the
+service port, frontend/runtime dependencies, cache integrity and writability,
+disk capacity, and official ATT&CK feed reachability. Every check includes a
+PASS/FAIL status and a human-readable fix. The GUI status chip exposes the same
+report. See the [troubleshooting matrix](TROUBLESHOOTING.md).
+
+For a support request attach:
 
 1. adversaryflow --version;
 2. redacted adversaryflow doctor output;

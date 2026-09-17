@@ -197,6 +197,30 @@ main { width: 100%; }
 .health-note { color: var(--text-muted); }
 .doctor-hint { margin: 15px 0 0; color: var(--text-muted); font-size: 11px; }
 .doctor-hint code { color: var(--primary); }
+.doctor-panel { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 18px; }
+.doctor-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
+.doctor-panel__heading .eyebrow { margin-bottom: 2px; font-size: 9px; }
+.doctor-panel__heading h3 { margin: 0; font-size: 15px; letter-spacing: -.015em; }
+.doctor-summary { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.doctor-summary.is-pass { border-color: color-mix(in srgb, var(--success) 32%, var(--border)); color: var(--success); background: color-mix(in srgb, var(--success) 6%, transparent); }
+.doctor-summary.is-warn { border-color: color-mix(in srgb, var(--warning) 32%, var(--border)); color: var(--warning); background: color-mix(in srgb, var(--warning) 6%, transparent); }
+.doctor-summary.is-fail { border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); color: var(--danger); background: color-mix(in srgb, var(--danger) 6%, transparent); }
+.doctor-loading { min-height: 76px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 1px dashed var(--border); border-radius: 9px; color: var(--text-muted); font-size: 11px; }
+.doctor-loading .spinner { width: 18px; height: 18px; }
+.doctor-error { display: flex; align-items: center; justify-content: space-between; gap: 15px; border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius: 9px; padding: 12px; background: color-mix(in srgb, var(--danger) 4%, transparent); }
+.doctor-error strong { color: var(--danger); font-size: 12px; }
+.doctor-error p { margin: 2px 0 0; color: var(--text-muted); font-size: 10px; }
+.doctor-error .button { min-height: 34px; padding: 6px 10px; font-size: 10px; }
+.doctor-checks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.doctor-checks li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--surface); }
+.doctor-checks li.is-fail { border-color: color-mix(in srgb, var(--danger) 25%, var(--border)); background: color-mix(in srgb, var(--danger) 3%, var(--surface)); }
+.doctor-status { align-self: start; border-radius: 5px; padding: 3px 4px; text-align: center; color: var(--success); background: color-mix(in srgb, var(--success) 9%, transparent); font-family: ui-monospace, "Cascadia Code", monospace; font-size: 8px; font-weight: 850; letter-spacing: .055em; }
+.is-fail > .doctor-status { color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.doctor-checks strong { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+.doctor-checks strong small { border-radius: 999px; padding: 1px 5px; color: var(--text-subtle); background: var(--surface-soft); font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.doctor-checks p { margin: 2px 0 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.doctor-checks .doctor-fix { margin-top: 6px; color: var(--text); }
+.doctor-fix span { display: inline-block; margin-right: 6px; color: var(--warning); font-size: 8px; font-weight: 850; text-transform: uppercase; letter-spacing: .07em; }
 .auth-form { display: grid; gap: 13px; }
 .auth-form label span { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: 11px; font-weight: 700; }
 .auth-form input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 11px; background: var(--canvas); color: var(--text); }

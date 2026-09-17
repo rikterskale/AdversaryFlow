@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import type { ActorsResponse, AttackDomain, HealthResponse, SessionResponse } from "../api/contract";
+import { getDoctor } from "../api/client";
+import type { ActorsResponse, AttackDomain, DoctorResponse, HealthResponse, SessionResponse } from "../api/contract";
 import { displayScalar } from "../api/guards";
 import { Dialog } from "../components/Dialog";
 import { Icon } from "../components/Icon";
@@ -37,21 +39,72 @@ function initialTheme(): Theme {
   return localStorage.getItem("adversaryflow-theme") === "light" ? "light" : "dark";
 }
 
-function HealthDetails({ health, actors, healthFailed }: Pick<AppShellProps, "health" | "actors" | "healthFailed">): JSX.Element {
+interface HealthDetailsProps extends Pick<AppShellProps, "health" | "actors" | "healthFailed"> {
+  doctor: DoctorResponse | null;
+  doctorError: Error | null;
+  doctorLoading: boolean;
+  onRetryDoctor: () => void;
+}
+
+function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doctorLoading, onRetryDoctor }: HealthDetailsProps): JSX.Element {
   const cacheVersion = health ? displayScalar(health.attack_data, "data_version") : null;
   const source = health ? displayScalar(health.attack_data, "source") : null;
   const serviceMode = health ? displayScalar(health.service, "bind_mode") : null;
+  const advisoryFailures = doctor?.checks.filter((check) => !check.required && check.status === "FAIL").length ?? 0;
+  const doctorTone = !doctor?.ok ? "is-fail" : advisoryFailures ? "is-warn" : "is-pass";
   return (
-    <div className="health-grid">
-      <div><span>Service</span><strong>{health?.status ?? (healthFailed ? "Unavailable" : "Checking")}</strong></div>
-      <div><span>ATT&amp;CK phase</span><strong>{health?.phase.replaceAll("_", " ") ?? "Unknown"}</strong></div>
-      <div><span>Loaded actors</span><strong>{actors?.actors.length ?? "—"}</strong></div>
-      <div><span>Data version</span><strong>{cacheVersion ?? actors?.data_version ?? "—"}</strong></div>
-      {source ? <div><span>Feed source</span><strong>{source}</strong></div> : null}
-      {serviceMode ? <div><span>Bind mode</span><strong>{serviceMode}</strong></div> : null}
-      {health?.error ? <p className="health-error">{health.error}</p> : null}
-      {healthFailed ? <p className="health-note">The health endpoint did not respond. Actor planning can continue if the catalog is available.</p> : null}
-    </div>
+    <>
+      <div className="health-grid">
+        <div><span>Service</span><strong>{health?.status ?? (healthFailed ? "Unavailable" : "Checking")}</strong></div>
+        <div><span>ATT&amp;CK phase</span><strong>{health?.phase.replaceAll("_", " ") ?? "Unknown"}</strong></div>
+        <div><span>Loaded actors</span><strong>{actors?.actors.length ?? "—"}</strong></div>
+        <div><span>Data version</span><strong>{cacheVersion ?? actors?.data_version ?? "—"}</strong></div>
+        {source ? <div><span>Feed source</span><strong>{source}</strong></div> : null}
+        {serviceMode ? <div><span>Bind mode</span><strong>{serviceMode}</strong></div> : null}
+        {health?.error ? <p className="health-error">{health.error}</p> : null}
+        {healthFailed ? <p className="health-note">The health endpoint did not respond. Actor planning can continue if the catalog is available.</p> : null}
+      </div>
+
+      <section aria-labelledby="host-self-test" className="doctor-panel">
+        <div className="doctor-panel__heading">
+          <div>
+            <p className="eyebrow">Guided troubleshooting</p>
+            <h3 id="host-self-test">Host self-test</h3>
+          </div>
+          {doctor ? (
+            <span className={`doctor-summary ${doctorTone}`}>
+              {doctor.summary.required_failed
+                ? `${doctor.summary.required_failed} required failed`
+                : advisoryFailures
+                  ? `${doctor.summary.passed}/${doctor.checks.length} pass · ${advisoryFailures} advisory`
+                  : `${doctor.summary.passed}/${doctor.checks.length} passed`}
+            </span>
+          ) : null}
+        </div>
+
+        {doctorLoading ? <div aria-live="polite" className="doctor-loading"><span className="spinner" />Checking the host and ATT&amp;CK source…</div> : null}
+        {doctorError ? (
+          <div className="doctor-error" role="alert">
+            <div><strong>Self-test unavailable</strong><p>{doctorError.message}</p></div>
+            <button className="button" onClick={onRetryDoctor} type="button">Retry</button>
+          </div>
+        ) : null}
+        {doctor ? (
+          <ul className="doctor-checks">
+            {doctor.checks.map((check) => (
+              <li className={check.status === "PASS" ? "is-pass" : "is-fail"} key={check.id}>
+                <span className="doctor-status">{check.status}</span>
+                <div>
+                  <strong>{check.label}{!check.required ? <small>Advisory</small> : null}</strong>
+                  <p>{check.detail}</p>
+                  {check.status === "FAIL" ? <p className="doctor-fix"><span>Fix</span>{check.fix}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+    </>
   );
 }
 
@@ -64,6 +117,13 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   const [helpOpen, setHelpOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
   const [refreshOpen, setRefreshOpen] = useState(false);
+  const doctorQuery = useQuery({
+    queryKey: ["doctor"],
+    queryFn: getDoctor,
+    enabled: healthOpen,
+    retry: false,
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -150,9 +210,17 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
 
       <main id="main-content" tabIndex={-1}>{children}</main>
 
-      <Dialog description="Live service and ATT&CK cache information. No target systems are contacted by this planner." onClose={() => setHealthOpen(false)} open={healthOpen} title="System health">
-        <HealthDetails actors={actors} health={health} healthFailed={healthFailed} />
-        <p className="doctor-hint">For deeper checks, run <code>adversaryflow doctor</code> on the host.</p>
+      <Dialog description="Live service, cache, host, and ATT&CK source checks. The self-test never contacts a target system." onClose={() => setHealthOpen(false)} open={healthOpen} title="System health">
+        <HealthDetails
+          actors={actors}
+          doctor={doctorQuery.data ?? null}
+          doctorError={doctorQuery.error}
+          doctorLoading={doctorQuery.isPending || doctorQuery.isFetching}
+          health={health}
+          healthFailed={healthFailed}
+          onRetryDoctor={() => { void doctorQuery.refetch(); }}
+        />
+        <p className="doctor-hint">Run <code>adversaryflow doctor</code> on the host to capture the same structured report for support.</p>
       </Dialog>
 
       <Dialog description="Refreshing can change technique mappings and will rebuild the current plan." onClose={() => setRefreshOpen(false)} open={refreshOpen} title="Refresh the ATT&CK feed?">

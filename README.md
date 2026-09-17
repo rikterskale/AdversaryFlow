@@ -173,7 +173,8 @@ commands include `doctor`, `cache-status`, `cache-refresh`, and `cache-clear`.
 See [Getting started](docs/GETTING_STARTED.md),
 [installation](docs/INSTALL.md), and
 [operations](docs/OPERATIONS.md) for supported platforms, cache locations,
-offline use, upgrades, health behavior, and troubleshooting.
+offline use, upgrades, and health behavior. Use the dedicated
+[troubleshooting matrix](docs/TROUBLESHOOTING.md) for symptom-to-fix guidance.
 
 ## API
 
@@ -183,6 +184,7 @@ offline use, upgrades, health behavior, and troubleshooting.
 | `GET /api/workflow/<stix_id>` | Full kill-chain workflow + lab commands |
 | `POST /api/refresh` | Force re-download of the live STIX feed |
 | `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
+| `GET /api/doctor` | Structured host self-test used by the GUI health panel |
 
 Mutating endpoints require a same-origin request token, refreshes are
 serialized/rate-limited, and non-loopback binding requires explicit opt-in.

@@ -96,6 +96,29 @@ export interface HealthResponse {
   service: Record<string, unknown>;
 }
 
+export type DoctorStatus = "PASS" | "FAIL";
+
+export interface DoctorCheck {
+  id: string;
+  label: string;
+  status: DoctorStatus;
+  required: boolean;
+  detail: string;
+  fix: string;
+}
+
+export interface DoctorResponse {
+  version: string;
+  generated_at: string;
+  ok: boolean;
+  summary: {
+    passed: number;
+    failed: number;
+    required_failed: number;
+  };
+  checks: DoctorCheck[];
+}
+
 export interface BootstrapResponse {
   runtime?: {
     ready?: boolean;

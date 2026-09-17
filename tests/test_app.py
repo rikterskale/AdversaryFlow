@@ -65,6 +65,28 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["ready"])
 
+    @patch("backend.app.diagnostics.collect_diagnostics")
+    def test_doctor_endpoint_returns_the_host_self_test(self, collect):
+        collect.return_value = {
+            "version": app_module.__version__,
+            "generated_at": "2026-09-17T00:00:00+00:00",
+            "ok": True,
+            "summary": {"passed": 1, "failed": 0, "required_failed": 0},
+            "checks": [{
+                "id": "python", "label": "Python runtime", "status": "PASS",
+                "required": True, "detail": "Python is supported.", "fix": "No action required.",
+            }],
+        }
+        response = self.client.get("/api/doctor")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+        collect.assert_called_once_with(
+            app_module.FRONTEND_DIR,
+            host="localhost",
+            port=80,
+            port_is_service=True,
+        )
+
     @patch("backend.app.attack_data.get_index", return_value=FakeIndex())
     def test_actor_response_has_versioned_metadata(self, _index):
         response = self.client.get("/api/actors?domains=enterprise")
