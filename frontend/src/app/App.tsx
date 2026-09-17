@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, getActors, getHealth, getSession, getWorkflow, prepareService, setApiToken } from "../api/client";
+import { ApiError, getActors, getHealth, getSession, getWorkflow, prepareService, refreshAttackData, setApiToken } from "../api/client";
 import type { SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
+import { ExportScreen } from "../features/export/ExportScreen";
+import { validateImportedPlan } from "../features/export/planContract";
 import { ReviewScreen } from "../features/review/ReviewScreen";
 import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
-import { useWizardStore } from "../state/wizardStore";
+import { useWizardStore, type WizardStep } from "../state/wizardStore";
 import { AppShell } from "./AppShell";
 import { AuthDialog } from "./AuthDialog";
 
@@ -19,9 +21,16 @@ export function App(): JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const domains = useWizardStore((state) => state.domains);
   const selectedActor = useWizardStore((state) => state.selectedActor);
+  const maxStep = useWizardStore((state) => state.maxStep);
+  const importedWorkflow = useWizardStore((state) => state.importedWorkflow);
   const setStep = useWizardStore((state) => state.setStep);
   const setDomains = useWizardStore((state) => state.setDomains);
   const selectActor = useWizardStore((state) => state.selectActor);
+  const importPlan = useWizardStore((state) => state.importPlan);
+  const resetAfterRefresh = useWizardStore((state) => state.resetAfterRefresh);
+  const restart = useWizardStore((state) => state.restart);
+  const initialWorkspaceStep = useRef<WizardStep>(currentStep);
+  const queryClient = useQueryClient();
 
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [startupPhase, setStartupPhase] = useState<StartupPhase>("connecting");
@@ -30,6 +39,7 @@ export function App(): JSX.Element {
   const [authOpen, setAuthOpen] = useState(false);
   const [authAttempted, setAuthAttempted] = useState(false);
   const [notice, setNotice] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const start = useCallback(async (): Promise<void> => {
     setStartupError("");
@@ -57,6 +67,10 @@ export function App(): JSX.Element {
   }, [start, startupAttempt]);
 
   useEffect(() => {
+    if (initialWorkspaceStep.current > 0) useWizardStore.getState().setStep(0);
+  }, []);
+
+  useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 4200);
     return () => window.clearTimeout(timer);
@@ -82,8 +96,10 @@ export function App(): JSX.Element {
       if (!selectedActor) throw new Error("Choose a threat actor before loading a workflow.");
       return getWorkflow(selectedActor.stix_id, domains);
     },
-    enabled: startupPhase === "ready" && Boolean(selectedActor) && currentStep >= 2,
+    enabled: startupPhase === "ready" && Boolean(selectedActor) && currentStep >= 2 && !importedWorkflow,
   });
+
+  const workflow = importedWorkflow ?? workflowQuery.data ?? null;
 
   const connect = (token: string): void => {
     setApiToken(token);
@@ -92,13 +108,50 @@ export function App(): JSX.Element {
     setStartupAttempt((value) => value + 1);
   };
 
+  const beginPlan = (): void => {
+    if (selectedActor || maxStep > 0) restart();
+    useWizardStore.getState().setStep(1);
+  };
+
+  const resumePlan = (): void => {
+    const destination = Math.min(Math.max(maxStep, 2), 3) as WizardStep;
+    setStep(destination);
+  };
+
+  const loadPlanFile = async (file: File): Promise<void> => {
+    if (file.size > 5 * 1024 * 1024) {
+      setNotice("Plan file is larger than 5 MB");
+      return;
+    }
+    try {
+      const value = JSON.parse(await file.text()) as unknown;
+      validateImportedPlan(value);
+      importPlan(value);
+      setNotice("Plan imported as high-risk; verify its data version before execution");
+    } catch (error: unknown) {
+      setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 JSON export.");
+    }
+  };
+
+  const refreshFeed = async (): Promise<void> => {
+    if (!session || refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshAttackData(domains, session.csrf_token);
+      resetAfterRefresh();
+      queryClient.removeQueries({ queryKey: ["workflow"] });
+      await queryClient.invalidateQueries({ queryKey: ["actors"] });
+      setNotice("ATT&CK feed refreshed; the plan was rebuilt");
+    } catch (error: unknown) {
+      setNotice(error instanceof Error ? error.message : "The ATT&CK feed could not be refreshed. Try again.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   let content: JSX.Element;
   if (startupPhase === "failed") {
-    content = (
-      <section className="screen setup-screen">
-        <ErrorState message={startupError} onRetry={() => setStartupAttempt((value) => value + 1)} title="Could not prepare ATT&CK data" />
-      </section>
-    );
+    content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
   } else if (startupPhase !== "ready") {
     content = (
       <section className="screen setup-screen">
@@ -109,7 +162,7 @@ export function App(): JSX.Element {
       </section>
     );
   } else if (currentStep === 0) {
-    content = <Welcome onBegin={() => setStep(1)} ready={Boolean(actorsQuery.data)} />;
+    content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
   } else if (currentStep === 1 || !selectedActor) {
     content = (
       <ActorGallery
@@ -125,16 +178,16 @@ export function App(): JSX.Element {
         selectedActor={selectedActor}
       />
     );
-  } else if (workflowQuery.isPending || workflowQuery.isFetching) {
+  } else if (!workflow && (workflowQuery.isPending || workflowQuery.isFetching)) {
     content = <section className="screen setup-screen"><LoadingState detail="Resolving mapped techniques and bounded catalog exercises." label={`Building ${selectedActor.name}'s lab plan…`} /></section>;
-  } else if (workflowQuery.error || !workflowQuery.data) {
+  } else if (workflowQuery.error || !workflow) {
     content = <section className="screen setup-screen"><ErrorState message={workflowQuery.error?.message ?? "The workflow response was empty."} onRetry={() => { void workflowQuery.refetch(); }} title="Could not build the actor workflow" /><Button onClick={() => setStep(1)} variant="ghost"><span aria-hidden="true">←</span> Back to threat actors</Button></section>;
   } else if (currentStep === 2) {
-    content = <ScopeScreen actor={selectedActor} onBack={() => setStep(1)} onBuild={() => setStep(3)} workflow={workflowQuery.data} />;
+    content = <ScopeScreen actor={selectedActor} onBack={() => setStep(1)} onBuild={() => setStep(3)} workflow={workflow} />;
   } else if (currentStep === 3) {
-    content = <ReviewScreen actor={selectedActor} onBack={() => setStep(2)} onFinish={() => setStep(4)} onNotice={setNotice} workflow={workflowQuery.data} />;
+    content = <ReviewScreen actor={selectedActor} onBack={() => setStep(2)} onFinish={() => setStep(4)} onNotice={setNotice} workflow={workflow} />;
   } else {
-    content = <section className="screen placeholder-screen"><p className="eyebrow">Step 4 of 4</p><h1>Your emulation plan is ready</h1><p>Export formats and the operator execution kit arrive in the next reviewed checkpoint.</p><Button onClick={() => setStep(3)} variant="ghost"><span aria-hidden="true">←</span> Back to review</Button></section>;
+    content = <ExportScreen actor={selectedActor} csrfToken={session?.csrf_token ?? ""} domains={domains} onBack={() => setStep(3)} onNotice={setNotice} onRestart={restart} workflow={workflow} />;
   }
 
   return (
@@ -143,7 +196,10 @@ export function App(): JSX.Element {
       domains={domains}
       health={healthQuery.data ?? null}
       healthFailed={healthQuery.isError}
+      onRefresh={refreshFeed}
+      refreshing={refreshing}
       session={session}
+      setupFailed={startupPhase === "failed" || actorsQuery.isError}
     >
       {content}
       <AuthDialog

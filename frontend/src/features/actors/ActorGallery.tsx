@@ -6,7 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/Feedback"
 import { Icon } from "../../components/Icon";
 
 type TypeFilter = "all" | ActorType;
-type SortOption = "name" | "techniques";
+type SortOption = "name" | "ttps";
 
 interface ActorGalleryProps {
   response: ActorsResponse | null;
@@ -64,7 +64,7 @@ export function ActorGallery({
     return [...(response?.actors ?? [])]
       .filter((actor) => typeFilter === "all" || actor.type === typeFilter)
       .filter((actor) => !normalized || actorSearchText(actor).includes(normalized))
-      .sort((left, right) => sort === "techniques"
+      .sort((left, right) => sort === "ttps"
         ? right.technique_count - left.technique_count || left.name.localeCompare(right.name)
         : left.name.localeCompare(right.name));
   }, [query, response, sort, typeFilter]);
@@ -104,6 +104,7 @@ export function ActorGallery({
                 <button
                   aria-pressed={active}
                   className={`segmented__button ${active ? "is-on" : ""}`}
+                  data-domain={option.value}
                   key={option.value}
                   onClick={() => toggleDomain(option.value)}
                   title={option.description}
@@ -148,7 +149,7 @@ export function ActorGallery({
             <span>Sort</span>
             <select id="sortSel" onChange={(event) => setSort(event.target.value as SortOption)} value={sort}>
               <option value="name">Name A–Z</option>
-              <option value="techniques">Most techniques</option>
+              <option value="ttps">Most techniques</option>
             </select>
           </label>
         </div>
@@ -159,8 +160,8 @@ export function ActorGallery({
 
       {!loading && !error ? (
         <>
-          <div className="results-line" id="actorResults" role="status">
-            <span><strong>{actors.length}</strong> of {response?.actors.length ?? 0} actors</span>
+          <div className="results-line" role="status">
+            <span id="actorResults">{actors.length} result{actors.length === 1 ? "" : "s"}</span>
             <span className="results-source">Source · MITRE ATT&amp;CK STIX 2.1</span>
           </div>
 

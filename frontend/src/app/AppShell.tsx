@@ -13,8 +13,11 @@ interface AppShellProps {
   session: SessionResponse | null;
   health: HealthResponse | null;
   healthFailed: boolean;
+  setupFailed: boolean;
   actors: ActorsResponse | null;
   domains: AttackDomain[];
+  onRefresh: () => Promise<void>;
+  refreshing: boolean;
 }
 
 const steps: { step: WizardStep; label: string; shortLabel: string }[] = [
@@ -26,7 +29,7 @@ const steps: { step: WizardStep; label: string; shortLabel: string }[] = [
 
 const domainLabels: Record<AttackDomain, string> = {
   enterprise: "Enterprise",
-  ics: "ICS / OT",
+  ics: "Ics",
   mobile: "Mobile",
 };
 
@@ -52,7 +55,7 @@ function HealthDetails({ health, actors, healthFailed }: Pick<AppShellProps, "he
   );
 }
 
-export function AppShell({ children, session, health, healthFailed, actors, domains }: AppShellProps): JSX.Element {
+export function AppShell({ children, session, health, healthFailed, setupFailed, actors, domains, onRefresh, refreshing }: AppShellProps): JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const maxStep = useWizardStore((state) => state.maxStep);
   const setStep = useWizardStore((state) => state.setStep);
@@ -60,12 +63,14 @@ export function AppShell({ children, session, health, healthFailed, actors, doma
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [helpOpen, setHelpOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
+  const [refreshOpen, setRefreshOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   const dataStatus = useMemo(() => {
+    if (setupFailed) return "setup needs attention";
     if (actors) {
       const count = actors.actors.length;
       return `${count} actor${count === 1 ? "" : "s"} · ${domains.map((domain) => domainLabels[domain]).join(" + ")}`;
@@ -73,14 +78,19 @@ export function AppShell({ children, session, health, healthFailed, actors, doma
     if (health?.loading) return "Preparing ATT&CK data";
     if (healthFailed || health?.status === "degraded") return "Service needs attention";
     return "Checking service";
-  }, [actors, domains, health, healthFailed]);
+  }, [actors, domains, health, healthFailed, setupFailed]);
 
-  const healthTone = actors && health?.status !== "degraded" ? "ok" : healthFailed || health?.status === "degraded" ? "warn" : "loading";
+  const healthTone = setupFailed || healthFailed || health?.status === "degraded" ? "warn" : actors ? "ok" : "loading";
 
   const toggleTheme = (): void => {
     const next: Theme = theme === "dark" ? "light" : "dark";
     setTheme(next);
     localStorage.setItem("adversaryflow-theme", next);
+  };
+
+  const requestRefresh = (): void => {
+    if (maxStep >= 2) setRefreshOpen(true);
+    else void onRefresh();
   };
 
   return (
@@ -117,9 +127,12 @@ export function AppShell({ children, session, health, healthFailed, actors, doma
 
         <div className="header-actions">
           {session?.version ? <span className="version-chip">v{session.version}</span> : null}
-          <button className={`health-chip health-chip--${healthTone}`} id="dataStatus" onClick={() => setHealthOpen(true)} type="button">
+          <button aria-label="Open system health" className={`health-chip health-chip--${healthTone}`} id="dataStatus" onClick={() => setHealthOpen(true)} type="button">
             <span aria-hidden="true" className="health-dot" />
             <span>{dataStatus}</span>
+          </button>
+          <button aria-label="Refresh the live ATT&CK feed" className={`icon-button ${refreshing ? "is-spinning" : ""}`} disabled={refreshing || !session} onClick={requestRefresh} type="button">
+            <Icon className="icon" name="refresh" />
           </button>
           <button aria-label={`Use ${theme === "dark" ? "light" : "dark"} theme`} className="icon-button" onClick={toggleTheme} type="button">
             <Icon className="icon" name={theme === "dark" ? "sun" : "moon"} />
@@ -142,14 +155,20 @@ export function AppShell({ children, session, health, healthFailed, actors, doma
         <p className="doctor-hint">For deeper checks, run <code>adversaryflow doctor</code> on the host.</p>
       </Dialog>
 
-      <Dialog description="A four-step, operator-gated workflow for preparing an authorized emulation in a disposable lab." onClose={() => setHelpOpen(false)} open={helpOpen} title="How AdversaryFlow works">
+      <Dialog description="Refreshing can change technique mappings and will rebuild the current plan." onClose={() => setRefreshOpen(false)} open={refreshOpen} title="Refresh the ATT&CK feed?">
+        <div className="callout"><strong>Current browser plan</strong><p>Scope and evidence will be cleared after the refreshed catalog is ready. Export records you need to keep first.</p></div>
+        <div className="dialog-actions"><button className="button button--ghost" onClick={() => setRefreshOpen(false)} type="button">Cancel</button><button className="button button--primary" onClick={() => { setRefreshOpen(false); void onRefresh(); }} type="button">Refresh feed</button></div>
+      </Dialog>
+
+      <Dialog description="A four-step, operator-gated workflow for preparing an authorized emulation in a disposable lab." onClose={() => setHelpOpen(false)} open={helpOpen} title="How to use AdversaryFlow">
         <ol className="help-list">
-          <li><span>1</span><div><strong>Choose a threat actor</strong><p>Load the actor’s documented ATT&amp;CK technique mappings.</p></div></li>
+          <li><span>1</span><div><strong>Pick any threat actor</strong><p>Load the actor’s documented ATT&amp;CK technique mappings.</p></div></li>
           <li><span>2</span><div><strong>Scope the engagement</strong><p>Limit platform, tactics, privilege, network activity, and risk.</p></div></li>
           <li><span>3</span><div><strong>Review and track</strong><p>Preview every action and record outcome and detection evidence.</p></div></li>
           <li><span>4</span><div><strong>Export the kit</strong><p>Download an offline, operator-gated package for the lab host.</p></div></li>
         </ol>
-        <div className="callout"><strong>Safety boundary</strong><p>The web service never runs attack commands, contacts a target, or acts as C2.</p></div>
+        <div className="callout"><strong>Safety boundary</strong><p>The web service never executes catalog commands, contacts a target, or acts as C2.</p></div>
+        <div className="dialog-actions"><button className="button button--primary" onClick={() => setHelpOpen(false)} type="button">Got it</button></div>
       </Dialog>
     </div>
   );

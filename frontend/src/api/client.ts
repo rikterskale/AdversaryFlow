@@ -76,8 +76,16 @@ export async function getWorkflow(stixId: string, domains: AttackDomain[]): Prom
   return parseWorkflow(await responseJson(await apiFetch(`/api/workflow/${encodeURIComponent(stixId)}?${query.toString()}`)));
 }
 
+export async function refreshAttackData(domains: AttackDomain[], csrfToken: string): Promise<void> {
+  const query = new URLSearchParams({ domains: domains.join(",") });
+  await responseJson(await apiFetch(`/api/refresh?${query.toString()}`, {
+    method: "POST",
+    headers: { "X-AdversaryFlow-CSRF": csrfToken },
+  }));
+}
+
 export async function prepareService(csrfToken: string): Promise<BootstrapResponse> {
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 15 * 60_000;
   let response = await apiFetch("/api/bootstrap");
   if (response.status === 503) {
     response = await apiFetch("/api/bootstrap", {

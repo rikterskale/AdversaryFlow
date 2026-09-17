@@ -9,11 +9,11 @@ export function LoadingState({ label, detail }: { label: string; detail: string 
   );
 }
 
-export function ErrorState({ title, message, onRetry }: { title: string; message: string; onRetry?: () => void }): JSX.Element {
+export function ErrorState({ title, message, onRetry, retryLabel = "Retry setup" }: { title: string; message: string; onRetry?: () => void; retryLabel?: string }): JSX.Element {
   return (
     <div className="error-state" role="alert">
       <div><strong>{title}</strong><p>{message}</p></div>
-      {onRetry ? <Button onClick={onRetry}>Try again</Button> : null}
+      {onRetry ? <Button onClick={onRetry}>{retryLabel}</Button> : null}
     </div>
   );
 }

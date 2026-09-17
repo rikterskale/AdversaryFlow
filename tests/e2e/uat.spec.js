@@ -314,6 +314,14 @@ test("J28 — the export screen summarises the finished plan", async ({ page }) 
   await expect(page.locator("#actionbarCtx")).toHaveText("Plan complete");
 });
 
+test("the export workspace has no accessibility violations", async ({ page }) => {
+  await toScope(page, { multiStage: true });
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
+
 async function exportAndRead(page, name) {
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name }).click();

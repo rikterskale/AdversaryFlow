@@ -1,7 +1,27 @@
+import type { ChangeEvent } from "react";
+
+import type { Actor } from "../../api/contract";
 import { Button } from "../../components/Button";
+import { ErrorState } from "../../components/Feedback";
 import { Icon } from "../../components/Icon";
 
-export function Welcome({ onBegin, ready }: { onBegin: () => void; ready: boolean }): JSX.Element {
+interface WelcomeProps {
+  onBegin: () => void;
+  onImport: (file: File) => Promise<void>;
+  onResume: () => void;
+  ready: boolean;
+  resumeActor: Actor | null;
+  setupError?: string;
+  onRetrySetup?: () => void;
+}
+
+export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setupError = "", onRetrySetup }: WelcomeProps): JSX.Element {
+  const importPlan = (event: ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void onImport(file);
+  };
+
   return (
     <section className="welcome-screen screen" aria-labelledby="welcome-title">
       <div className="welcome-glow" aria-hidden="true" />
@@ -10,8 +30,17 @@ export function Welcome({ onBegin, ready }: { onBegin: () => void; ready: boolea
         <h1 id="welcome-title">Turn a threat actor into an <span>end-to-end emulation plan</span></h1>
         <p className="welcome-lead">Build a guided, ATT&amp;CK-mapped workflow for detection validation—then export an operator-gated kit to use offline on a disposable lab host.</p>
         <div className="welcome-actions">
-          <Button disabled={!ready} onClick={onBegin} variant="primary">Begin emulation plan <Icon className="button-icon" name="arrow-right" /></Button>
-          <span>{ready ? "Live ATT&CK catalog ready" : "Preparing the catalog…"}</span>
+          <Button disabled={!ready && !setupError} onClick={onBegin} variant="primary">Begin emulation plan <Icon className="button-icon" name="arrow-right" /></Button>
+          <span>{setupError ? "Setup needs attention" : ready ? "Live ATT&CK catalog ready" : "Preparing the catalog…"}</span>
+        </div>
+        {setupError ? <ErrorState message={setupError} onRetry={onRetrySetup} title="Could not prepare ATT&CK data" /> : null}
+        <div className="resume-panel">
+          <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 plan. Imported commands are treated as untrusted high-risk content.</p></div>
+          <div className="resume-panel__actions">
+            {resumeActor ? <Button onClick={onResume} variant="secondary">Resume {resumeActor.name} plan</Button> : null}
+            <label className="button button--ghost import-button" htmlFor="importPlan"><Icon className="button-icon" name="file" /> Resume JSON plan</label>
+            <input accept="application/json,.json" className="sr-only" id="importPlan" onChange={importPlan} type="file" />
+          </div>
         </div>
       </div>
       <div className="boundary-card">

@@ -114,9 +114,9 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
               {platformOptions.map((option) => {
                 const selected = scope.commandPlatform === option.value;
                 return (
-                  <button aria-label={option.label} aria-pressed={selected} className={`platform-option ${selected ? "is-on" : ""}`} key={option.value} onClick={() => updateScope({ commandPlatform: option.value })} type="button">
+                  <button aria-label={option.label} aria-pressed={selected} className="platform-option" key={option.value} onClick={() => updateScope({ commandPlatform: option.value })} type="button">
                     <span className="platform-option__check"><Icon name="check" /></span>
-                    <strong>{option.label}</strong><span>{option.detail}</span>
+                    <strong className={selected ? "is-on" : ""}>{option.label}</strong><span>{option.detail}</span>
                   </button>
                 );
               })}
@@ -171,7 +171,7 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
             <div className="scope-panel__heading"><span className="panel-number">04</span><div><h2>Execution record</h2><p>Optional context stored with browser progress and exports. Do not enter credentials or secrets.</p></div></div>
             <div className="field-grid">
               <label htmlFor="recordOperator"><span>Operator or team</span><input autoComplete="off" id="recordOperator" maxLength={120} onChange={(event) => updateScope({ operator: event.target.value })} placeholder="Purple team" type="text" value={scope.operator} /></label>
-              <label htmlFor="recordTarget"><span>Disposable lab identifier</span><input autoComplete="off" id="recordTarget" maxLength={200} onChange={(event) => updateScope({ target: event.target.value })} placeholder="lab-host-01" type="text" value={scope.target} /></label>
+              <label htmlFor="recordTarget"><span>Target</span><input autoComplete="off" id="recordTarget" maxLength={200} onChange={(event) => updateScope({ target: event.target.value })} placeholder="Disposable lab identifier, for example lab-host-01" type="text" value={scope.target} /></label>
             </div>
           </section>
         </div>

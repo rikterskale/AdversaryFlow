@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-import type { Actor, AttackDomain } from "../api/contract";
+import type { Actor, AttackDomain, WorkflowResponse } from "../api/contract";
+import { evidenceFromImportedPlan, scopeFromImportedPlan, workflowFromImportedPlan, type PlanExport } from "../features/export/planContract";
 import { defaultScope, type ScopeSettings } from "../features/scope/scopeModel";
 import type { ExecutionEvidence } from "../features/review/evidence";
 
@@ -16,6 +17,7 @@ interface WizardState {
   scopeInitializedFor: string | null;
   evidenceKey: string | null;
   records: Record<string, ExecutionEvidence>;
+  importedWorkflow: WorkflowResponse | null;
   setStep: (step: WizardStep) => void;
   setDomains: (domains: AttackDomain[]) => void;
   selectActor: (actor: Actor | null) => void;
@@ -23,6 +25,8 @@ interface WizardState {
   updateScope: (patch: Partial<ScopeSettings>) => void;
   ensureEvidenceKey: (key: string) => void;
   updateEvidence: (techniqueId: string, patch: Partial<ExecutionEvidence>) => void;
+  importPlan: (plan: PlanExport) => void;
+  resetAfterRefresh: () => void;
   restart: () => void;
 }
 
@@ -46,7 +50,7 @@ export function consumeStorageWriteFailure(): boolean {
   return failed;
 }
 
-function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains" | "selectedActor" | "scope" | "scopeInitializedFor" | "evidenceKey" | "records"> {
+function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains" | "selectedActor" | "scope" | "scopeInitializedFor" | "evidenceKey" | "records" | "importedWorkflow"> {
   return {
     currentStep: 0,
     maxStep: 0,
@@ -56,6 +60,7 @@ function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains"
     scopeInitializedFor: null,
     evidenceKey: null,
     records: {},
+    importedWorkflow: null,
   };
 }
 
@@ -64,10 +69,10 @@ export const useWizardStore = create<WizardState>()(
     (set) => ({
       ...initialState(),
       setStep: (step) => set((state) => ({ currentStep: step, maxStep: Math.max(state.maxStep, step) as WizardStep })),
-      setDomains: (domains) => set({ domains, selectedActor: null, scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {}, currentStep: 1, maxStep: 1 }),
+      setDomains: (domains) => set({ domains, selectedActor: null, scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {}, importedWorkflow: null, currentStep: 1, maxStep: 1 }),
       selectActor: (actor) => set((state) => ({
         selectedActor: actor,
-        ...(actor?.stix_id !== state.selectedActor?.stix_id ? { scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {} } : {}),
+        ...(actor?.stix_id !== state.selectedActor?.stix_id ? { scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {}, importedWorkflow: null } : {}),
       })),
       initializeScope: (actorId, tactics) => set((state) => state.scopeInitializedFor === actorId
         ? state
@@ -87,6 +92,30 @@ export const useWizardStore = create<WizardState>()(
         };
         return { records: { ...state.records, [techniqueId]: next } };
       }),
+      importPlan: (plan) => {
+        const scope = scopeFromImportedPlan(plan);
+        set({
+          currentStep: 3,
+          maxStep: 4,
+          domains: [...plan.domains],
+          selectedActor: { ...plan.actor, aliases: [...plan.actor.aliases] },
+          scope,
+          scopeInitializedFor: plan.actor.stix_id,
+          evidenceKey: [plan.actor.stix_id, plan.domains.join("+"), plan.data_version, scope.commandPlatform].join("|"),
+          records: evidenceFromImportedPlan(plan),
+          importedWorkflow: workflowFromImportedPlan(plan),
+        });
+      },
+      resetAfterRefresh: () => set((state) => ({
+        currentStep: 1,
+        maxStep: 1,
+        selectedActor: state.selectedActor,
+        scope: defaultScope(),
+        scopeInitializedFor: null,
+        evidenceKey: null,
+        records: {},
+        importedWorkflow: null,
+      })),
       restart: () => set(initialState()),
     }),
     {
@@ -100,6 +129,7 @@ export const useWizardStore = create<WizardState>()(
         scopeInitializedFor: state.scopeInitializedFor,
         evidenceKey: state.evidenceKey,
         records: state.records,
+        importedWorkflow: state.importedWorkflow,
       }),
       storage: createJSONStorage(() => resilientStorage),
     },
