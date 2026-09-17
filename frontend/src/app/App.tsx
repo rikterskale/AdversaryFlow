@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { ApiError, getActors, getHealth, getSession, prepareService, setApiToken } from "../api/client";
+import { ApiError, getActors, getHealth, getSession, getWorkflow, prepareService, setApiToken } from "../api/client";
 import type { SessionResponse } from "../api/contract";
+import { Button } from "../components/Button";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
-import { ScopePlaceholder } from "../features/scope/ScopePlaceholder";
+import { PlanPlaceholder } from "../features/review/PlanPlaceholder";
+import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
 import { useWizardStore } from "../state/wizardStore";
 import { AppShell } from "./AppShell";
@@ -74,6 +76,15 @@ export function App(): JSX.Element {
     refetchInterval: 15_000,
   });
 
+  const workflowQuery = useQuery({
+    queryKey: ["workflow", selectedActor?.stix_id ?? "", ...domains],
+    queryFn: () => {
+      if (!selectedActor) throw new Error("Choose a threat actor before loading a workflow.");
+      return getWorkflow(selectedActor.stix_id, domains);
+    },
+    enabled: startupPhase === "ready" && Boolean(selectedActor) && currentStep >= 2,
+  });
+
   const connect = (token: string): void => {
     setApiToken(token);
     setAuthAttempted(true);
@@ -114,8 +125,14 @@ export function App(): JSX.Element {
         selectedActor={selectedActor}
       />
     );
+  } else if (workflowQuery.isPending || workflowQuery.isFetching) {
+    content = <section className="screen setup-screen"><LoadingState detail="Resolving mapped techniques and bounded catalog exercises." label={`Building ${selectedActor.name}'s lab plan…`} /></section>;
+  } else if (workflowQuery.error || !workflowQuery.data) {
+    content = <section className="screen setup-screen"><ErrorState message={workflowQuery.error?.message ?? "The workflow response was empty."} onRetry={() => { void workflowQuery.refetch(); }} title="Could not build the actor workflow" /><Button onClick={() => setStep(1)} variant="ghost"><span aria-hidden="true">←</span> Back to threat actors</Button></section>;
+  } else if (currentStep === 2) {
+    content = <ScopeScreen actor={selectedActor} onBack={() => setStep(1)} onBuild={() => setStep(3)} workflow={workflowQuery.data} />;
   } else {
-    content = <ScopePlaceholder actor={selectedActor} onBack={() => setStep(1)} />;
+    content = <PlanPlaceholder actor={selectedActor} onBack={() => setStep(2)} />;
   }
 
   return (

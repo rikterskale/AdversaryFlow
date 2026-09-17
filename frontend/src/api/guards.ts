@@ -5,6 +5,10 @@ import type {
   HealthPhase,
   HealthResponse,
   SessionResponse,
+  Command,
+  Technique,
+  WorkflowResponse,
+  WorkflowStage,
 } from "./contract";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,6 +55,81 @@ export function parseActors(value: unknown): ActorsResponse {
     domains: value.domains,
     data_version: value.data_version,
     version: value.version,
+  };
+}
+
+function isCommand(value: unknown): value is Command {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.platform === "string" &&
+    typeof value.command === "string" &&
+    typeof value.note === "string" &&
+    typeof value.cleanup === "string" &&
+    (value.risk === "none" || value.risk === "low" || value.risk === "medium" || value.risk === "high") &&
+    isStringArray(value.side_effects) &&
+    typeof value.requires_admin === "boolean" &&
+    typeof value.requires_network === "boolean" &&
+    isStringArray(value.network_targets) &&
+    isStringArray(value.prerequisites) &&
+    typeof value.expected_telemetry === "string" &&
+    typeof value.expected_output === "string" &&
+    typeof value.timeout_seconds === "number" &&
+    typeof value.rollback === "string" &&
+    typeof value.cleanup_required === "boolean" &&
+    typeof value.acknowledgment_required === "boolean"
+  );
+}
+
+function isTechnique(value: unknown): value is Technique {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.attack_id === "string" &&
+    typeof value.name === "string" &&
+    Array.isArray(value.commands) &&
+    value.commands.every(isCommand) &&
+    typeof value.command_source === "string" &&
+    (value.tactics === undefined || isStringArray(value.tactics)) &&
+    (value.platforms === undefined || isStringArray(value.platforms)) &&
+    (value.data_sources === undefined || isStringArray(value.data_sources))
+  );
+}
+
+function isWorkflowStage(value: unknown): value is WorkflowStage {
+  return (
+    isRecord(value) &&
+    typeof value.tactic === "string" &&
+    typeof value.title === "string" &&
+    Array.isArray(value.techniques) &&
+    value.techniques.every(isTechnique)
+  );
+}
+
+export function parseWorkflow(value: unknown): WorkflowResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.actor) ||
+    !isRecord(value.summary) ||
+    !Array.isArray(value.kill_chain) ||
+    !value.kill_chain.every((item) => isRecord(item) && typeof item.tactic === "string" && typeof item.title === "string") ||
+    !Array.isArray(value.stages) ||
+    !value.stages.every(isWorkflowStage) ||
+    !isRecord(value.metadata) ||
+    !isStringArray(value.metadata.domains) ||
+    typeof value.metadata.data_version !== "string" ||
+    typeof value.metadata.version !== "string"
+  ) {
+    throw new Error("The service returned an incomplete workflow.");
+  }
+  return {
+    actor: value.actor,
+    summary: value.summary,
+    kill_chain: value.kill_chain as { tactic: string; title: string }[],
+    stages: value.stages,
+    metadata: {
+      domains: value.metadata.domains,
+      data_version: value.metadata.data_version,
+      version: value.metadata.version,
+    },
   };
 }
 
