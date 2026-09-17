@@ -25,7 +25,7 @@ steps are reached:
 2. **Scope the engagement** — pick the command platform (Windows / Linux /
    macOS), toggle kill-chain stages on/off, include or drop pre-compromise
    tactics, and see a live plan preview update as you go.
-3. **Run & track the plan** — review structured risk, privilege, network,
+3. **Review & track the plan** — review structured risk, privilege, network,
    expected-telemetry, prerequisites, rollback, and cleanup metadata before
    copying a command. Record command result (ran / failed / skipped) separately
    from detection result (alerted / silent / blocked / not instrumented), plus
@@ -34,8 +34,9 @@ steps are reached:
    Progress autosaves in this browser; `j` / `k` move between techniques and
    `c` copies the focused command.
 4. **Export** — download a one-click **operator execution kit** containing a CSV
-   plan and self-contained PowerShell or Bash runner, or export **Markdown**,
-   schema-versioned **JSON**, or a commented **runbook**.
+   plan and self-contained PowerShell or Bash runner. Generate command-free
+   purple-team reports as **PDF** or **HTML**, preserve the schema-versioned
+   **JSON** evidence record, or export **Markdown** and a commented **runbook**.
 
 The execution kit is an offline handoff artifact. Direct catalog commands need
 no AdversaryFlow installation, Python, or network access. Bounded synthetic
@@ -73,32 +74,24 @@ Under the hood:
 
 ## Architecture
 
+AdversaryFlow is a local Flask service plus a React/TypeScript SPA. Flask owns
+the safety boundary, live STIX cache, catalog rebinding, diagnostics, reports,
+and offline-kit serialization. The browser owns the guided workflow,
+autosaved evidence, heatmap, and pre-copy review experience. There is no web
+service execution path.
+
+```text
+React + TypeScript SPA
+  │ same-origin JSON + CSRF token
+  ▼
+Flask planner API ──► live ATT&CK STIX cache
+  │                 └► bounded catalog + safety metadata
+  ├──► command-free HTML/PDF reports
+  └──► operator-gated offline ZIP ──► disposable lab host
 ```
-AdversaryFlow/
-├── backend/
-│   ├── app.py                       # Flask API + serves the frontend
-│   ├── attack_data.py               # live STIX download/cache + kill-chain indexing
-│   ├── command_catalog.py           # curated core library + tactic fallback
-│   ├── command_catalog_extended.py  # auto-merges the ext_part* files below
-│   ├── ext_helper.py                # shared helper for the part files
-│   ├── command_safety.py             # structured risk and cleanup metadata
-│   ├── lab_exercises.py              # 146 bounded exercises + evidence receipts
-│   ├── telemetry.py                  # independent endpoint/SIEM correlation CLI
-│   └── ext_part1..14.py              # technique-indexed lab exercises, one reviewable slice each
-├── frontend/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js              # actor picker, workflow render, exporters
-├── data/                   # legacy checkout cache location (git-ignored)
-├── docs/                   # install, operations, API, export, release guides
-├── schemas/                # versioned JSON export schema
-├── tests/                  # unit and contract tests
-├── pyproject.toml          # package metadata + adversaryflow command
-├── requirements.lock       # pinned runtime set
-├── requirements-dev.lock   # pinned lint/type tooling
-├── run.sh / run.ps1        # one-command launchers
-└── README.md
-```
+
+The full component map, data flows, trust boundaries, persistence model, and
+build pipeline are documented in [Architecture](docs/ARCHITECTURE.md).
 
 **Data source:** [`mitre-attack/attack-stix-data`](https://github.com/mitre-attack/attack-stix-data)
 (`master` tracks the latest ATT&CK release). Enterprise by default; ICS and
@@ -113,6 +106,8 @@ everyday use, remediation, recovery, upgrades, and support).
 The fastest supported path from a source checkout is Docker Compose:
 
 ```bash
+git clone https://github.com/rikterskale/AdversaryFlow.git
+cd AdversaryFlow
 docker compose up
 ```
 
@@ -125,7 +120,22 @@ STIX cache persists in the `adversaryflow-stix-cache` volume. Set
 `ADVERSARYFLOW_API_TOKEN` before startup only when you need a stable token.
 
 Stop with Ctrl+C. A later `docker compose up` is safe to rerun and reuses the
-cache. Native launchers remain supported alternatives:
+cache.
+
+For a safe first dry-run, open the printed URL, enter the printed token, and:
+
+1. Choose any ATT&CK actor or campaign.
+2. Keep the detected platform and default guardrails, then select **Build plan**.
+3. Review the heatmap and first technique card without copying a command.
+4. Select **Finish & export**, then download the PDF report or schema-versioned
+   JSON record.
+
+That completes the planner journey without executing anything. On a typical
+connected workstation it takes less than five minutes; the initial ATT&CK
+download is the only network-dependent step. See the exact copy/paste path in
+[Getting started](docs/GETTING_STARTED.md).
+
+Native launchers remain supported alternatives:
 
 Linux and macOS:
 
@@ -185,6 +195,8 @@ offline use, upgrades, and health behavior. Use the dedicated
 | `POST /api/refresh` | Force re-download of the live STIX feed |
 | `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
 | `GET /api/doctor` | Structured host self-test used by the GUI health panel |
+| `POST /api/execution-kit` | Catalog-rebound, operator-gated offline kit |
+| `POST /api/report/{format}` | Command-free HTML or PDF purple-team engagement report |
 
 Mutating endpoints require a same-origin request token, refreshes are
 serialized/rate-limited, and non-loopback binding requires explicit opt-in.
@@ -244,8 +256,8 @@ Run the local verification suite with:
 
 ```bash
 .venv/bin/python -m unittest discover --verbose
-node --check frontend/app.js
 bash -n install.sh run.sh
+npm run check:frontend
 npm run test:e2e
 ```
 

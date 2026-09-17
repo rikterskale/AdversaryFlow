@@ -29,6 +29,7 @@ ATT&CK STIX source.
 | `STIX cache integrity` is `FAIL` | A bundle is truncated, malformed, or does not match its recorded SHA-256 | Stop the service, preserve provenance if needed, run `adversaryflow cache-clear --yes`, then restart online to download a verified bundle. |
 | `Cache disk space` is `FAIL` | Less than 256 MiB is free on the cache filesystem | Free space or move `ADVERSARYFLOW_CACHE_DIR` / the Compose volume to a larger disk. |
 | `ATT&CK feed reachability` is `FAIL` | Offline mode, DNS/proxy/TLS trouble, or blocked GitHub raw content | If online updates are required, allow HTTPS to `raw.githubusercontent.com` and correct proxy/DNS/TLS settings. Otherwise use `--offline` only with a validated cache. |
+| `docker compose up` exits or restarts repeatedly | Docker is stopped, the host port is occupied, the cache volume is not writable, or the image build failed | Start Docker, run `docker compose ps` and `docker compose logs adversaryflow`, then follow the first reported failure. Use `ADVERSARYFLOW_PORT=5050` when port 5000 is occupied. |
 | GUI status says `setup needs attention` | Session creation, bootstrap, or actor loading failed | Open **System health**, follow the first failing required check, then choose **Retry setup**. |
 | `/api/live` is 200 but `/api/health` is 503 | The process is live but ATT&CK data is loading or failed | Read `phase` and `error` in `/api/health`; wait if loading, otherwise use the GUI self-test or `adversaryflow doctor`. |
 | Both `/api/live` and the GUI are unreachable | The service did not start, exited, or is on another port | Run `docker compose ps` or restart the native launcher. Confirm the printed URL and the port check. |
@@ -37,6 +38,7 @@ ATT&CK STIX source.
 | Mutation returns HTTP 403 | The same-origin request token is absent or the browser origin differs | Use the GUI, or fetch `/api/session` and send `X-AdversaryFlow-CSRF` from the same origin. |
 | Browser progress cannot be saved | Local storage is blocked, private, or full | Export schema-versioned JSON immediately, then restore it with **Resume JSON plan** in a storage-enabled profile. |
 | Execution-kit download fails | The live catalog changed, the request is too large, or the service rejected the plan | Keep the plan open, inspect the error toast and health panel, refresh only if necessary, then retry the download. The service rebinds commands to its catalog. |
+| HTML/PDF report download fails | The plan is incomplete, the request exceeded 5 MiB, or the catalog could not rebind a technique | Keep the plan open, inspect the error toast and **System health**, export JSON as a backup, then retry. Reports do not execute or include commands. |
 
 ## Safe recovery order
 

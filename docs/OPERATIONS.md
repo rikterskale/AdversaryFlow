@@ -73,8 +73,9 @@ stdout/stderr hashes, receipt digests, endpoint/SIEM references,
 operator/target context, notes, and cleanup verification are stored locally.
 Exercise receipts are self-reported; correlate their run IDs and timestamps
 with the endpoint or SIEM before treating execution as independently verified.
-Export a JSON plan for backup or handoff;
-the welcome screen can resume a schema 2.0 JSON plan. Imported commands are
+Export a schema 2.0 JSON plan for backup, handoff, or resume. The export screen
+also produces command-free HTML/PDF engagement reports with telemetry,
+detection mappings, evidence status, and coverage gaps. Imported commands are
 always elevated to high risk and require acknowledgment before copying.
 
 Do not put secrets in execution notes or exports.

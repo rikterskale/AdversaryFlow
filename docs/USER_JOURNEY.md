@@ -45,9 +45,10 @@ The AdversaryFlow web service **generates plans; it never executes commands**.
 It runs entirely on your own machine, binds to loopback by default, and stores nothing beyond a
 cached copy of the public ATT&CK bundle and your own progress in browser local
 storage. The finished plan exports as a one-click, offline operator kit with a
-CSV and standalone PowerShell/Bash runner, or as Markdown, schema-versioned JSON,
-or a text runbook. A JSON export can be loaded back in later to resume exactly
-where you left off.
+CSV and standalone PowerShell/Bash runner, as a command-free HTML or PDF
+engagement report, or as Markdown, schema-versioned JSON, and a commented text
+runbook. A JSON export can be loaded back in later to resume exactly where you
+left off.
 
 ---
 
@@ -250,15 +251,19 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 
 | Card | File | Contents |
 |---|---|---|
-| **Operator execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
+| **Download Windows execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
+| **PDF engagement report** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and prioritized gaps |
+| **HTML engagement report** | `AdversaryFlow_G0016_APT29_report.html` | The same command-free report as a self-contained, responsive browser document |
+| **Schema-versioned JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical schema 2.0 plan validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
-| **JSON** | `AdversaryFlow_G0016_APT29.json` | Schema 2.0 document validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
-| **Runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
+| **Commented runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
 
 The runbook remains a deliberately non-executable review format. The execution
 kit is the controlled runnable handoff: each step requires an operator decision,
 edited commands require a reason and second approval, and the destination runner
 writes HTML/Markdown reports plus CSV, JSON, JSONL, logs, and checksums.
+The service rebinds report content to the curated catalog before rendering the
+HTML and PDF engagement reports. Those reports never contain runnable commands.
 
 **Observable result:** the file downloads and a toast reads
 *"Exported AdversaryFlow_G0016_APT29.json"*. **Core value is delivered here.**
@@ -324,6 +329,7 @@ prefix.
 | Clipboard blocked by the browser | Toast *"Clipboard access was denied"* | Select the command text manually |
 | Local storage unavailable (private mode, quota) | Toast *"Progress can't be saved in this browser — export the plan to keep your records"*, shown once | Export the JSON plan to preserve records |
 | Operator execution kit generation fails | A toast shows the API's error message, or `Execution kit could not be generated (<status>)` when no JSON message is available; the export button is restored | Correct the reported plan/session problem and click the execution-kit card again |
+| HTML/PDF engagement report generation fails | A toast shows the API's error message, or `Report generation failed. Check service health and try again.` when no message is available; both report buttons are restored | Correct the reported plan/session problem and select the report format again |
 | Refresh while a plan is open | Confirm dialog *"Refreshing can change technique mappings and will rebuild the current plan. Continue?"*; on success, toast *"ATT&CK feed refreshed; the plan was rebuilt"* | Cancel to keep the current plan |
 | Refresh twice within 5 seconds | `429 refresh_rate_limited` | Wait a few seconds |
 | Refresh while another refresh or bootstrap runs | `409 refresh_in_progress` / `409 bootstrap_in_progress` | Wait for it to finish |
@@ -388,7 +394,7 @@ one envelope: `{"error", "message", "version"}`.
 | Command | Purpose | Result |
 |---|---|---|
 | `adversaryflow --version` | Identify the build | `AdversaryFlow 0.4.0` |
-| `adversaryflow doctor` | Check Python, frontend assets, dependencies, cache writability | JSON report; exit 0 healthy, exit 1 otherwise |
+| `adversaryflow doctor` | Check Python and Docker/Compose versions, service port, frontend/runtime dependencies, cache integrity and writability, disk capacity, and ATT&CK feed reachability | PASS/FAIL JSON with a human-readable fix for each check; exit 0 healthy, exit 1 otherwise |
 | `adversaryflow cache-status` | Inspect cache provenance per domain | JSON with path, age, freshness, ETag, SHA-256 |
 | `adversaryflow cache-refresh --domains enterprise` | Force a re-download | Prints refreshed cache status |
 | `adversaryflow cache-clear --yes` | Remove only AdversaryFlow cache files | `{"removed": [...]}`; without `--yes`: `Refusing to clear the cache without --yes.` exit 2 |
@@ -404,7 +410,7 @@ table directly.
 |---|---|---|---|---|
 | J1 | Install | `./install.sh` | Verifies Python ≥ 3.10, builds `.venv`, installs pinned sets, runs `doctor` | stdout contains `AdversaryFlow installed and verified.` and exit code is 0 |
 | J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.4.0` |
-| J3 | Diagnose | `adversaryflow doctor` | Emits a JSON health report | Exit code 0 and `"ok": true`, `"frontend_available": true`, `"cache_writable": true` |
+| J3 | Diagnose | `adversaryflow doctor` | Emits the host self-test used by the GUI health panel | Exit code 0 and `"ok": true`; every Python, Docker/Compose, port, dependency, cache, disk, and ATT&CK reachability check has PASS/FAIL state plus a human-readable fix |
 | J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.4.0: http://127.0.0.1:5000` |
 | J5 | Serve UI | `GET /` | Returns the wizard page | HTTP 200 and body contains `AdversaryFlow — Adversary Emulation Planner` |
 | J6 | Harden responses | Any HTTP request | Security headers applied | Response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-origin`, a non-empty `X-Request-ID`, and a CSP containing `frame-ancestors 'none'` |
@@ -430,9 +436,9 @@ table directly.
 | J26 | Record evidence | Set an outcome and expand **Execution proof** | Persists the note, cleanup state, run ID, timestamps, exit code, output hashes, evidence source, and telemetry references | `#progressCount` and `#progressPct` update to match the marked techniques; bounded-exercise receipts can be digest-verified and imported |
 | J27 | Persistence failure | Make local storage throw | Warns instead of silently dropping records | Toast reads `Progress can't be saved in this browser — export the plan to keep your records` |
 | J28 | Export screen | Click **Finish & export** | Renders step 4 | Heading *Your emulation plan is ready* with tiles Techniques, Stages, Runnable tests, Marked run |
-| J29 | Export JSON | Click **JSON** | Downloads a schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
+| J29 | Export JSON | Click **Schema-versioned JSON** | Downloads a schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
 | J30 | Export Markdown | Click **Markdown report** | Downloads a report | File named `AdversaryFlow_<ID>_<Name>.md` containing `# AdversaryFlow — <name> (<id>)`, a `### <technique>` section, and `**Outcome:**` |
-| J31 | Export runbook | Click **Runbook**, including after importing fields containing line breaks | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; every physical metadata, command, and cleanup line retains `REM` on Windows or `#` on Linux/macOS |
+| J31 | Export runbook | Click **Commented runbook**, including after importing fields containing line breaks | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; every physical metadata, command, and cleanup line retains `REM` on Windows or `#` on Linux/macOS |
 | J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with the actor heading, outcomes, and evidence notes restored; toast reads `Plan imported as high-risk; verify its data version before execution` |
 | J33 | Round-trip | Export with default scope, then resume that file | The plan is usable, not blocked by its own risk elevation | Command text is the real command (not `Restricted by scope`) and the runnable count is greater than 0 |
 | J34 | Reject a bad plan | Resume a file with an incomplete actor | Refuses and stays put | Toast reads `Plan actor record is invalid` and the welcome screen is still displayed |
@@ -461,9 +467,10 @@ table directly.
 | J57 | Enforce exact origins | Send a mutating request with a valid CSRF token and vary only `Origin` | Compares scheme, host, and effective port rather than hostname text alone | Foreign host, `null`, wrong scheme, and wrong port return HTTP 403 with `error = forbidden`; a matching `http://[::1]:5000` origin is accepted when the request host is `[::1]:5000` |
 | J58 | Propagate Windows install failures | Run `.\install.ps1` with each native child command forced to return non-zero | Stops at the failed step | PowerShell exits non-zero with the matching step-specific error and never prints `AdversaryFlow installed and verified.` |
 | J59 | Publish remote authentication | Inspect `docs/openapi.yaml` | Describes the bearer-token condition and unauthorised responses | `components.securitySchemes.BearerToken` is HTTP bearer; the contract says it is required for all `/api/*` requests in remote mode, and every documented API operation includes a `401` response |
-| J60 | Export operator kit | Click **Operator execution kit** | Builds and downloads a catalog-rebound ZIP without executing commands | HTTP 200 returns a `.zip` containing an `<actor>-plan.csv` and platform-matching `<actor>-execute.ps1` or `<actor>-execute.sh`; plans with bounded exercises also contain `AdversaryFlow-exercises.py`; the toast reads `Execution kit ready: <filename>` |
+| J60 | Export operator kit | Click **Download <platform> execution kit** | Builds and downloads a catalog-rebound ZIP without executing commands | HTTP 200 returns a `.zip` containing an `<actor>-plan.csv` and platform-matching `<actor>-execute.ps1` or `<actor>-execute.sh`; plans with bounded exercises also contain `AdversaryFlow-exercises.py`; the toast reads `Execution kit ready: <filename>` |
 | J61 | Recover from kit export failure | Make `POST /api/execution-kit` return an error, then click the execution-kit card | Surfaces the failure and restores the control | A toast shows the API message or the status fallback, no download begins, and the execution-kit button is enabled again |
 | J62 | Record a failing lab step | Run a downloaded kit whose step exits non-zero and whose cleanup also fails | Records the failure as evidence instead of aborting the session | The runner exits 0; `execution-summary.json`, `execution-results.csv`, `evidence-events.jsonl`, and `SHA256SUMS` are all written; the summary reports `failed_steps = 1` and `completed_steps = 0`; the CSV row records `exit_code = 3` and `cleanup_status = failed`; the generated runner contains no `set -e` statement |
+| J63 | Export engagement reports | Click **PDF engagement report**, then **HTML engagement report** | The server validates the schema 2.0 plan, rebinds catalog-owned mappings, and downloads command-free reports | Files named `AdversaryFlow_<ID>_<Name>_report.pdf` and `.html` contain planned techniques, expected telemetry, ATT&CK detection guidance, catalog Sigma references when present, evidence status, and coverage gaps; neither contains runnable commands |
 
 ---
 

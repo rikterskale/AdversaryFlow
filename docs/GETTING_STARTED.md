@@ -50,9 +50,13 @@ or install a GitHub Release wheel.
   same program. The examples below use the venv command so they work in any
   shell that has already run `./install.sh`.
 
-## Fast path: Docker Compose
+## Five-minute dry-run with Docker Compose
 
-You need Git and Docker with the Compose plugin. From a terminal:
+This is the recommended first-run path. It creates a plan and report without
+copying or executing any command. You need Git, a running Docker Engine or
+Docker Desktop, and the Compose v2 plugin (`docker compose version`).
+
+### Minute 0–1: clone and start
 
 ```bash
 git clone https://github.com/rikterskale/AdversaryFlow.git
@@ -60,8 +64,13 @@ cd AdversaryFlow
 docker compose up
 ```
 
-The build is reproducible from a digest-pinned Python image and hash-locked
-Python requirements. Wait for this banner, then open the printed URL:
+That final command builds and starts the full stack. It is safe to rerun. The
+image uses a digest-pinned Python base and hash-locked dependencies; no host
+Python or Node installation is required.
+
+### Minute 1–3: open the guided UI
+
+Wait for the success banner:
 
 ```text
 ============================================================
@@ -69,23 +78,59 @@ Python requirements. Wait for this banner, then open the printed URL:
   URL:       http://127.0.0.1:5000
   API token: <random per-start value> (generated for this container start)
   Next step: open the URL and enter this token when prompted.
+  First start: ATT&CK data downloads into the cache volume.
+  Authorized disposable labs only; see ACCEPTABLE_USE.md.
 ============================================================
 ```
 
-The UI is available immediately and reports ATT&CK setup progress; Compose
-marks the service healthy when the bearer-protected `/api/health` endpoint is
-ready. The first download is about 54 MB. It is validated and retained in the
-`adversaryflow-stix-cache` volume for later starts. The host port is reachable
-only through `127.0.0.1`, and the service still requires the printed token for
-all API calls.
+Open the printed URL and paste the printed token into the connection dialog.
+The page shows ATT&CK preparation progress. The first Enterprise bundle is
+about 54 MB, so a slow or filtered connection can extend this one-time step.
+The validated bundle persists in the `adversaryflow-stix-cache` volume.
 
-Build the first plan in the browser using the steps in
-[Build a plan in the wizard](#35-build-a-plan-in-the-wizard). Stop the stack
-with Ctrl+C. `docker compose up` is idempotent and reuses the cache.
+If the token scrolls away, open another terminal in the checkout and run:
 
-The numbered native-install path below remains supported for operators who do
-not use Docker. Its unauthenticated loopback `curl` examples apply to that
-native path; container API calls require the token printed in the Compose log.
+```bash
+docker compose logs adversaryflow
+```
+
+### Minute 3–5: create a no-execution plan
+
+1. Select **Begin emulation plan**.
+2. Choose any actor or campaign, then select **Continue**.
+3. On **Scope the engagement**, keep the detected command platform and all
+   three Allow-* guardrails off. The preview should show at least one runnable
+   technique. Select **Build plan**.
+4. On **Review and track plan**, inspect the coverage heatmap and the first
+   technique's risk, privilege, network, telemetry, and rollback preview. Do
+   not select **Copy command**; nothing needs to run for this dry-run.
+5. Select **Finish & export**, then download **PDF engagement report** and
+   **Schema-versioned JSON**.
+
+You are done when both files download and the page still reports `0` outcomes
+recorded. The PDF is a command-free coverage report. JSON is the canonical
+schema 2.0 plan that can resume the session later. AdversaryFlow has not
+contacted a target or executed a command.
+
+### Stop, restart, or run detached
+
+Press Ctrl+C in the Compose terminal. A later `docker compose up` reuses the
+cache. For background operation:
+
+```bash
+docker compose up --detach
+docker compose logs adversaryflow
+```
+
+Use `docker compose down` to remove the container and network while preserving
+the named cache volume. Do not add `--volumes` unless you deliberately want to
+remove the cached ATT&CK data.
+
+The host port remains loopback-only even though the container listens on its
+internal interface. The bearer token is still required because a non-loopback
+bind exists inside the Compose network. The numbered native path below remains
+supported; its unauthenticated loopback `curl` examples do not apply to the
+token-protected container API.
 
 ---
 
@@ -498,13 +543,17 @@ On **Finish & export**:
 
 | Control | What you get |
 | --- | --- |
-| **Download operator execution kit** | ZIP: catalog-rebound CSV + PowerShell (Windows) or Bash (Linux/macOS) runner. Bounded synthetic steps add `AdversaryFlow-exercises.py` (needs Python 3.10+ beside the kit). Direct steps need no AdversaryFlow install on the destination. |
+| **Download <platform> execution kit** | ZIP: catalog-rebound CSV + PowerShell (Windows) or Bash (Linux/macOS) runner. Bounded synthetic steps add `AdversaryFlow-exercises.py` (needs Python 3.10+ beside the kit). Direct steps need no AdversaryFlow install on the destination. |
+| **PDF engagement report** | Paginated, command-free purple-team report with planned techniques, expected telemetry, ATT&CK detection guidance, catalog-provided Sigma references, recorded evidence, and coverage gaps. |
+| **HTML engagement report** | Self-contained responsive version of the same command-free report. |
 | **Markdown report** | Human-readable plan, including **Outcome** and **Detection**. |
-| **JSON** | Schema 2.0; this is the file you resume later. |
-| **Runbook** | `.txt` with every command commented (`REM` / `#`). It is not a script. |
+| **Schema-versioned JSON** | Canonical schema 2.0 plan and evidence record; this is the file you resume later. |
+| **Commented Runbook** | `.txt` with every command commented (`REM` / `#`). It is not a script. |
 
-The service never runs kit commands. The destination runner asks run / edit
-/ skip / abort per step.
+The service rebinds kit and report metadata to its bounded catalog before
+serialization. It never runs kit commands. The destination runner asks run /
+edit / skip / abort per step. Reports deliberately omit runnable command
+bodies; Sigma links appear only when the catalog explicitly supplies one.
 
 ### Offline
 
