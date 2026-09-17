@@ -1,0 +1,5 @@
+{
+  "name": "@adversaryflow/frontend-source",
+  "private": true,
+  "type": "module"
+}
