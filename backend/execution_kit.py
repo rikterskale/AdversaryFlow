@@ -235,7 +235,7 @@ def _plan_needs_exercise_runner(plan: ExecutionPlan) -> bool:
     return any(step.supported and EXERCISE_RUNNER_NAME in step.planned_command for step in plan.steps)
 
 
-def normalize_plan(document: Any) -> ExecutionPlan:
+def normalize_plan(document: Any, *, require_executable: bool = True) -> ExecutionPlan:
     """Validate the browser's plan export and assign stable occurrence IDs."""
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
@@ -326,7 +326,7 @@ def normalize_plan(document: Any) -> ExecutionPlan:
                 timeout_seconds=timeout,
             ))
 
-    if not any(step.supported for step in rows):
+    if require_executable and not any(step.supported for step in rows):
         raise ExecutionKitError("Plan has no executable Windows, Linux, or macOS steps")
     canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return ExecutionPlan(

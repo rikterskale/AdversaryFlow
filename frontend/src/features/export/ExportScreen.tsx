@@ -19,6 +19,7 @@ interface ExportScreenProps {
 }
 
 type TextFormat = "json" | "markdown" | "runbook";
+type ReportFormat = "html" | "pdf";
 
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -31,13 +32,13 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function contentDispositionFilename(value: string | null): string {
+function contentDispositionFilename(value: string | null, fallback: string): string {
   const match = value?.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
-  if (!match?.[1]) return "AdversaryFlow_execution_kit.zip";
+  if (!match?.[1]) return fallback;
   try {
-    return decodeURIComponent(match[1].replace(/^"|"$/g, "")).replace(/^.*[\\/]/, "") || "AdversaryFlow_execution_kit.zip";
+    return decodeURIComponent(match[1].replace(/^"|"$/g, "")).replace(/^.*[\\/]/, "") || fallback;
   } catch {
-    return "AdversaryFlow_execution_kit.zip";
+    return fallback;
   }
 }
 
@@ -45,12 +46,16 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const scope = useWizardStore((state) => state.scope);
   const records = useWizardStore((state) => state.records);
   const [kitLoading, setKitLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
   const bundle = useMemo(() => buildExportBundle(actor, workflow, scope, records, domains), [actor, domains, records, scope, workflow]);
   const markedRun = bundle.plan.summary.marked_run.length;
   const platform = platformLabel(scope.commandPlatform);
   const runner = scope.commandPlatform === "windows" ? "PowerShell" : "Bash";
   const hasBoundedExercise = bundle.plan.stages.some((stage) => stage.techniques.some((technique) => technique.supported && technique.command.fidelity === "bounded_synthetic"));
+  const techniques = bundle.plan.stages.flatMap((stage) => stage.techniques);
+  const detectionAssessed = techniques.filter((technique) => technique.execution.detection_result && technique.execution.detection_result !== "not_assessed").length;
+  const coverageGaps = techniques.filter((technique) => !technique.supported || technique.command_source === "fallback").length;
 
   const exportText = (format: TextFormat): void => {
     try {
@@ -87,13 +92,34 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         body: JSON.stringify(bundle.plan),
       });
       if (!response.ok) await responseJson(response);
-      const filename = contentDispositionFilename(response.headers.get("Content-Disposition"));
+      const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), "AdversaryFlow_execution_kit.zip");
       downloadBlob(await response.blob(), filename);
       onNotice(`Execution kit ready: ${filename}`);
     } catch (error: unknown) {
       onNotice(error instanceof Error ? error.message : "Execution kit generation failed. Check service health and try again.");
     } finally {
       setKitLoading(false);
+    }
+  };
+
+  const exportReport = async (format: ReportFormat): Promise<void> => {
+    if (reportLoading) return;
+    setReportLoading(format);
+    try {
+      const response = await apiFetch(`/api/report/${format}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
+        body: JSON.stringify(bundle.plan),
+      });
+      if (!response.ok) await responseJson(response);
+      const fallback = `AdversaryFlow_${bundle.slug}_report.${format}`;
+      const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), fallback);
+      downloadBlob(await response.blob(), filename);
+      onNotice(`Engagement report ready: ${filename}`);
+    } catch (error: unknown) {
+      onNotice(error instanceof Error ? error.message : "Report generation failed. Check service health and try again.");
+    } finally {
+      setReportLoading(null);
     }
   };
 
@@ -148,20 +174,31 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
           </div>
         </div>
 
-        <aside className="export-secondary" aria-label="Planning exports">
-          <div className="export-section-heading"><div><p className="eyebrow">Planning artifacts</p><h2>Share, review, or resume</h2></div></div>
+        <aside className="export-secondary" aria-label="Reports and planning exports">
+          <div className="export-section-heading"><div><p className="eyebrow">Purple-team reporting</p><h2>Package outcomes and gaps</h2></div></div>
+          <div className="report-readiness" aria-label="Report coverage snapshot">
+            <div><strong>{markedRun}/{bundle.preview.runnable}</strong><span>Outcomes recorded</span></div>
+            <div><strong>{detectionAssessed}/{techniques.length}</strong><span>Detections assessed</span></div>
+            <div><strong>{coverageGaps}</strong><span>Catalog gaps</span></div>
+          </div>
           <div className="export-card-list">
-            <button className="export-card" onClick={() => exportText("markdown")} type="button"><span><Icon name="file" /></span><div><strong>Markdown report</strong><p>Human-readable plan, outcomes, detection results, evidence, and commands.</p></div><Icon name="download" /></button>
-            <button className="export-card" onClick={() => exportText("json")} type="button"><span><Icon name="file" /></span><div><strong>Schema-versioned JSON</strong><p>AdversaryFlow 2.0 record for validation, archival, and later resume.</p></div><Icon name="download" /></button>
-            <button className="export-card" onClick={() => exportText("runbook")} type="button"><span><Icon name="file" /></span><div><strong>Runbook</strong><p>Review-only text; every command and cleanup line remains commented.</p></div><Icon name="download" /></button>
+            <button className="export-card export-card--featured" disabled={Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("pdf"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "pdf" ? "Building PDF report…" : "PDF engagement report"}</strong><p>Leadership-ready coverage, telemetry, detection mappings, evidence, and prioritized gaps.</p></div><Icon name="download" /></button>
+            <button className="export-card" disabled={Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("html"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "html" ? "Building HTML report…" : "HTML engagement report"}</strong><p>Self-contained, responsive report for review in any modern browser.</p></div><Icon name="download" /></button>
+            <button className="export-card" onClick={() => exportText("json")} type="button"><span><Icon name="file" /></span><div><strong>Schema-versioned JSON</strong><p>Canonical AdversaryFlow 2.0 plan and evidence record for validation or resume.</p></div><Icon name="download" /></button>
+          </div>
+
+          <div className="secondary-exports">
+            <span>Additional planning artifacts</span>
+            <button onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
+            <button onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>
           </div>
 
           <div className="verification-card">
-            <div><Icon name="shield" /><span><strong>Verify before transfer</strong><small>Keep the extracted kit together</small></span></div>
+            <div><Icon name="shield" /><span><strong>Evidence-aware, command-free reports</strong><small>Catalog mappings are rebound before rendering</small></span></div>
             <ul>
-              <li>The service rebinds techniques to the live bounded catalog.</li>
-              <li>The runner refuses a missing or changed plan CSV.</li>
-              <li>Direct steps need no callback to this web service.</li>
+              <li>Reports never include runnable command bodies.</li>
+              <li>Sigma links appear only when the catalog supplies one.</li>
+              <li>JSON keeps the schema 2.0 source record intact.</li>
             </ul>
           </div>
           <Button className="summary-copy" onClick={() => { void copySummary(); }} variant="ghost"><Icon className="button-icon" name="copy" /> Copy plan summary</Button>

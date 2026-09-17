@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, attack_data, command_catalog, diagnostics, execution_kit
+from . import __version__, attack_data, command_catalog, diagnostics, execution_kit, reporting
 
 
 def _frontend_dir() -> str:
@@ -89,7 +89,7 @@ def begin_request() -> None:
     # Complete actor plans can contain hundreds of command records. Flask 3.1
     # supports a route-specific request cap, so unrelated endpoints retain the
     # much smaller global body limit.
-    if request.path == "/api/execution-kit":
+    if request.path == "/api/execution-kit" or request.path.startswith("/api/report/"):
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
         supplied = request.headers.get("Authorization", "")
@@ -345,6 +345,39 @@ def execution_kit_download():
         mimetype="application/zip",
         as_attachment=True,
         download_name=filename,
+        max_age=0,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.route("/api/report/<report_format>", methods=["POST"])
+def engagement_report_download(report_format: str):
+    """Build a command-free HTML or PDF purple-team engagement report."""
+    _require_csrf()
+    if report_format not in {"html", "pdf"}:
+        abort(404, description="Engagement reports are available as HTML or PDF")
+    document = request.get_json(silent=True)
+    if document is None:
+        abort(400, description="A JSON AdversaryFlow plan is required")
+    try:
+        report = reporting.build_report(document)
+        if report_format == "html":
+            content = reporting.render_html(report)
+            mimetype = "text/html"
+        else:
+            content = reporting.render_pdf(report)
+            mimetype = "application/pdf"
+    except reporting.ReportError as exc:
+        abort(400, description=str(exc))
+    _log_event("engagement_report_generated", format=report_format,
+               platform=document.get("scope", {}).get("command_platform"), size_bytes=len(content))
+    response = send_file(
+        io.BytesIO(content),
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=reporting.report_filename(report, report_format),
         max_age=0,
     )
     response.headers["Cache-Control"] = "no-store"

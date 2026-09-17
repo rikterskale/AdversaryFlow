@@ -38,12 +38,13 @@ class SchemaTests(unittest.TestCase):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
         self.assertIn("/api/session:", contract)
         self.assertIn("/api/bootstrap:", contract)
+        self.assertIn("/api/report/{report_format}:", contract)
         self.assertIn('"403"', contract)
 
     def test_openapi_documents_conditional_bearer_auth_and_every_401(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
         self.assertIn("security:\n  - {}\n  - BearerToken: []", contract)
-        self.assertEqual(contract.count('"401"'), 10)
+        self.assertEqual(contract.count('"401"'), 11)
 
     def test_openapi_command_contract_matches_the_plan_schema(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")

@@ -531,11 +531,23 @@ main { width: 100%; }
 .export-card-list { display: grid; gap: 8px; }
 .export-card { width: 100%; min-height: 80px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface); transition: .18s ease; }
 .export-card:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); transform: translateX(2px); }
+.export-card:disabled { cursor: wait; opacity: .68; transform: none; }
+.export-card--featured { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 7%, var(--surface)), var(--surface)); }
 .export-card > span { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 8px; background: var(--surface-soft); color: var(--text-muted); }
 .export-card > span svg { width: 18px; height: 18px; }
 .export-card > svg { width: 15px; height: 15px; color: var(--primary); }
 .export-card strong { display: block; font-size: 11px; }
 .export-card p { margin: 2px 0 0; color: var(--text-subtle); font-size: 9px; line-height: 1.45; }
+.report-readiness { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.report-readiness > div { min-width: 0; border: 1px solid var(--border); border-radius: 9px; padding: 9px; background: var(--surface-soft); }
+.report-readiness strong, .report-readiness span { display: block; }
+.report-readiness strong { font-size: 14px; letter-spacing: -.02em; }
+.report-readiness span { margin-top: 2px; color: var(--text-subtle); font-size: 7px; line-height: 1.35; text-transform: uppercase; letter-spacing: .05em; }
+.secondary-exports { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 14px; }
+.secondary-exports > span { grid-column: 1 / -1; color: var(--text-subtle); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.secondary-exports button { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; background: transparent; color: var(--text-muted); font-size: 8px; font-weight: 700; }
+.secondary-exports button:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); color: var(--text); }
+.secondary-exports svg { width: 12px; height: 12px; color: var(--primary); }
 .verification-card { margin-top: 16px; border: 1px solid color-mix(in srgb, var(--warning) 25%, var(--border)); border-radius: 10px; padding: 14px; background: color-mix(in srgb, var(--warning) 4%, var(--surface)); }
 .verification-card > div { display: flex; align-items: center; gap: 9px; }
 .verification-card > div > svg { width: 22px; height: 22px; color: var(--warning); }

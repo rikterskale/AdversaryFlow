@@ -97,6 +97,12 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("buildExportBundle", self.source)
         self.assertIn("Download ${platform} execution kit", self.source)
 
+    def test_purple_team_reports_are_available_in_every_required_format(self):
+        self.assertIn('/api/report/${format}', self.source)
+        self.assertIn("PDF engagement report", self.source)
+        self.assertIn("HTML engagement report", self.source)
+        self.assertIn("Schema-versioned JSON", self.source)
+
     def test_production_assets_are_emitted(self):
         self.assertIn('<div id="root"></div>', self.html)
         self.assertIn('src="/app.js"', self.html)

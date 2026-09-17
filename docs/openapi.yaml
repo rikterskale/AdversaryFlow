@@ -155,6 +155,43 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
+  /api/report/{report_format}:
+    post:
+      summary: Generate a command-free purple-team engagement report
+      description: Rebinds techniques to the live bounded catalog, then renders expected telemetry, ATT&CK detection guidance, catalog-provided Sigma references, recorded outcomes, and coverage gaps. The report never contains runnable command bodies and the service does not execute commands. Use the existing schema-versioned plan export for JSON.
+      parameters:
+        - name: report_format
+          in: path
+          required: true
+          schema: { enum: [html, pdf] }
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [schema_version, tool, actor, scope, execution_context, stages]
+              properties:
+                schema_version: { const: "2.0" }
+                tool: { const: AdversaryFlow }
+                actor: { type: object }
+                scope: { type: object }
+                execution_context: { type: object }
+                stages: { type: array, minItems: 1, maxItems: 32 }
+      responses:
+        "200":
+          description: Downloadable HTML or PDF engagement report
+          content:
+            text/html:
+              schema: { type: string }
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
   /api/refresh:
     post:
       summary: Refresh selected ATT&CK domains and rebuild their index

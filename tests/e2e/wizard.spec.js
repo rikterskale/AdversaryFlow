@@ -122,6 +122,18 @@ async function interceptApi(page, commands = [command]) {
     headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor_Windows.zip"' },
     body: Buffer.from("fixture execution kit"),
   }));
+  await page.route("**/api/report/html", route => route.fulfill({
+    status: 200,
+    contentType: "text/html",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor_report.html"' },
+    body: "<!doctype html><title>Fixture engagement report</title>",
+  }));
+  await page.route("**/api/report/pdf", route => route.fulfill({
+    status: 200,
+    contentType: "application/pdf",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor_report.pdf"' },
+    body: Buffer.from("%PDF-1.7 fixture"),
+  }));
 }
 
 async function interceptDoctor(page) {
@@ -292,6 +304,25 @@ test("operator execution kit is a one-click portable download", async ({ page })
   await page.getByRole("button", { name: /Download Windows execution kit/ }).click();
   const artifact = await download;
   expect(artifact.suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_Windows.zip");
+});
+
+test("purple-team reports export catalog-rebound HTML and PDF artifacts", async ({ page }) => {
+  await interceptApi(page);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByLabel("Outcome for T1033").selectOption("passed");
+  await page.getByLabel("Detection for T1033").selectOption("alerted");
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  await expect(page.getByLabel("Report coverage snapshot")).toContainText("1/1");
+
+  const htmlDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: /HTML engagement report/ }).click();
+  expect((await htmlDownload).suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_report.html");
+
+  const pdfDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: /PDF engagement report/ }).click();
+  expect((await pdfDownload).suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_report.pdf");
+  await expect(page.getByRole("status").filter({ hasText: "Engagement report ready:" })).toBeVisible();
 });
 
 test("a bounded exercise receipt is digest-verified and exported as execution proof", async ({ page }) => {

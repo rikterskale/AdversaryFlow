@@ -19,6 +19,8 @@ node_modules/
 playwright-report/
 test-results/
 .audit-cache/
+tmp/pdfs/*.pdf
+tmp/pdfs/*.png
 
 # Lint and type-checker caches (both tools also self-ignore, but be explicit)
 .mypy_cache/
