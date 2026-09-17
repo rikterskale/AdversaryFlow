@@ -23,7 +23,8 @@ technique. The web service **does not execute catalog commands**. You copy a
 command (or hand an operator an offline kit) and run it only on a lab host
 you are authorized to test.
 
-Install from a source checkout or a GitHub Release wheel.
+Install from a source checkout with Docker Compose, use the native launchers,
+or install a GitHub Release wheel.
 
 ## Safety (read before any command)
 
@@ -49,9 +50,46 @@ Install from a source checkout or a GitHub Release wheel.
   same program. The examples below use the venv command so they work in any
   shell that has already run `./install.sh`.
 
+## Fast path: Docker Compose
+
+You need Git and Docker with the Compose plugin. From a terminal:
+
+```bash
+git clone https://github.com/rikterskale/AdversaryFlow.git
+cd AdversaryFlow
+docker compose up
+```
+
+The build is reproducible from a digest-pinned Python image and hash-locked
+Python requirements. Wait for this banner, then open the printed URL:
+
+```text
+============================================================
+  AdversaryFlow container configured successfully
+  URL:       http://127.0.0.1:5000
+  API token: <random per-start value> (generated for this container start)
+  Next step: open the URL and enter this token when prompted.
+============================================================
+```
+
+The UI is available immediately and reports ATT&CK setup progress; Compose
+marks the service healthy when the bearer-protected `/api/health` endpoint is
+ready. The first download is about 54 MB. It is validated and retained in the
+`adversaryflow-stix-cache` volume for later starts. The host port is reachable
+only through `127.0.0.1`, and the service still requires the printed token for
+all API calls.
+
+Build the first plan in the browser using the steps in
+[Build a plan in the wizard](#35-build-a-plan-in-the-wizard). Stop the stack
+with Ctrl+C. `docker compose up` is idempotent and reuses the cache.
+
+The numbered native-install path below remains supported for operators who do
+not use Docker. Its unauthenticated loopback `curl` examples apply to that
+native path; container API calls require the token printed in the Compose log.
+
 ---
 
-## 1. Check the machine
+## 1. Check the machine for a native install
 
 You need **Git** and **Python 3.10 or newer**.
 

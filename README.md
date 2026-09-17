@@ -110,7 +110,22 @@ New operators should follow the copy/paste handbook
 [Getting started](docs/GETTING_STARTED.md) (install, first verified PoC,
 everyday use, remediation, recovery, upgrades, and support).
 
-The supported path is a source checkout:
+The fastest supported path from a source checkout is Docker Compose:
+
+```bash
+docker compose up
+```
+
+The startup banner prints <http://127.0.0.1:5000>, a per-start API token,
+and the exact next step. Enter that token when the browser asks for it. The
+host port is published on loopback only, the service still enforces its
+non-loopback bearer-token gate inside the container, and the validated ATT&CK
+STIX cache persists in the `adversaryflow-stix-cache` volume. Set
+`ADVERSARYFLOW_PORT` to choose another host port; set
+`ADVERSARYFLOW_API_TOKEN` before startup only when you need a stable token.
+
+Stop with Ctrl+C. A later `docker compose up` is safe to rerun and reuses the
+cache. Native launchers remain supported alternatives:
 
 Linux and macOS:
 
@@ -124,7 +139,7 @@ Windows PowerShell:
 .\run.ps1
 ```
 
-The launcher opens <http://127.0.0.1:5000> when ready. The first enterprise
+The native launcher opens <http://127.0.0.1:5000> when ready. The first enterprise
 launch downloads and validates approximately 54 MB of STIX data in the
 background while the UI reports progress. Later starts do not reinstall
 dependencies. Use **↻ Refresh feed** (or

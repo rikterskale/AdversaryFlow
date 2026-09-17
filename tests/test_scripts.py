@@ -210,7 +210,7 @@ class LauncherScriptTests(unittest.TestCase):
         self.root = Path(self.directory.name)
 
     def test_posix_scripts_are_valid_bash(self):
-        for name in ("install.sh", "run.sh"):
+        for name in ("install.sh", "run.sh", "docker/entrypoint.sh"):
             result = subprocess.run(
                 [BASH, "-n", str(ROOT / name)], capture_output=True, text=True, check=False
             )

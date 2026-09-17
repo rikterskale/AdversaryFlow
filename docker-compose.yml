@@ -1,0 +1,32 @@
+name: adversaryflow
+
+services:
+  adversaryflow:
+    image: adversaryflow:0.4.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ADVERSARYFLOW_API_TOKEN: "${ADVERSARYFLOW_API_TOKEN:-}"
+      ADVERSARYFLOW_CACHE_DIR: /var/lib/adversaryflow/cache
+      ADVERSARYFLOW_LOG_LEVEL: "${ADVERSARYFLOW_LOG_LEVEL:-info}"
+      ADVERSARYFLOW_PUBLIC_URL: "http://127.0.0.1:${ADVERSARYFLOW_PORT:-5000}"
+    ports:
+      - "127.0.0.1:${ADVERSARYFLOW_PORT:-5000}:5000"
+    volumes:
+      - adversaryflow-stix-cache:/var/lib/adversaryflow/cache
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run/adversaryflow:rw,noexec,nosuid,size=64k,mode=0700,uid=10001,gid=10001
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+volumes:
+  adversaryflow-stix-cache:
+    name: adversaryflow-stix-cache
