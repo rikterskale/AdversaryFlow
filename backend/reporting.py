@@ -6,8 +6,10 @@ command bodies and cannot execute anything.
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import io
+import json
 import re
 import textwrap
 from dataclasses import dataclass
@@ -32,6 +34,37 @@ class SigmaReference:
 
 
 @dataclass(frozen=True)
+class TelemetryAcceptance:
+    technique_id: str
+    scenario: str
+    activity_event_types: Tuple[str, ...]
+    minimum_activity_events: int
+    requirements: Tuple[str, ...]
+    limitation: str
+
+
+@dataclass(frozen=True)
+class ReportExecution:
+    outcome: str
+    updated_at: str
+    operator: str
+    target: str
+    notes: str
+    cleanup_completed: bool | None
+    run_id: str
+    started_at: str
+    completed_at: str
+    exit_code: int | None
+    stdout_sha256: str
+    stderr_sha256: str
+    receipt_sha256: str
+    receipt_verified: bool | None
+    telemetry_references: Tuple[str, ...]
+    evidence_source: str
+    detection_result: str
+
+
+@dataclass(frozen=True)
 class ReportTechnique:
     sequence: int
     tactic: str
@@ -45,14 +78,31 @@ class ReportTechnique:
     fidelity: str
     risk: str
     expected_telemetry: str
+    telemetry_acceptance: TelemetryAcceptance | None
     data_sources: Tuple[str, ...]
     detection_guidance: str
     sigma_references: Tuple[SigmaReference, ...]
-    outcome: str
-    detection_result: str
-    evidence_source: str
-    evidence_notes: str
-    telemetry_references: Tuple[str, ...]
+    execution: ReportExecution
+
+    @property
+    def outcome(self) -> str:
+        return self.execution.outcome
+
+    @property
+    def detection_result(self) -> str:
+        return self.execution.detection_result
+
+    @property
+    def evidence_source(self) -> str:
+        return self.execution.evidence_source
+
+    @property
+    def evidence_notes(self) -> str:
+        return self.execution.notes
+
+    @property
+    def telemetry_references(self) -> Tuple[str, ...]:
+        return self.execution.telemetry_references
 
 
 @dataclass(frozen=True)
@@ -64,35 +114,88 @@ class CoverageGap:
 
 
 @dataclass(frozen=True)
+class ReportScope:
+    command_platform: str
+    include_pre: bool
+    curated_only: bool
+    allow_network: bool
+    allow_admin: bool
+    allow_high_risk: bool
+    stages: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CoverageSummary:
+    occurrences: int
+    unique_techniques: int
+    supported: int
+    unsupported: int
+    curated: int
+    fallback: int
+    outcome_not_run: int
+    outcome_passed: int
+    outcome_failed: int
+    outcome_skipped: int
+    detection_not_assessed: int
+    detection_alerted: int
+    detection_blocked: int
+    detection_silent: int
+    detection_not_instrumented: int
+    expected_telemetry_mapped: int
+    attack_detection_mapped: int
+    sigma_mapped: int
+
+    @property
+    def detected(self) -> int:
+        """Positive control results without collapsing their recorded state."""
+        return self.detection_alerted + self.detection_blocked
+
+
+@dataclass(frozen=True)
 class EngagementReport:
+    schema_version: str
+    tool_version: str
+    domains: Tuple[str, ...]
+    actor_stix_id: str
     actor_id: str
     actor_name: str
+    actor_type: str
+    actor_aliases: Tuple[str, ...]
     actor_description: str
+    actor_technique_count: int
     generated: str
-    report_generated: str
     data_version: str
     platform: str
+    scope: ReportScope
     operator: str
     target: str
+    execution_started_at: str
+    execution_completed_at: str
     plan_sha256: str
     techniques: Tuple[ReportTechnique, ...]
+    coverage: CoverageSummary
     gaps: Tuple[CoverageGap, ...]
 
     @property
+    def report_generated(self) -> str:
+        """Compatibility alias for renderers; report output adds no wall-clock time."""
+        return self.generated
+
+    @property
     def unique_techniques(self) -> int:
-        return len({item.technique_id for item in self.techniques})
+        return self.coverage.unique_techniques
 
     @property
     def recorded(self) -> int:
-        return sum(item.outcome != "not_run" for item in self.techniques)
+        return self.coverage.occurrences - self.coverage.outcome_not_run
 
     @property
     def detection_assessed(self) -> int:
-        return sum(item.detection_result != "not_assessed" for item in self.techniques)
+        return self.coverage.occurrences - self.coverage.detection_not_assessed
 
     @property
     def alerted(self) -> int:
-        return sum(item.detection_result == "alerted" for item in self.techniques)
+        return self.coverage.detection_alerted
 
 
 def _text(value: Any, *, maximum: int = 10_000) -> str:
@@ -102,7 +205,7 @@ def _text(value: Any, *, maximum: int = 10_000) -> str:
 
 
 def _text_list(value: Any, *, maximum_items: int = 100, maximum: int = 2_000) -> Tuple[str, ...]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return ()
     cleaned = (_text(item, maximum=maximum) for item in value[:maximum_items])
     return tuple(dict.fromkeys(item for item in cleaned if item))
@@ -114,34 +217,33 @@ def _safe_https_url(value: Any) -> str:
     return url if parsed.scheme == "https" and bool(parsed.netloc) else ""
 
 
-def _sigma_references(command: Mapping[str, Any]) -> Tuple[SigmaReference, ...]:
-    """Read optional catalog-provided Sigma references without inventing mappings."""
-    candidates: Any = command.get("sigma_rules")
-    if candidates is None:
-        candidates = command.get("sigma")
-    if candidates is None:
-        candidates = command.get("detection_rules")
-    if not isinstance(candidates, list):
-        return ()
-    references: List[SigmaReference] = []
-    seen = set()
-    for candidate in candidates[:50]:
-        if isinstance(candidate, str):
-            url = _safe_https_url(candidate)
-            label = "Sigma rule"
-        elif isinstance(candidate, dict):
-            url = _safe_https_url(candidate.get("url") or candidate.get("reference"))
-            label = _text(candidate.get("title") or candidate.get("name") or candidate.get("id"), maximum=300) or "Sigma rule"
-        else:
-            continue
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        references.append(SigmaReference(label=label, url=url))
-    return tuple(references)
+def _optional_bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
 
 
-def _evidence(technique: Mapping[str, Any]) -> Tuple[str, str, str, str, Tuple[str, ...]]:
+def _optional_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _digest(value: Any) -> str:
+    text = _text(value, maximum=64)
+    return text.lower() if re.fullmatch(r"[a-fA-F0-9]{64}", text) else ""
+
+
+def _date_time(value: Any) -> str:
+    text = _text(value, maximum=100)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return text
+
+
+def _evidence(technique: Mapping[str, Any]) -> ReportExecution:
     raw = technique.get("execution")
     evidence = raw if isinstance(raw, dict) else {}
     outcome = _text(evidence.get("outcome"), maximum=30)
@@ -153,7 +255,47 @@ def _evidence(technique: Mapping[str, Any]) -> Tuple[str, str, str, str, Tuple[s
     source = _text(evidence.get("evidence_source"), maximum=60)
     notes = _text(evidence.get("notes"), maximum=500)
     telemetry = _text_list(evidence.get("telemetry_refs"), maximum_items=20, maximum=500)
-    return outcome, detection, source, notes, telemetry
+    return ReportExecution(
+        outcome=outcome,
+        updated_at=_date_time(evidence.get("updated_at")),
+        operator=_text(evidence.get("operator"), maximum=120),
+        target=_text(evidence.get("target"), maximum=200),
+        notes=notes,
+        cleanup_completed=_optional_bool(evidence.get("cleanup_completed")),
+        run_id=_text(evidence.get("run_id"), maximum=128),
+        started_at=_date_time(evidence.get("started_at")),
+        completed_at=_date_time(evidence.get("completed_at")),
+        exit_code=_optional_int(evidence.get("exit_code")),
+        stdout_sha256=_digest(evidence.get("stdout_sha256")),
+        stderr_sha256=_digest(evidence.get("stderr_sha256")),
+        receipt_sha256=_digest(evidence.get("receipt_sha256")),
+        receipt_verified=_optional_bool(evidence.get("receipt_verified")),
+        telemetry_references=telemetry,
+        evidence_source=source,
+        detection_result=detection,
+    )
+
+
+def _telemetry_acceptance(command: Mapping[str, Any]) -> TelemetryAcceptance | None:
+    raw = command.get("telemetry_acceptance")
+    if not isinstance(raw, dict):
+        return None
+    technique_id = _text(raw.get("technique_id"), maximum=64)
+    scenario = _text(raw.get("scenario"), maximum=200)
+    activity_types = _text_list(raw.get("activity_event_types"), maximum_items=100, maximum=200)
+    requirements = _text_list(raw.get("requirements"), maximum_items=100, maximum=2_000)
+    minimum = _optional_int(raw.get("minimum_activity_events"))
+    limitation = _text(raw.get("limitation"), maximum=2_000)
+    if not technique_id or not scenario or not activity_types or not requirements or minimum is None or minimum < 1 or not limitation:
+        return None
+    return TelemetryAcceptance(
+        technique_id=technique_id,
+        scenario=scenario,
+        activity_event_types=activity_types,
+        minimum_activity_events=minimum,
+        requirements=requirements,
+        limitation=limitation,
+    )
 
 
 def _coverage_gaps(techniques: Iterable[ReportTechnique]) -> Tuple[CoverageGap, ...]:
@@ -180,10 +322,58 @@ def _coverage_gaps(techniques: Iterable[ReportTechnique]) -> Tuple[CoverageGap, 
         if not item.expected_telemetry:
             gaps.append(CoverageGap("Telemetry mapping", item.technique_id, item.technique_name,
                                     "The catalog does not declare expected telemetry for this technique."))
-        if not item.detection_guidance and not item.sigma_references:
-            gaps.append(CoverageGap("Detection mapping", item.technique_id, item.technique_name,
-                                    "No ATT&CK detection guidance or catalog Sigma reference is mapped."))
+        if not item.detection_guidance:
+            gaps.append(CoverageGap("ATT&CK detection mapping", item.technique_id, item.technique_name,
+                                    "The exported ATT&CK record does not contain detection guidance."))
+        if not item.sigma_references:
+            gaps.append(CoverageGap("Sigma mapping", item.technique_id, item.technique_name,
+                                    "The catalog does not carry a Sigma rule reference for this technique."))
     return tuple(gaps)
+
+
+def _coverage_summary(techniques: Sequence[ReportTechnique]) -> CoverageSummary:
+    return CoverageSummary(
+        occurrences=len(techniques),
+        unique_techniques=len({item.technique_id for item in techniques}),
+        supported=sum(item.supported for item in techniques),
+        unsupported=sum(not item.supported for item in techniques),
+        curated=sum(item.command_source == "curated" for item in techniques),
+        fallback=sum(item.command_source == "fallback" for item in techniques),
+        outcome_not_run=sum(item.outcome == "not_run" for item in techniques),
+        outcome_passed=sum(item.outcome == "passed" for item in techniques),
+        outcome_failed=sum(item.outcome == "failed" for item in techniques),
+        outcome_skipped=sum(item.outcome == "skipped" for item in techniques),
+        detection_not_assessed=sum(item.detection_result == "not_assessed" for item in techniques),
+        detection_alerted=sum(item.detection_result == "alerted" for item in techniques),
+        detection_blocked=sum(item.detection_result == "blocked" for item in techniques),
+        detection_silent=sum(item.detection_result == "silent" for item in techniques),
+        detection_not_instrumented=sum(item.detection_result == "not_instrumented" for item in techniques),
+        expected_telemetry_mapped=sum(bool(item.expected_telemetry) for item in techniques),
+        attack_detection_mapped=sum(bool(item.detection_guidance) for item in techniques),
+        sigma_mapped=sum(bool(item.sigma_references) for item in techniques),
+    )
+
+
+def _execution_window(techniques: Sequence[ReportTechnique]) -> Tuple[str, str]:
+    def ordered(values: Iterable[str]) -> List[Tuple[datetime, str]]:
+        result = []
+        for value in values:
+            if not value:
+                continue
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            result.append((parsed.astimezone(timezone.utc), value))
+        return sorted(result, key=lambda item: item[0])
+
+    starts = ordered(item.execution.started_at for item in techniques)
+    completions = ordered(item.execution.completed_at for item in techniques)
+    return (starts[0][1] if starts else "", completions[-1][1] if completions else "")
+
+
+def _source_plan_sha256(document: Mapping[str, Any]) -> str:
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def build_report(document: Mapping[str, Any]) -> EngagementReport:
@@ -209,7 +399,6 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
             step_index += 1
             command = technique.get("command")
             command = command if isinstance(command, dict) else {}
-            outcome, detection, source, notes, telemetry_refs = _evidence(technique)
             report_rows.append(ReportTechnique(
                 sequence=step.sequence,
                 tactic=step.tactic,
@@ -223,30 +412,52 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
                 fidelity=step.fidelity,
                 risk=step.risk,
                 expected_telemetry=step.expected_telemetry,
+                telemetry_acceptance=_telemetry_acceptance(command),
                 data_sources=_text_list(technique.get("data_sources")),
                 detection_guidance=_text(technique.get("detection")),
-                sigma_references=_sigma_references(command),
-                outcome=outcome,
-                detection_result=detection,
-                evidence_source=source,
-                evidence_notes=notes,
-                telemetry_references=telemetry_refs,
+                # The current catalog declares no Sigma-reference field. Keep
+                # this empty until such metadata is added to the catalog and
+                # the versioned export contract explicitly.
+                sigma_references=(),
+                execution=_evidence(technique),
             ))
     techniques = tuple(report_rows)
     if not techniques:
         raise ReportError("Plan must contain at least one technique")
+    raw_scope = rebound.get("scope")
+    scope = raw_scope if isinstance(raw_scope, dict) else {}
+    started_at, completed_at = _execution_window(techniques)
+    coverage = _coverage_summary(techniques)
     return EngagementReport(
+        schema_version=_text(rebound.get("schema_version"), maximum=20),
+        tool_version=_text(rebound.get("tool_version"), maximum=100),
+        domains=_text_list(rebound.get("domains"), maximum_items=3, maximum=20),
+        actor_stix_id=_text(actor.get("stix_id"), maximum=200),
         actor_id=normalized.actor_id,
         actor_name=normalized.actor_name,
+        actor_type=_text(actor.get("type"), maximum=20),
+        actor_aliases=_text_list(actor.get("aliases"), maximum_items=100, maximum=500),
         actor_description=_text(actor.get("description"), maximum=2_000),
+        actor_technique_count=_optional_int(actor.get("technique_count")) or 0,
         generated=normalized.generated,
-        report_generated=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         data_version=normalized.data_version,
         platform=normalized.platform,
+        scope=ReportScope(
+            command_platform=normalized.platform,
+            include_pre=scope.get("include_pre") is True,
+            curated_only=scope.get("curated_only") is True,
+            allow_network=scope.get("allow_network") is True,
+            allow_admin=scope.get("allow_admin") is True,
+            allow_high_risk=scope.get("allow_high_risk") is True,
+            stages=_text_list(scope.get("stages"), maximum_items=32, maximum=120),
+        ),
         operator=normalized.operator,
         target=normalized.target,
-        plan_sha256=normalized.plan_sha256,
+        execution_started_at=started_at,
+        execution_completed_at=completed_at,
+        plan_sha256=_source_plan_sha256(document),
         techniques=techniques,
+        coverage=coverage,
         gaps=_coverage_gaps(techniques),
     )
 
