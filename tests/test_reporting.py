@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from backend import command_catalog
-from backend.reporting import build_report, render_html, render_pdf, report_filename
+from backend.reporting import build_report, render_html, render_json, render_pdf, report_filename
 from tests.test_execution_kit import plan_fixture
 
 
@@ -108,6 +108,18 @@ class EngagementReportingTests(unittest.TestCase):
         self.assertTrue(first.scope.include_pre)
         self.assertFalse(first.scope.allow_network)
 
+        self.assertEqual(render_html(first), render_html(second))
+        self.assertEqual(render_pdf(first), render_pdf(second))
+        self.assertEqual(render_json(document), render_json(document))
+
+    def test_json_serializer_preserves_the_schema_versioned_source_record(self):
+        document = plan_fixture("linux")
+        serialized = render_json(document)
+
+        self.assertEqual(json.loads(serialized), document)
+        self.assertEqual(json.loads(serialized)["schema_version"], "2.0")
+        self.assertTrue(serialized.endswith(b"\n"))
+
     def test_report_preserves_all_recorded_result_metadata(self):
         document = plan_fixture("linux")
         technique = document["stages"][0]["techniques"][0]
@@ -141,6 +153,12 @@ class EngagementReportingTests(unittest.TestCase):
         self.assertEqual(evidence.telemetry_references, ("siem:event-1042",))
         self.assertEqual(report.execution_started_at, "2026-09-05T12:00:00Z")
         self.assertEqual(report.execution_completed_at, "2026-09-05T12:03:00Z")
+
+        for body in (render_html(report), render_pdf(report)):
+            self.assertIn(b"run-1042", body)
+            self.assertIn(b"siem:event-1042", body)
+            self.assertIn(b"Digest verified", body)
+            self.assertIn(b"self-reported", body)
 
     def test_report_exposes_catalog_telemetry_acceptance_without_running_an_exercise(self):
         document = plan_fixture("linux")
@@ -204,11 +222,25 @@ class EngagementReportingTests(unittest.TestCase):
         self.assertNotIn(b"UNTRUSTED COMMAND BODY", body)
         self.assertGreaterEqual(body.count(b"/Type /Page"), 2)
 
+    def test_pdf_content_is_derived_from_the_html_serializer(self):
+        report = build_report(plan_fixture("linux"))
+        html_document = b"<!doctype html><html><body><h1>HTML SOURCE SENTINEL</h1></body></html>"
+
+        with patch("backend.reporting.render_html", return_value=html_document):
+            body = render_pdf(report)
+
+        self.assertIn(b"HTML SOURCE SENTINEL", body)
+        self.assertNotIn(b"Fixture Actor", body)
+
     def test_filename_is_safe_and_descriptive(self):
         document = plan_fixture("linux")
         document["actor"]["name"] = "Fixture / Actor"
         filename = report_filename(build_report(document), "pdf")
         self.assertEqual(filename, "AdversaryFlow_G0001_Fixture_Actor_report.pdf")
+        self.assertEqual(
+            report_filename(build_report(document), "json"),
+            "AdversaryFlow_G0001_Fixture_Actor.json",
+        )
 
 
 if __name__ == "__main__":

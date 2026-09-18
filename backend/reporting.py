@@ -14,7 +14,8 @@ import re
 import textwrap
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from html.parser import HTMLParser
+from typing import Any, ClassVar, Dict, Iterable, List, Mapping, Sequence, Tuple
 from urllib.parse import urlparse
 
 from .execution_kit import ExecutionKitError, normalize_plan, rebind_to_catalog
@@ -467,7 +468,17 @@ def _slug(value: str) -> str:
 
 
 def report_filename(report: EngagementReport, extension: str) -> str:
-    return f"AdversaryFlow_{_slug(report.actor_id)}_{_slug(report.actor_name)}_report.{extension}"
+    stem = f"AdversaryFlow_{_slug(report.actor_id)}_{_slug(report.actor_name)}"
+    suffix = "" if extension == "json" else "_report"
+    return f"{stem}{suffix}.{extension}"
+
+
+def render_json(document: Mapping[str, Any]) -> bytes:
+    """Serialize the existing schema-versioned plan without a report-shaped fork."""
+    try:
+        return (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ReportError("Plan cannot be serialized as JSON") from exc
 
 
 def _h(value: Any) -> str:
@@ -485,15 +496,73 @@ def _gap_summary(gaps: Sequence[CoverageGap]) -> Dict[str, int]:
     return summary
 
 
+def _display(value: Any, fallback: str = "Not recorded") -> str:
+    if value is None or value == "":
+        return fallback
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    return str(value)
+
+
+def _fact(label: str, value: Any, fallback: str = "Not recorded") -> str:
+    return f"<li><strong>{_h(label)}:</strong> {_h(_display(value, fallback))}</li>"
+
+
+def _acceptance_html(acceptance: TelemetryAcceptance | None) -> str:
+    if acceptance is None:
+        return (
+            "<p>No catalog telemetry-acceptance contract is available for this technique. "
+            "Validate the expected telemetry against independent sensor data.</p>"
+        )
+    events = ", ".join(acceptance.activity_event_types)
+    requirements = "; ".join(acceptance.requirements)
+    return (
+        f"<p><strong>Scenario:</strong> {_h(acceptance.scenario)}</p>"
+        f"<p><strong>Activity events:</strong> {_h(events)} "
+        f"(minimum {_h(acceptance.minimum_activity_events)})</p>"
+        f"<p><strong>Requirements:</strong> {_h(requirements)}</p>"
+        f'<p class="limitation"><strong>Limitation:</strong> {_h(acceptance.limitation)}</p>'
+    )
+
+
+def _execution_html(execution: ReportExecution) -> str:
+    receipt_state = (
+        "Digest verified; receipt remains self-reported"
+        if execution.receipt_verified is True
+        else "Digest not verified" if execution.receipt_verified is False else "Not recorded"
+    )
+    telemetry = "; ".join(execution.telemetry_references) or "Not recorded"
+    facts = (
+        _fact("Outcome", _label(execution.outcome))
+        + _fact("Detection result", _label(execution.detection_result))
+        + _fact("Evidence source", _label(execution.evidence_source) if execution.evidence_source else "")
+        + _fact("Operator", execution.operator)
+        + _fact("Target", execution.target)
+        + _fact("Updated", execution.updated_at)
+        + _fact("Started", execution.started_at)
+        + _fact("Completed", execution.completed_at)
+        + _fact("Exit code", execution.exit_code)
+        + _fact("Cleanup completed", execution.cleanup_completed)
+        + _fact("Run ID", execution.run_id)
+        + _fact("stdout SHA-256", execution.stdout_sha256)
+        + _fact("stderr SHA-256", execution.stderr_sha256)
+        + _fact("Receipt SHA-256", execution.receipt_sha256)
+        + _fact("Receipt status", receipt_state)
+        + _fact("Telemetry references", telemetry)
+    )
+    notes = _h(execution.notes or "No operator evidence note recorded.")
+    return f'<p><strong>Notes:</strong> {notes}</p><ul class="facts">{facts}</ul>'
+
+
 def render_html(report: EngagementReport) -> bytes:
     """Render a self-contained, escaped HTML engagement report."""
     gap_summary = _gap_summary(report.gaps)
     cards = (
         ("Planned", len(report.techniques)),
         ("Unique", report.unique_techniques),
-        ("Recorded", report.recorded),
-        ("Detection assessed", report.detection_assessed),
-        ("Alerted", report.alerted),
+        ("Curated", report.coverage.curated),
+        ("Fallback", report.coverage.fallback),
+        ("Detected", report.coverage.detected),
         ("Open gaps", len(report.gaps)),
     )
     card_html = "".join(f'<div class="metric"><strong>{value}</strong><span>{_h(label)}</span></div>' for label, value in cards)
@@ -511,9 +580,6 @@ def render_html(report: EngagementReport) -> bytes:
             for reference in item.sigma_references
         ) or "No catalog Sigma reference"
         attack_id = f'<a href="{_h(item.attack_url)}" rel="noopener noreferrer">{_h(item.technique_id)}</a>' if item.attack_url else _h(item.technique_id)
-        evidence = item.evidence_notes or "No operator evidence note recorded."
-        if item.telemetry_references:
-            evidence += " Telemetry: " + "; ".join(item.telemetry_references)
         rows.append(f"""
           <article class="technique">
             <div class="technique-head">
@@ -522,8 +588,9 @@ def render_html(report: EngagementReport) -> bytes:
             </div>
             <div class="technique-grid">
               <section><h4>Expected telemetry</h4><p>{_h(telemetry)}</p><small>ATT&amp;CK data sources: {_h(sources)}</small></section>
+              <section><h4>Telemetry acceptance</h4>{_acceptance_html(item.telemetry_acceptance)}</section>
               <section><h4>Detection mapping</h4><p>{_h(guidance)}</p><small>Sigma: {sigma}</small></section>
-              <section><h4>Recorded evidence</h4><p>{_h(evidence)}</p><small>Source: {_h(_label(item.evidence_source) if item.evidence_source else "Not recorded")}</small></section>
+              <section><h4>Recorded evidence</h4>{_execution_html(item.execution)}</section>
             </div>
           </article>""")
 
@@ -532,19 +599,62 @@ def render_html(report: EngagementReport) -> bytes:
         for gap in report.gaps
     ) or '<tr><td colspan="3" class="empty">No coverage gaps were identified from the recorded plan.</td></tr>'
     description = f'<p class="actor-description">{_h(report.actor_description)}</p>' if report.actor_description else ""
+    aliases = ", ".join(report.actor_aliases) or "None recorded"
+    domains = ", ".join(report.domains) or "Not recorded"
+    scope_stages = ", ".join(_label(stage) for stage in report.scope.stages) or "Not recorded"
+    scope_facts = "".join((
+        _fact("Command platform", _label(report.scope.command_platform)),
+        _fact("Included stages", scope_stages),
+        _fact("Include pre-ATT&CK", report.scope.include_pre),
+        _fact("Curated only", report.scope.curated_only),
+        _fact("Network allowed", report.scope.allow_network),
+        _fact("Administrator allowed", report.scope.allow_admin),
+        _fact("High risk allowed", report.scope.allow_high_risk),
+    ))
+    engagement_facts = "".join((
+        _fact("Actor STIX ID", report.actor_stix_id),
+        _fact("Actor type", _label(report.actor_type) if report.actor_type else ""),
+        _fact("Aliases", aliases),
+        _fact("ATT&CK technique count", report.actor_technique_count),
+        _fact("Domains", domains),
+        _fact("Operator", report.operator),
+        _fact("Target", report.target),
+        _fact("Plan generated", report.generated),
+        _fact("Observed execution start", report.execution_started_at),
+        _fact("Observed execution completion", report.execution_completed_at),
+    ))
+    coverage_rows = (
+        ("Catalog", f"{report.coverage.curated} curated · {report.coverage.fallback} fallback · "
+                    f"{report.coverage.unsupported} unsupported"),
+        ("Command outcomes", f"{report.coverage.outcome_passed} passed · {report.coverage.outcome_failed} failed · "
+                             f"{report.coverage.outcome_skipped} skipped · {report.coverage.outcome_not_run} not run"),
+        ("Detection outcomes", f"{report.coverage.detection_alerted} alerted · {report.coverage.detection_blocked} blocked · "
+                               f"{report.coverage.detection_silent} silent · "
+                               f"{report.coverage.detection_not_instrumented} not instrumented · "
+                               f"{report.coverage.detection_not_assessed} not assessed"),
+        ("Mappings", f"{report.coverage.expected_telemetry_mapped} expected telemetry · "
+                     f"{report.coverage.attack_detection_mapped} ATT&CK detection · "
+                     f"{report.coverage.sigma_mapped} Sigma"),
+    )
+    coverage_table = "".join(
+        f"<tr><th>{_h(label)}</th><td>{_h(value)}</td></tr>" for label, value in coverage_rows
+    )
     content = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>AdversaryFlow engagement report · {_h(report.actor_name)}</title>
 <style>
-:root{{--ink:#132039;--muted:#60708d;--line:#dce3ee;--surface:#f5f7fb;--navy:#101b33;--blue:#376cf6;--cyan:#12a8b4;--green:#16865b;--amber:#b86d13;--red:#bd3346}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);font:14px/1.55 Inter,Segoe UI,Arial,sans-serif;background:#fff}}main{{width:min(1120px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}}header{{position:relative;overflow:hidden;border-radius:22px;padding:42px;background:var(--navy);color:#fff;box-shadow:0 24px 70px #13203920}}header:after{{content:"";position:absolute;width:360px;height:360px;right:-170px;top:-220px;border:70px solid #376cf655;border-radius:50%}}.kicker{{color:#8eb6ff;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}}h1{{max-width:800px;margin:10px 0 7px;font-size:38px;line-height:1.05;letter-spacing:-.04em}}header p{{max-width:760px;margin:0;color:#c8d3e8}}.meta{{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}}.meta span,.badge{{border:1px solid #ffffff26;border-radius:999px;padding:5px 9px;font-size:11px}}.safety{{margin:18px 0 0;border-left:3px solid #4f81ff;padding:12px 15px;background:#eef3ff;color:#31456c}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:24px 0}}.metric{{border:1px solid var(--line);border-radius:13px;padding:16px;background:#fff}}.metric strong{{display:block;font-size:25px}}.metric span{{color:var(--muted);font-size:11px}}h2{{margin:42px 0 12px;font-size:22px;letter-spacing:-.02em}}.gap-chips{{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}}.gap-chips li{{display:flex;gap:8px;border:1px solid #f0cfaa;border-radius:10px;padding:8px 11px;background:#fff8ee}}.gap-chips span{{color:#795126}}.technique-list{{display:grid;gap:12px}}.technique{{border:1px solid var(--line);border-radius:15px;padding:18px;background:#fff;page-break-inside:avoid}}.technique-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}.technique-head>div:first-child{{display:grid;grid-template-columns:auto 1fr;column-gap:9px}}.sequence{{grid-row:1/3;display:grid;place-items:center;width:33px;height:33px;border-radius:8px;background:#edf2ff;color:var(--blue);font-weight:800}}h3{{margin:0;font-size:15px}}h3 a{{color:var(--blue)}}.technique-head p{{margin:2px 0 0;color:var(--muted);font-size:11px}}.badges{{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}}.badge{{border-color:var(--line);padding:3px 7px;background:var(--surface);color:var(--muted);font-weight:700;text-transform:capitalize}}.curated,.outcome-passed,.detection-alerted{{color:var(--green);background:#edf9f4;border-color:#b8e6d3}}.fallback,.outcome-skipped,.detection-not_assessed{{color:var(--amber);background:#fff8ee;border-color:#f0cfaa}}.outcome-failed,.detection-silent{{color:var(--red);background:#fff1f3;border-color:#f2c1ca}}.technique-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}}.technique-grid section{{border-radius:10px;padding:12px;background:var(--surface)}}h4{{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.technique-grid p{{margin:0 0 7px;font-size:12px}}small{{color:var(--muted)}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:14px}}th,td{{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}}th{{background:var(--surface);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}}tr:last-child td{{border-bottom:0}}.gap-category{{color:var(--amber);font-weight:700}}footer{{margin-top:44px;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:10px}}code{{font-family:Consolas,monospace;overflow-wrap:anywhere}}.empty{{color:var(--muted)}}@media(max-width:850px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.technique-grid{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{width:min(100% - 24px,1120px);padding-top:12px}}header{{padding:26px}}h1{{font-size:29px}}.metrics{{grid-template-columns:repeat(2,1fr)}}.technique-head{{display:block}}.badges{{justify-content:flex-start;margin-top:10px}}}}@media print{{main{{width:100%;padding:0}}header{{box-shadow:none}}.technique{{break-inside:avoid}}}}
+:root{{--ink:#132039;--muted:#60708d;--line:#dce3ee;--surface:#f5f7fb;--navy:#101b33;--blue:#376cf6;--cyan:#12a8b4;--green:#16865b;--amber:#b86d13;--red:#bd3346}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);font:14px/1.55 Inter,Segoe UI,Arial,sans-serif;background:#fff}}main{{width:min(1120px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}}header{{position:relative;overflow:hidden;border-radius:22px;padding:42px;background:var(--navy);color:#fff;box-shadow:0 24px 70px #13203920}}header:after{{content:"";position:absolute;width:360px;height:360px;right:-170px;top:-220px;border:70px solid #376cf655;border-radius:50%}}.kicker{{color:#8eb6ff;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}}h1{{max-width:800px;margin:10px 0 7px;font-size:38px;line-height:1.05;letter-spacing:-.04em}}header p{{max-width:760px;margin:0;color:#c8d3e8}}.meta{{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0;padding:0;list-style:none}}.meta li,.badge{{border:1px solid #ffffff26;border-radius:999px;padding:5px 9px;font-size:11px}}.safety,.honesty{{margin:18px 0 0;border-left:3px solid #4f81ff;padding:12px 15px;background:#eef3ff;color:#31456c}}.honesty{{border-color:var(--amber);background:#fff8ee;color:#664318}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:24px 0}}.metric{{border:1px solid var(--line);border-radius:13px;padding:16px;background:#fff}}.metric strong{{display:block;font-size:25px}}.metric span{{color:var(--muted);font-size:11px}}h2{{margin:42px 0 12px;font-size:22px;letter-spacing:-.02em}}.overview-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}}.overview-grid>section{{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface)}}.overview-grid h2{{margin:0 0 10px;font-size:16px}}.facts{{margin:0;padding-left:18px;color:var(--muted)}}.facts strong{{color:var(--ink)}}.gap-chips{{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}}.gap-chips li{{display:flex;gap:8px;border:1px solid #f0cfaa;border-radius:10px;padding:8px 11px;background:#fff8ee}}.gap-chips span{{color:#795126}}.technique-list{{display:grid;gap:12px}}.technique{{border:1px solid var(--line);border-radius:15px;padding:18px;background:#fff;page-break-inside:avoid}}.technique-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}.technique-head>div:first-child{{display:grid;grid-template-columns:auto 1fr;column-gap:9px}}.sequence{{grid-row:1/3;display:grid;place-items:center;width:33px;height:33px;border-radius:8px;background:#edf2ff;color:var(--blue);font-weight:800}}h3{{margin:0;font-size:15px}}h3 a{{color:var(--blue)}}.technique-head p{{margin:2px 0 0;color:var(--muted);font-size:11px}}.badges{{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}}.badge{{border-color:var(--line);padding:3px 7px;background:var(--surface);color:var(--muted);font-weight:700;text-transform:capitalize}}.curated,.outcome-passed,.detection-alerted{{color:var(--green);background:#edf9f4;border-color:#b8e6d3}}.fallback,.outcome-skipped,.detection-not_assessed{{color:var(--amber);background:#fff8ee;border-color:#f0cfaa}}.outcome-failed,.detection-silent{{color:var(--red);background:#fff1f3;border-color:#f2c1ca}}.technique-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}}.technique-grid section{{border-radius:10px;padding:12px;background:var(--surface)}}h4{{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.technique-grid p{{margin:0 0 7px;font-size:12px}}.limitation{{color:#795126}}small{{color:var(--muted)}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:14px}}th,td{{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}}th{{background:var(--surface);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}}tr:last-child td{{border-bottom:0}}.coverage-table th{{width:180px}}.gap-category{{color:var(--amber);font-weight:700}}footer{{margin-top:44px;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:10px}}code{{font-family:Consolas,monospace;overflow-wrap:anywhere}}.empty{{color:var(--muted)}}@media(max-width:850px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.technique-grid,.overview-grid{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{width:min(100% - 24px,1120px);padding-top:12px}}header{{padding:26px}}h1{{font-size:29px}}.metrics{{grid-template-columns:repeat(2,1fr)}}.technique-head{{display:block}}.badges{{justify-content:flex-start;margin-top:10px}}}}@media print{{main{{width:100%;padding:0}}header{{box-shadow:none}}.technique{{break-inside:avoid}}}}
 </style></head><body><main>
-<header><div class="kicker">AdversaryFlow · Purple-team engagement report</div><h1>{_h(report.actor_name)} <small>({_h(report.actor_id)})</small></h1><p>Authorized adversary-emulation coverage and detection validation for a disposable lab.</p><div class="meta"><span>{_h(report.platform.title())}</span><span>Operator: {_h(report.operator or 'Not recorded')}</span><span>Target: {_h(report.target or 'Not recorded')}</span><span>Plan: {_h(report.generated)}</span></div></header>
+<header><div class="kicker">AdversaryFlow · Purple-team engagement report</div><h1>{_h(report.actor_name)} <small>({_h(report.actor_id)})</small></h1><p>Authorized adversary-emulation coverage and detection validation for a disposable lab.</p><ul class="meta"><li>{_h(report.platform.title())}</li><li>Operator: {_h(report.operator or 'Not recorded')}</li><li>Target: {_h(report.target or 'Not recorded')}</li><li>Plan: {_h(report.generated)}</li></ul></header>
 <p class="safety"><strong>Planner boundary:</strong> AdversaryFlow generated this report from a catalog-rebound plan. The service did not execute commands, connect to a target, or include runnable commands in this report.</p>
+<p class="honesty"><strong>Evidence limitation:</strong> A verified receipt confirms the integrity of a self-reported lab record; it is not independent proof of execution or detection. Correlate run IDs, timestamps, and hashes with SIEM or endpoint telemetry.</p>
 {description}<section class="metrics">{card_html}</section>
+<div class="overview-grid"><section><h2>Engagement metadata</h2><ul class="facts">{engagement_facts}</ul></section><section><h2>Authorized scope</h2><ul class="facts">{scope_facts}</ul></section></div>
+<section><h2>Coverage breakdown</h2><table class="coverage-table"><tbody>{coverage_table}</tbody></table></section>
 <section><h2>Coverage gap summary</h2><ul class="gap-chips">{gap_chips}</ul></section>
 <section><h2>Technique results</h2><div class="technique-list">{''.join(rows)}</div></section>
 <section><h2>Coverage gaps and follow-up</h2><table><thead><tr><th>Category</th><th>Technique</th><th>Finding</th></tr></thead><tbody>{gap_rows}</tbody></table></section>
-<footer>Generated {_h(report.report_generated)} · ATT&amp;CK data {_h(report.data_version)} · Plan SHA-256 <code>{_h(report.plan_sha256)}</code><br>Catalog Sigma references are included only when explicitly present in the catalog; absence is not a claim that no community rule exists.</footer>
+<footer>Plan generated {_h(report.report_generated)} · Schema {_h(report.schema_version)} · Tool {_h(report.tool_version)} · ATT&amp;CK data {_h(report.data_version)} · Plan SHA-256 <code>{_h(report.plan_sha256)}</code><br>Catalog Sigma references are included only when explicitly present in the catalog; absence is not a claim that no community rule exists.</footer>
 </main></body></html>"""
     return content.encode("utf-8")
 
@@ -756,6 +866,93 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
     return layout.finish()
 
 
+@dataclass(frozen=True)
+class _HtmlBlock:
+    kind: str
+    text: str
+
+
+class _ReportHtmlParser(HTMLParser):
+    """Extract the visible report blocks used by the dependency-free PDF writer."""
+
+    _block_tags: ClassVar[frozenset[str]] = frozenset(
+        {"h1", "h2", "h3", "h4", "p", "li", "small", "th", "td", "footer"}
+    )
+    _skipped_tags: ClassVar[frozenset[str]] = frozenset({"head", "script", "style"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: List[_HtmlBlock] = []
+        self._capture_tag: str | None = None
+        self._parts: List[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in self._skipped_tags:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag == "br" and self._capture_tag:
+            self._parts.append(" ")
+        elif tag in self._block_tags and self._capture_tag is None:
+            self._capture_tag = tag
+            self._parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._skipped_tags:
+            self._skip_depth = max(0, self._skip_depth - 1)
+            return
+        if self._skip_depth or tag != self._capture_tag:
+            return
+        value = re.sub(r"\s+", " ", " ".join(self._parts)).strip()
+        if value:
+            self.blocks.append(_HtmlBlock(tag, value))
+        self._capture_tag = None
+        self._parts = []
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth and self._capture_tag:
+            self._parts.append(data)
+
+
+def _layout_pdf_html(report: EngagementReport, document: bytes) -> List[List[str]]:
+    parser = _ReportHtmlParser()
+    try:
+        parser.feed(document.decode("utf-8"))
+        parser.close()
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ReportError("The HTML report could not be rendered as PDF") from exc
+    if not parser.blocks:
+        raise ReportError("The HTML report did not contain printable content")
+
+    layout = _PdfLayout(report)
+    for block in parser.blocks:
+        if block.kind == "h1":
+            layout.heading(block.text, size=23)
+        elif block.kind == "h2":
+            layout.y -= 5
+            layout.heading(block.text, size=15)
+        elif block.kind == "h3":
+            layout.heading(block.text, size=11)
+        elif block.kind == "h4":
+            layout.ensure(16)
+            layout.text(layout.left, layout.y, block.text.upper(), 8, bold=True, color=(0.22, 0.42, 0.96))
+            layout.y -= 13
+        elif block.kind == "th":
+            layout.paragraph(block.text.upper(), size=8, color=(0.22, 0.42, 0.96), space_after=2)
+        elif block.kind == "td":
+            layout.paragraph(block.text, size=8.5, indent=7, space_after=4)
+        elif block.kind == "li":
+            layout.paragraph(f"- {block.text}", size=8.5, indent=5, space_after=2)
+        elif block.kind in {"small", "footer"}:
+            layout.paragraph(block.text, size=7.5, color=(0.38, 0.44, 0.55), space_after=4)
+        else:
+            layout.paragraph(block.text, size=9, space_after=7)
+    return layout.finish()
+
+
 def _pdf_document(pages: Sequence[Sequence[str]]) -> bytes:
     objects: Dict[int, bytes] = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -794,5 +991,6 @@ def _pdf_document(pages: Sequence[Sequence[str]]) -> bytes:
 
 
 def render_pdf(report: EngagementReport) -> bytes:
-    """Render a dependency-free, paginated PDF report."""
-    return _pdf_document(_layout_pdf(report))
+    """Render the self-contained HTML report into a deterministic PDF."""
+    html_document = render_html(report)
+    return _pdf_document(_layout_pdf_html(report, html_document))

@@ -354,10 +354,10 @@ def execution_kit_download():
 
 @app.route("/api/report/<report_format>", methods=["POST"])
 def engagement_report_download(report_format: str):
-    """Build a command-free HTML or PDF purple-team engagement report."""
+    """Build a purple-team report or return its canonical plan JSON."""
     _require_csrf()
-    if report_format not in {"html", "pdf"}:
-        abort(404, description="Engagement reports are available as HTML or PDF")
+    if report_format not in {"html", "pdf", "json"}:
+        abort(404, description="Engagement reports are available as HTML, PDF, or JSON")
     document = request.get_json(silent=True)
     if document is None:
         abort(400, description="A JSON AdversaryFlow plan is required")
@@ -366,9 +366,12 @@ def engagement_report_download(report_format: str):
         if report_format == "html":
             content = reporting.render_html(report)
             mimetype = "text/html"
-        else:
+        elif report_format == "pdf":
             content = reporting.render_pdf(report)
             mimetype = "application/pdf"
+        else:
+            content = reporting.render_json(document)
+            mimetype = "application/json"
     except reporting.ReportError as exc:
         abort(400, description=str(exc))
     _log_event("engagement_report_generated", format=report_format,
