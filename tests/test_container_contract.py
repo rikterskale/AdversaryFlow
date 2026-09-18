@@ -53,15 +53,35 @@ class ContainerContractTests(unittest.TestCase):
         self.assertRegex(self.compose, r"cap_drop:\s*\n\s*- ALL")
 
     def test_host_publication_is_loopback_only_and_cache_is_persistent(self):
-        self.assertIn('"127.0.0.1:${ADVERSARYFLOW_PORT:-5000}:5000"', self.compose)
-        self.assertIn("adversaryflow-stix-cache:/var/lib/adversaryflow/cache", self.compose)
+        self.assertIn('ADVERSARYFLOW_BIND_ADDRESS: "${ADVERSARYFLOW_BIND_ADDRESS:-127.0.0.1}"', self.compose)
+        self.assertIn(
+            '"${ADVERSARYFLOW_BIND_ADDRESS:-127.0.0.1}:${ADVERSARYFLOW_PORT:-5000}:${ADVERSARYFLOW_PORT:-5000}"',
+            self.compose,
+        )
+        self.assertIn(
+            '"adversaryflow-stix-cache:${ADVERSARYFLOW_CACHE_DIR:-/var/lib/adversaryflow/cache}"',
+            self.compose,
+        )
         self.assertIn("name: adversaryflow-stix-cache", self.compose)
+
+    def test_launcher_environment_is_passed_through_with_safe_defaults(self):
+        expected = {
+            'ADVERSARYFLOW_HOST: "${ADVERSARYFLOW_HOST:-0.0.0.0}"',
+            'ADVERSARYFLOW_PORT: "${ADVERSARYFLOW_PORT:-5000}"',
+            'ADVERSARYFLOW_CACHE_DIR: "${ADVERSARYFLOW_CACHE_DIR:-/var/lib/adversaryflow/cache}"',
+            'ADVERSARYFLOW_OFFLINE: "${ADVERSARYFLOW_OFFLINE:-false}"',
+            'ADVERSARYFLOW_API_TOKEN: "${ADVERSARYFLOW_API_TOKEN:-}"',
+        }
+        for setting in expected:
+            with self.subTest(setting=setting):
+                self.assertIn(setting, self.compose)
 
     def test_container_keeps_the_non_loopback_bearer_gate(self):
         self.assertIn("ADVERSARYFLOW_HOST=0.0.0.0", self.dockerfile)
         self.assertIn('"--allow-remote"', self.dockerfile)
         self.assertIn("ADVERSARYFLOW_API_TOKEN", self.entrypoint)
         self.assertIn("secrets.token_urlsafe(32)", self.entrypoint)
+        self.assertIn("Refusing remote container publication", self.entrypoint)
         self.assertNotRegex(self.compose, r"ADVERSARYFLOW_API_TOKEN:\s*[A-Za-z0-9_-]{16,}")
 
     def test_healthcheck_uses_the_authenticated_readiness_endpoint(self):

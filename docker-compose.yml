@@ -8,13 +8,24 @@ services:
       dockerfile: Dockerfile
     environment:
       ADVERSARYFLOW_API_TOKEN: "${ADVERSARYFLOW_API_TOKEN:-}"
-      ADVERSARYFLOW_CACHE_DIR: /var/lib/adversaryflow/cache
+      # This is the host-side publish address, not the app's container bind.
+      ADVERSARYFLOW_BIND_ADDRESS: "${ADVERSARYFLOW_BIND_ADDRESS:-127.0.0.1}"
+      ADVERSARYFLOW_CACHE_DIR: "${ADVERSARYFLOW_CACHE_DIR:-/var/lib/adversaryflow/cache}"
+      # Bridge networking requires the service to listen on the container
+      # interface. The host publication below remains loopback-only by default.
+      ADVERSARYFLOW_HOST: "${ADVERSARYFLOW_HOST:-0.0.0.0}"
       ADVERSARYFLOW_LOG_LEVEL: "${ADVERSARYFLOW_LOG_LEVEL:-info}"
-      ADVERSARYFLOW_PUBLIC_URL: "http://127.0.0.1:${ADVERSARYFLOW_PORT:-5000}"
+      ADVERSARYFLOW_OFFLINE: "${ADVERSARYFLOW_OFFLINE:-false}"
+      ADVERSARYFLOW_PORT: "${ADVERSARYFLOW_PORT:-5000}"
+      ADVERSARYFLOW_PUBLIC_URL: "${ADVERSARYFLOW_PUBLIC_URL:-}"
     ports:
-      - "127.0.0.1:${ADVERSARYFLOW_PORT:-5000}:5000"
+      # REMOTE OPT-IN (off by default): set ADVERSARYFLOW_BIND_ADDRESS=0.0.0.0,
+      # ADVERSARYFLOW_API_TOKEN to a long random value, and PUBLIC_URL to the
+      # TLS-protected URL. The entrypoint refuses remote publication without
+      # that explicit token.
+      - "${ADVERSARYFLOW_BIND_ADDRESS:-127.0.0.1}:${ADVERSARYFLOW_PORT:-5000}:${ADVERSARYFLOW_PORT:-5000}"
     volumes:
-      - adversaryflow-stix-cache:/var/lib/adversaryflow/cache
+      - "adversaryflow-stix-cache:${ADVERSARYFLOW_CACHE_DIR:-/var/lib/adversaryflow/cache}"
     init: true
     read_only: true
     tmpfs:

@@ -3,6 +3,7 @@ set -eu
 
 token_file="/run/adversaryflow/api-token"
 cache_dir="${ADVERSARYFLOW_CACHE_DIR:-/var/lib/adversaryflow/cache}"
+publish_address="${ADVERSARYFLOW_BIND_ADDRESS:-127.0.0.1}"
 service_port="${ADVERSARYFLOW_PORT:-5000}"
 public_url="${ADVERSARYFLOW_PUBLIC_URL:-http://127.0.0.1:$service_port}"
 
@@ -17,6 +18,17 @@ if [ ! -d "${token_file%/*}" ] || [ ! -w "${token_file%/*}" ]; then
     printf '%s\n' 'Restore the /run/adversaryflow tmpfs mount with UID/GID 10001.' >&2
     exit 1
 fi
+
+case "$publish_address" in
+    127.*|localhost|::1|'[::1]') ;;
+    *)
+        if [ -z "${ADVERSARYFLOW_API_TOKEN:-}" ]; then
+            printf 'Refusing remote container publication on %s without ADVERSARYFLOW_API_TOKEN.\n' "$publish_address" >&2
+            printf '%s\n' 'Set a long random token and place TLS in front of the service before retrying.' >&2
+            exit 2
+        fi
+        ;;
+esac
 
 if [ -z "${ADVERSARYFLOW_API_TOKEN:-}" ]; then
     ADVERSARYFLOW_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
