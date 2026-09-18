@@ -21,7 +21,7 @@ type PendingPlanReset =
   | { kind: "actor"; actor: Actor }
   | { kind: "domains"; domains: AttackDomain[] };
 
-export function App(): JSX.Element {
+export function App(): React.JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const domains = useWizardStore((state) => state.domains);
   const selectedActor = useWizardStore((state) => state.selectedActor);
@@ -182,7 +182,7 @@ export function App(): JSX.Element {
     }
   };
 
-  let content: JSX.Element;
+  let content: React.JSX.Element;
   if (startupPhase === "failed") {
     content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
   } else if (startupPhase !== "ready") {

@@ -29,7 +29,7 @@ export function coverageStatus(evidence: ExecutionEvidence | undefined): CellSta
   return "planned";
 }
 
-export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }: CoverageHeatmapProps): JSX.Element {
+export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }: CoverageHeatmapProps): React.JSX.Element {
   return (
     <section className="heatmap-panel" aria-labelledby="heatmap-title">
       <div className="heatmap-heading">

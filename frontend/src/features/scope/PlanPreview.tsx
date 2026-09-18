@@ -10,7 +10,7 @@ interface PlanPreviewProps {
   preview: PlanPreviewModel;
 }
 
-export function PlanPreview({ actor, commandPlatform, dataVersion, preview }: PlanPreviewProps): JSX.Element {
+export function PlanPreview({ actor, commandPlatform, dataVersion, preview }: PlanPreviewProps): React.JSX.Element {
   const curatedWidth = preview.total ? `${(preview.curated / preview.total) * 100}%` : "0%";
   const fallbackWidth = preview.total ? `${(preview.fallback / preview.total) * 100}%` : "0%";
   const withheldReasons = [

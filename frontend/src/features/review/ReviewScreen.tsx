@@ -54,7 +54,7 @@ function cardForTechnique(techniqueId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`.techcard[data-tid="${CSS.escape(techniqueId)}"]`);
 }
 
-export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: ReviewScreenProps): JSX.Element {
+export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: ReviewScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
   const records = useWizardStore((state) => state.records);
   const ensureEvidenceKey = useWizardStore((state) => state.ensureEvidenceKey);

@@ -39,7 +39,7 @@ interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
 }
 
-export function Icon({ name, ...props }: IconProps): JSX.Element {
+export function Icon({ name, ...props }: IconProps): React.JSX.Element {
   return (
     <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" {...props}>
       {paths[name]}
