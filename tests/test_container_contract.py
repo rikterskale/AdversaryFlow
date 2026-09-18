@@ -31,7 +31,7 @@ class ContainerContractTests(unittest.TestCase):
         assert node_image is not None
         self.assertRegex(node_image.group(1), r"^node:\d+\.\d+\.\d+-bookworm-slim@sha256:[0-9a-f]{64}$")
         self.assertGreaterEqual(self.dockerfile.count("FROM ${PYTHON_IMAGE}"), 2)
-        self.assertIn("--require-hashes --requirement requirements.lock", self.dockerfile)
+        self.assertIn("--require-hashes --requirement /tmp/requirements.lock", self.dockerfile)
         self.assertIn("--require-hashes --requirement requirements-build.lock", self.dockerfile)
 
     def test_container_builds_the_spa_from_the_locked_source(self):
@@ -58,7 +58,7 @@ class ContainerContractTests(unittest.TestCase):
         self.assertIn("name: adversaryflow-stix-cache", self.compose)
 
     def test_container_keeps_the_non_loopback_bearer_gate(self):
-        self.assertIn('"--host", "0.0.0.0"', self.dockerfile)
+        self.assertIn("ADVERSARYFLOW_HOST=0.0.0.0", self.dockerfile)
         self.assertIn('"--allow-remote"', self.dockerfile)
         self.assertIn("ADVERSARYFLOW_API_TOKEN", self.entrypoint)
         self.assertIn("secrets.token_urlsafe(32)", self.entrypoint)
@@ -67,8 +67,13 @@ class ContainerContractTests(unittest.TestCase):
     def test_healthcheck_uses_the_authenticated_readiness_endpoint(self):
         healthcheck = Path("docker/healthcheck.py").read_text(encoding="utf-8")
         self.assertIn("/api/health", healthcheck)
+        self.assertIn('os.environ.get("ADVERSARYFLOW_PORT", "5000")', healthcheck)
         self.assertIn("Authorization", healthcheck)
         self.assertIn('document.get("ready") is True', healthcheck)
+
+    def test_entrypoint_reports_unwritable_runtime_directories_cleanly(self):
+        self.assertIn("cannot write its cache directory", self.entrypoint)
+        self.assertIn("cannot write its runtime token directory", self.entrypoint)
 
 
 if __name__ == "__main__":

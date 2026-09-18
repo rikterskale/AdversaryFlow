@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -10,14 +11,21 @@ from pathlib import Path
 from typing import Any
 
 TOKEN_FILE = Path("/run/adversaryflow/api-token")
-HEALTH_URL = "http://127.0.0.1:5000/api/health"
+
+
+def _health_url() -> str:
+    """Probe the configured container port without depending on its bind address."""
+    port = int(os.environ.get("ADVERSARYFLOW_PORT", "5000"))
+    if not 1 <= port <= 65535:
+        raise ValueError("ADVERSARYFLOW_PORT must be between 1 and 65535")
+    return f"http://127.0.0.1:{port}/api/health"
 
 
 def main() -> int:
     try:
         token = TOKEN_FILE.read_text(encoding="utf-8").strip()
         request = urllib.request.Request(
-            HEALTH_URL,
+            _health_url(),
             headers={"Authorization": f"Bearer {token}"},
         )
         with urllib.request.urlopen(request, timeout=3) as response:

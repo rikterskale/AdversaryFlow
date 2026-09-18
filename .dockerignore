@@ -1,9 +1,13 @@
 .git
 .github
+.agents
+.codex
 .audit-cache
 .claude
+.doctor-debug-cache
 .mypy_cache
 .pytest_cache
+.pytest-report-doctor
 .ruff_cache
 .venv
 build
@@ -12,8 +16,12 @@ htmlcov
 node_modules
 playwright-report
 test-results
+tmp
 *.egg-info
 **/__pycache__
 **/*.pyc
+.coverage
+.coverage.*
+*.log
 data/*.json
 data/*.tmp

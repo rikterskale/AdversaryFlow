@@ -54,6 +54,7 @@ LABEL org.opencontainers.image.title="AdversaryFlow" \
       org.opencontainers.image.version="0.4.0"
 
 ENV ADVERSARYFLOW_CACHE_DIR=/var/lib/adversaryflow/cache \
+    ADVERSARYFLOW_HOST=0.0.0.0 \
     ADVERSARYFLOW_PORT=5000 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -64,8 +65,9 @@ RUN groupadd --gid 10001 adversaryflow \
     && useradd --uid 10001 --gid adversaryflow --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin adversaryflow \
     && install -d -o adversaryflow -g adversaryflow /var/lib/adversaryflow/cache /run/adversaryflow
 
-COPY requirements.lock ./
-RUN python -m pip install --require-hashes --requirement requirements.lock
+COPY requirements.lock /tmp/requirements.lock
+RUN python -m pip install --require-hashes --requirement /tmp/requirements.lock \
+    && rm -f /tmp/requirements.lock
 
 COPY --from=wheel-builder /wheels /wheels
 COPY --from=wheel-builder /build/ACCEPTABLE_USE.md /usr/share/doc/adversaryflow/ACCEPTABLE_USE.md
@@ -85,4 +87,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=60 \
     CMD ["python", "/usr/local/lib/adversaryflow/container_healthcheck.py"]
 
 ENTRYPOINT ["/usr/local/bin/adversaryflow-entrypoint"]
-CMD ["serve", "--host", "0.0.0.0", "--port", "5000", "--allow-remote"]
+CMD ["serve", "--allow-remote"]
