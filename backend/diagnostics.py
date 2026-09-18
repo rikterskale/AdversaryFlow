@@ -21,6 +21,7 @@ from . import __version__, attack_data
 MINIMUM_PYTHON = (3, 10)
 MINIMUM_FREE_BYTES = 256 * 1024 * 1024
 NETWORK_TIMEOUT_SECONDS = 5.0
+CONTAINER_TOKEN_FILE = Path("/run/adversaryflow/api-token")
 
 
 def _result(
@@ -66,7 +67,29 @@ def _run_version_command(command: List[str]) -> subprocess.CompletedProcess[str]
     return subprocess.run(command, **kwargs)
 
 
-def _docker_check() -> Dict[str, Any]:
+def _running_in_container() -> bool:
+    """Detect a conventional OCI/container runtime without invoking it."""
+    if Path("/.dockerenv").is_file():
+        return True
+    try:
+        control_groups = Path("/proc/1/cgroup").read_text(encoding="utf-8", errors="replace").lower()
+    except OSError:
+        return False
+    return any(marker in control_groups for marker in ("docker", "containerd", "kubepods", "podman"))
+
+
+def _docker_check(*, containerized: bool | None = None) -> Dict[str, Any]:
+    if containerized is None:
+        containerized = _running_in_container()
+    if containerized:
+        return _result(
+            "docker",
+            "Docker and Compose context",
+            True,
+            "Running inside a container; the host Docker Engine and Compose plugin are intentionally outside this namespace.",
+            "Run docker version and docker compose version on the host if the stack cannot be started.",
+            required=False,
+        )
     executable = shutil.which("docker")
     fix = "Install Docker Engine or Docker Desktop with the Compose v2 plugin, then ensure docker is on PATH."
     if not executable:
@@ -116,10 +139,31 @@ def _dependency_check() -> tuple[Dict[str, Any], Dict[str, str | None]]:
     ), versions
 
 
-def _port_check(host: str, port: int, port_is_service: bool) -> Dict[str, Any]:
+def _container_service_is_live(port: int) -> bool:
+    """Return whether this container's configured port belongs to AdversaryFlow."""
+    try:
+        token = CONTAINER_TOKEN_FILE.read_text(encoding="utf-8").strip()
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/live", headers=headers)
+        with urllib.request.urlopen(request, timeout=1) as response:
+            document: Any = json.load(response)
+        return response.status == 200 and isinstance(document, dict) and document.get("status") == "live"
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
+
+
+def _port_check(host: str, port: int, port_is_service: bool, *, containerized: bool = False) -> Dict[str, Any]:
     fix = f"Stop the process using {host}:{port}, or choose another port with --port or ADVERSARYFLOW_PORT."
     if port_is_service:
         return _result("port", "Service port", True, f"This AdversaryFlow service is listening on {host}:{port}.", fix)
+    if containerized and _container_service_is_live(port):
+        return _result(
+            "port",
+            "Service port",
+            True,
+            f"This container's AdversaryFlow service is already listening on port {port}.",
+            fix,
+        )
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
         if not addresses:
@@ -264,14 +308,15 @@ def collect_diagnostics(
     network_timeout: float = NETWORK_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
     """Return a stable diagnostics contract without changing application state."""
+    containerized = _running_in_container()
     dependency, versions = _dependency_check()
     writable, cache_writable, cache_error = _cache_writable_check()
     checks = [
         _python_check(),
-        _docker_check(),
+        _docker_check(containerized=containerized),
         _frontend_check(frontend_dir),
         dependency,
-        _port_check(host, port, port_is_service),
+        _port_check(host, port, port_is_service, containerized=containerized),
         writable,
         _cache_integrity_check(),
         _disk_space_check(),

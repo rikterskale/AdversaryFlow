@@ -31,6 +31,21 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(check["status"], "PASS")
         self.assertIn("listening", check["detail"])
 
+    def test_a_running_service_inside_the_container_owns_its_port(self):
+        with patch("backend.diagnostics._container_service_is_live", return_value=True) as live:
+            check = diagnostics._port_check("0.0.0.0", 5000, False, containerized=True)
+        live.assert_called_once_with(5000)
+        self.assertEqual(check["status"], "PASS")
+        self.assertIn("already listening", check["detail"])
+
+    def test_an_unrelated_container_process_does_not_pass_the_port_check(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+            with patch("backend.diagnostics._container_service_is_live", return_value=False):
+                check = diagnostics._port_check("127.0.0.1", port, False, containerized=True)
+        self.assertEqual(check["status"], "FAIL")
+
     def test_docker_and_compose_versions_are_reported_together(self):
         engine = subprocess.CompletedProcess(["docker"], 0, "27.5.1\n", "")
         compose = subprocess.CompletedProcess(["docker", "compose"], 0, "2.32.4\n", "")
@@ -40,6 +55,18 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(check["status"], "PASS")
         self.assertIn("27.5.1", check["detail"])
         self.assertIn("2.32.4", check["detail"])
+
+    def test_container_context_does_not_require_the_host_docker_cli(self):
+        with patch("backend.diagnostics.shutil.which") as which:
+            check = diagnostics._docker_check(containerized=True)
+        which.assert_not_called()
+        self.assertEqual(check["status"], "PASS")
+        self.assertFalse(check["required"])
+        self.assertIn("inside a container", check["detail"])
+
+    def test_container_detection_uses_the_standard_dockerenv_marker(self):
+        with patch("backend.diagnostics.Path.is_file", return_value=True):
+            self.assertTrue(diagnostics._running_in_container())
 
     def test_an_unsupported_python_version_fails_with_upgrade_guidance(self):
         with patch.object(diagnostics.sys, "version_info", (3, 9, 19)):
