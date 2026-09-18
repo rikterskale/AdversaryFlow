@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # AdversaryFlow launcher — bootstraps once, then starts the installed command.
 set -euo pipefail
-cd "$(dirname "$0")"
+script_path="${BASH_SOURCE[0]}"
+script_dir="${script_path%/*}"
+if [ "$script_dir" = "$script_path" ]; then
+  script_dir="${script_path%\\*}"
+fi
+if [ "$script_dir" = "$script_path" ]; then
+  script_dir="."
+fi
+cd "$script_dir"
 
 if [ ! -x .venv/bin/adversaryflow ]; then
   echo "[AdversaryFlow] first-run installation…"

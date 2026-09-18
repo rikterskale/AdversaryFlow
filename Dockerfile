@@ -4,6 +4,23 @@
 # supported Docker platforms. Update both together after reviewing the
 # official image manifest.
 ARG PYTHON_IMAGE=python:3.12.14-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254
+ARG NODE_IMAGE=node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d
+
+FROM ${NODE_IMAGE} AS frontend-builder
+
+ENV NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+
+WORKDIR /build
+
+# Install exactly the browser dependency graph reviewed in package-lock.json.
+# Lifecycle scripts are not needed to build this application.
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY frontend ./frontend
+RUN npm run build:frontend
 
 FROM ${PYTHON_IMAGE} AS wheel-builder
 
@@ -18,6 +35,12 @@ COPY requirements-build.lock ./
 RUN python -m pip install --require-hashes --requirement requirements-build.lock
 
 COPY . .
+# Never trust a stale checked-in browser bundle: the image packages the SPA
+# compiled in the pinned Node stage above.
+COPY --from=frontend-builder /build/frontend/index.html ./frontend/index.html
+COPY --from=frontend-builder /build/frontend/styles.css ./frontend/styles.css
+COPY --from=frontend-builder /build/frontend/app.js ./frontend/app.js
+COPY --from=frontend-builder /build/frontend/favicon.svg ./frontend/favicon.svg
 
 RUN python -m build --wheel --no-isolation --outdir /wheels
 

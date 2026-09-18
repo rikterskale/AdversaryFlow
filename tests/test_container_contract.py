@@ -27,9 +27,20 @@ class ContainerContractTests(unittest.TestCase):
         image = re.search(r"ARG PYTHON_IMAGE=([^\s]+)", self.dockerfile)
         assert image is not None
         self.assertRegex(image.group(1), r"^python:\d+\.\d+\.\d+-slim-bookworm@sha256:[0-9a-f]{64}$")
+        node_image = re.search(r"ARG NODE_IMAGE=([^\s]+)", self.dockerfile)
+        assert node_image is not None
+        self.assertRegex(node_image.group(1), r"^node:\d+\.\d+\.\d+-bookworm-slim@sha256:[0-9a-f]{64}$")
         self.assertGreaterEqual(self.dockerfile.count("FROM ${PYTHON_IMAGE}"), 2)
         self.assertIn("--require-hashes --requirement requirements.lock", self.dockerfile)
         self.assertIn("--require-hashes --requirement requirements-build.lock", self.dockerfile)
+
+    def test_container_builds_the_spa_from_the_locked_source(self):
+        self.assertIn("FROM ${NODE_IMAGE} AS frontend-builder", self.dockerfile)
+        self.assertIn("COPY package.json package-lock.json ./", self.dockerfile)
+        self.assertIn("RUN npm ci --ignore-scripts", self.dockerfile)
+        self.assertIn("RUN npm run build:frontend", self.dockerfile)
+        for asset in ("index.html", "styles.css", "app.js", "favicon.svg"):
+            self.assertIn(f"COPY --from=frontend-builder /build/frontend/{asset}", self.dockerfile)
 
     def test_container_tags_match_the_package_version(self):
         self.assertIn(f'org.opencontainers.image.version="{__version__}"', self.dockerfile)

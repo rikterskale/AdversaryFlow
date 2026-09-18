@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "$0")" && pwd)"
+script_path="${BASH_SOURCE[0]}"
+script_dir="${script_path%/*}"
+if [ "$script_dir" = "$script_path" ]; then
+  script_dir="${script_path%\\*}"
+fi
+if [ "$script_dir" = "$script_path" ]; then
+  script_dir="."
+fi
+repo_dir="$(cd "$script_dir" && pwd)"
 cd "$repo_dir"
 
 if ! command -v python3 >/dev/null 2>&1; then
