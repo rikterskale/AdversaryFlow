@@ -48,7 +48,8 @@ class DocumentationContractTests(unittest.TestCase):
         section = " ".join(self.getting_started[compose:native].split())
         self.assertIn("docker compose up", section)
         self.assertIn("not select **Copy command**", section)
-        self.assertIn("**PDF engagement report**", section)
+        self.assertIn("**Generate report**", section)
+        self.assertIn("download **PDF**", section)
         self.assertIn("**Schema-versioned JSON**", section)
         self.assertIn("`0` outcomes recorded", section)
 
@@ -88,15 +89,23 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("entrypoint.sh", self.architecture)
 
     def test_report_formats_and_json_authority_are_documented(self) -> None:
-        self.assertIn("**PDF engagement report**", self.exports)
-        self.assertIn("**HTML engagement report**", self.exports)
+        self.assertIn("**Generate report**", self.exports)
+        self.assertIn("sandboxed\npreview", self.exports)
+        self.assertIn("accepts `html`, `pdf`,\nor `json`", self.exports)
         self.assertIn("Reports omit command bodies", self.exports)
         self.assertIn("Sigma rule labels and HTTPS references", self.exports)
+        self.assertIn("current catalog does not declare a Sigma-reference field", self.exports)
+        self.assertIn("x_mitre_data_sources", self.exports)
+        self.assertIn("x_mitre_detection", self.exports)
         self.assertIn("JSON remains the canonical machine-readable", self.exports)
+        self.assertIn("self-reported\nreceipt", self.exports)
+        self.assertIn("independently collected endpoint or SIEM telemetry", self.exports)
+        self.assertIn("does not refresh ATT&CK data, search for rules, run a kit", self.exports)
 
     def test_troubleshooting_covers_compose_reports_and_diagnostics(self) -> None:
         self.assertIn("`docker compose up` exits or restarts repeatedly", self.troubleshooting)
-        self.assertIn("HTML/PDF report download fails", self.troubleshooting)
+        self.assertIn("Report preview shows **Report generation failed**", self.troubleshooting)
+        self.assertIn("PDF or JSON download fails after the preview is ready", self.troubleshooting)
         self.assertIn("`ATT&CK feed reachability` is `FAIL`", self.troubleshooting)
 
     def test_primary_cross_document_links_resolve(self) -> None:

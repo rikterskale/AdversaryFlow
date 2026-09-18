@@ -252,9 +252,10 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 | Card | File | Contents |
 |---|---|---|
 | **Download Windows execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
-| **PDF engagement report** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps |
-| **HTML engagement report** | `AdversaryFlow_G0016_APT29_report.html` | The same command-free report as a self-contained, responsive browser document |
-| **Schema-versioned JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical schema 2.0 plan validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
+| **Generate report** | Preview in the Export step | Empty → generating → ready, or an actionable error with retry; the ready state embeds the self-contained HTML in a sandboxed preview |
+| **PDF** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps, rendered from the preview HTML |
+| **HTML** | `AdversaryFlow_G0016_APT29_report.html` | The same self-contained, responsive document shown in the preview |
+| **JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical schema 2.0 plan validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
 | **Commented runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
 
@@ -264,9 +265,13 @@ edited commands require a reason and second approval, and the destination runner
 writes HTML/Markdown reports plus CSV, JSON, JSONL, logs, and checksums.
 The service rebinds report content to the curated catalog before rendering the
 HTML and PDF engagement reports. Those reports never contain runnable commands.
+The JSON download preserves the submitted schema 2.0 record rather than
+creating a second report schema.
 
-**Observable result:** the file downloads and a toast reads
-*"Exported AdversaryFlow_G0016_APT29.json"*. **Core value is delivered here.**
+**Observable result:** report generation moves from **Generating report
+preview…** to **Preview ready** and the toast reads *"Engagement report preview
+ready"*. The HTML, PDF, and JSON download controls then become available.
+**Core value is delivered here.**
 
 ### Step 11 — Resume later
 
@@ -329,7 +334,8 @@ prefix.
 | Clipboard blocked by the browser | Toast *"Clipboard access was denied"* | Select the command text manually |
 | Local storage unavailable (private mode, quota) | Toast *"Progress can't be saved in this browser — export the plan to keep your records"*, shown once | Export the JSON plan to preserve records |
 | Operator execution kit generation fails | A toast shows the API's error message, or `Execution kit could not be generated (<status>)` when no JSON message is available; the export button is restored | Correct the reported plan/session problem and click the execution-kit card again |
-| HTML/PDF engagement report generation fails | A toast shows the API's error message, or `Report generation failed. Check service health and try again.` when no message is available; both report buttons are restored | Correct the reported plan/session problem and select the report format again |
+| Engagement report generation fails | The preview area shows **Report generation failed**, preserves the API message, and offers **Retry report generation**; the same message also appears in a toast | Correct the reported plan/session problem and retry generation |
+| PDF/JSON report download fails after preview | The preview remains visible, an inline error and toast show the API message, and all download controls are restored | Correct the reported service/session problem and retry the format |
 | Refresh while a plan is open | Confirm dialog *"Refreshing can change technique mappings and will rebuild the current plan. Continue?"*; on success, toast *"ATT&CK feed refreshed; the plan was rebuilt"* | Cancel to keep the current plan |
 | Refresh twice within 5 seconds | `429 refresh_rate_limited` | Wait a few seconds |
 | Refresh while another refresh or bootstrap runs | `409 refresh_in_progress` / `409 bootstrap_in_progress` | Wait for it to finish |
@@ -436,7 +442,7 @@ table directly.
 | J26 | Record evidence | Set an outcome and expand **Execution proof** | Persists the note, cleanup state, run ID, timestamps, exit code, output hashes, evidence source, and telemetry references | `#progressCount` and `#progressPct` update to match the marked techniques; bounded-exercise receipts can be digest-verified and imported |
 | J27 | Persistence failure | Make local storage throw | Warns instead of silently dropping records | Toast reads `Progress can't be saved in this browser — export the plan to keep your records` |
 | J28 | Export screen | Click **Finish & export** | Renders step 4 | Heading *Your emulation plan is ready* with tiles Techniques, Stages, Runnable tests, Marked run |
-| J29 | Export JSON | Click **Schema-versioned JSON** | Downloads a schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
+| J29 | Export JSON | Click **Generate report**, then **JSON** | Downloads the canonical schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
 | J30 | Export Markdown | Click **Markdown report** | Downloads a report | File named `AdversaryFlow_<ID>_<Name>.md` containing `# AdversaryFlow — <name> (<id>)`, a `### <technique>` section, and `**Outcome:**` |
 | J31 | Export runbook | Click **Commented runbook**, including after importing fields containing line breaks | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; every physical metadata, command, and cleanup line retains `REM` on Windows or `#` on Linux/macOS |
 | J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with the actor heading, outcomes, and evidence notes restored; toast reads `Plan imported as high-risk; verify its data version before execution` |
@@ -470,7 +476,7 @@ table directly.
 | J60 | Export operator kit | Click **Download <platform> execution kit** | Builds and downloads a catalog-rebound ZIP without executing commands | HTTP 200 returns a `.zip` containing an `<actor>-plan.csv` and platform-matching `<actor>-execute.ps1` or `<actor>-execute.sh`; plans with bounded exercises also contain `AdversaryFlow-exercises.py`; the toast reads `Execution kit ready: <filename>` |
 | J61 | Recover from kit export failure | Make `POST /api/execution-kit` return an error, then click the execution-kit card | Surfaces the failure and restores the control | A toast shows the API message or the status fallback, no download begins, and the execution-kit button is enabled again |
 | J62 | Record a failing lab step | Run a downloaded kit whose step exits non-zero and whose cleanup also fails | Records the failure as evidence instead of aborting the session | The runner exits 0; `execution-summary.json`, `execution-results.csv`, `evidence-events.jsonl`, and `SHA256SUMS` are all written; the summary reports `failed_steps = 1` and `completed_steps = 0`; the CSV row records `exit_code = 3` and `cleanup_status = failed`; the generated runner contains no `set -e` statement |
-| J63 | Export engagement reports | Click **PDF engagement report**, then **HTML engagement report** | The server validates the schema 2.0 plan, rebinds catalog-owned mappings, and downloads command-free reports | Files named `AdversaryFlow_<ID>_<Name>_report.pdf` and `.html` contain planned techniques, expected telemetry, ATT&CK detection guidance, catalog Sigma references when present, evidence status, and coverage gaps; neither contains runnable commands |
+| J63 | Export engagement reports | Click **Generate report**, inspect the preview, then download **HTML**, **PDF**, and **JSON** | The server validates the schema 2.0 plan, rebinds catalog-owned mappings for the command-free human view, renders PDF from HTML, and preserves JSON as the canonical record | Empty/loading/error/ready states are explicit; files are named `AdversaryFlow_<ID>_<Name>_report.html`, `_report.pdf`, and `.json`; HTML/PDF contain techniques, telemetry, ATT&CK detection guidance, catalog Sigma references only when present, evidence, and gaps, but no runnable commands |
 
 ---
 

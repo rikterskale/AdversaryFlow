@@ -74,9 +74,12 @@ operator/target context, notes, and cleanup verification are stored locally.
 Exercise receipts are self-reported; correlate their run IDs and timestamps
 with the endpoint or SIEM before treating execution as independently verified.
 Export a schema 2.0 JSON plan for backup, handoff, or resume. The export screen
-also produces command-free HTML/PDF engagement reports with telemetry,
-detection mappings, evidence status, and coverage gaps. Imported commands are
-always elevated to high risk and require acknowledgment before copying.
+uses **Generate report** to produce a sandboxed HTML preview, then enables
+command-free HTML/PDF downloads plus the canonical JSON record. Human reports
+include telemetry, ATT&CK detection mappings, evidence status, and coverage
+gaps; the current catalog has no Sigma-reference field, so missing Sigma
+mappings are reported as gaps instead of inferred. Imported commands are always
+elevated to high risk and require acknowledgment before copying.
 
 Do not put secrets in execution notes or exports.
 

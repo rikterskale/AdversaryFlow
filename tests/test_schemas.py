@@ -41,6 +41,14 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/api/report/{report_format}:", contract)
         self.assertIn('"403"', contract)
 
+    def test_openapi_publishes_all_report_serializers(self):
+        contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
+        report_contract = contract[contract.index("/api/report/{report_format}:"):contract.index("/api/refresh:")]
+        self.assertIn("enum: [html, pdf, json]", report_contract)
+        for content_type in ("text/html", "application/pdf", "application/json"):
+            with self.subTest(content_type=content_type):
+                self.assertIn(content_type, report_contract)
+
     def test_openapi_documents_conditional_bearer_auth_and_every_401(self):
         contract = Path("docs/openapi.yaml").read_text(encoding="utf-8")
         self.assertIn("security:\n  - {}\n  - BearerToken: []", contract)

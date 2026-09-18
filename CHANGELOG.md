@@ -4,6 +4,10 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Added deterministic purple-team engagement reports over the schema 2.0 plan:
+  a sandboxed HTML preview, HTML-derived PDF, canonical JSON download, complete
+  telemetry/evidence detail, honest Sigma and instrumentation gaps, and no
+  report-time execution or network access.
 - Listed every mapped ATT&CK group and campaign, including actors that
   ATT&CK records only through the malware or tools they use.
 - Removed the prescribed first actor: the welcome screen no longer skips

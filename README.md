@@ -49,7 +49,8 @@ in under five minutes entirely in the planner:
 3. Review the coverage heatmap and the first technique's risk, privilege,
    network, telemetry, and rollback preview.
 4. Do **not** select **Copy command**. Select **Finish & export** instead.
-5. Download **PDF engagement report** and **Schema-versioned JSON**.
+5. Select **Generate report**, review the preview, then download **PDF** and
+   **Schema-versioned JSON**.
 
 Success is two downloaded planning artifacts and `0` outcomes recorded. The
 service has not executed a command or contacted a target. Stop with Ctrl+C;
@@ -80,8 +81,9 @@ steps are reached:
    `c` copies the focused command.
 4. **Export** — download a one-click **operator execution kit** containing a CSV
    plan and self-contained PowerShell or Bash runner. Generate command-free
-   purple-team reports as **PDF** or **HTML**, preserve the schema-versioned
-   **JSON** evidence record, or export **Markdown** and a commented **runbook**.
+   purple-team reports, review the sandboxed HTML preview, then download
+   **HTML**, **PDF**, or the canonical schema-versioned **JSON** evidence
+   record. Markdown and a commented runbook remain available separately.
 
 The execution kit is an offline handoff artifact. Direct catalog commands need
 no AdversaryFlow installation, Python, or network access. Bounded synthetic
@@ -213,7 +215,7 @@ offline use, upgrades, and health behavior. Use the dedicated
 | `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
 | `GET /api/doctor` | Structured host self-test used by the GUI health panel |
 | `POST /api/execution-kit` | Catalog-rebound, operator-gated offline kit |
-| `POST /api/report/{format}` | Command-free HTML or PDF purple-team engagement report |
+| `POST /api/report/{format}` | Command-free HTML/PDF engagement report or canonical schema 2.0 JSON (`html`, `pdf`, `json`) |
 
 Mutating endpoints require a same-origin request token, refreshes are
 serialized/rate-limited, and non-loopback binding requires explicit opt-in.
@@ -221,6 +223,9 @@ The complete HTTP contract is checked in as [OpenAPI 3.1](docs/openapi.yaml).
 Schema 2.0 JSON exports conform to the
 [AdversaryFlow plan schema](schemas/adversaryflow-plan.schema.json); they are
 AdversaryFlow-native and do not claim direct VECTR or Caldera compatibility.
+The human report's field provenance, detection-mapping rules, coverage-gap
+math, and receipt-correlation limitation are documented in
+[Export formats](docs/EXPORTS.md).
 
 ### The `domains` parameter (ATT&CK domain toggle)
 

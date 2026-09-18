@@ -23,7 +23,8 @@ Official MITRE ATT&CK STIX 2.1 feed
 │  app.py / Flask API ◄──── React + TypeScript SPA             │
 │       │                  (same origin, browser autosave)      │
 │       ├── diagnostics.py ──► PASS/FAIL self-test              │
-│       ├── reporting.py ───► command-free HTML/PDF            │
+│       ├── reporting.py ───► command-free HTML → PDF           │
+│       │                    └► canonical plan JSON              │
 │       └── execution_kit.py ► catalog-rebound offline ZIP     │
 └──────────────────────────────────────────────────────────────┘
                                       │ deliberate file transfer
@@ -42,7 +43,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
 | `backend/lab_exercises.py` | Portable bounded synthetic exercise families and digest-protected receipts | Runs only when an operator invokes the exported script on a lab host |
 | `backend/execution_kit.py` | Rebinds a submitted plan to the server catalog and emits the offline CSV/runner ZIP | Browser-supplied command bodies are discarded |
-| `backend/reporting.py` | Builds command-free report models and self-contained HTML/PDF output | Escapes plan text and omits executable content |
+| `backend/reporting.py` | Builds a deterministic command-free report view, self-contained HTML, HTML-derived PDF, and canonical plan JSON | Escapes plan text, omits executable content from human reports, and never executes plan content |
 | `backend/diagnostics.py` | Shared CLI/API checks for runtime, Docker, assets, port, cache, disk, and ATT&CK reachability | Read-only except for a temporary cache-writability probe |
 | `backend/telemetry.py` | Normalizes independently collected endpoint/SIEM exports and applies bounded-exercise acceptance criteria | Does not collect from remote targets or execute exercises |
 
@@ -111,13 +112,20 @@ instead of silently losing work.
 
 ### Export and handoff
 
-The browser builds the strict schema 2.0 plan record. JSON is downloaded
-directly and remains the canonical resume format.
+The browser builds the strict schema 2.0 plan record. On the Export step,
+**Generate report** requests HTML, presents explicit empty/loading/error/ready
+states, and places the self-contained document in a sandboxed preview.
 
 `POST /api/report/html` and `POST /api/report/pdf` discard submitted command
 bodies through catalog rebinding, then render technique coverage, expected
-telemetry, ATT&CK detection mappings, optional catalog Sigma references,
-evidence, and categorized gaps. Reports contain no runnable command text.
+telemetry and acceptance criteria, ATT&CK data sources/detection guidance,
+catalog Sigma references only when explicitly present, complete evidence, and
+categorized gaps. PDF consumes the same generated HTML. Reports contain no
+runnable command text and make no report-time network calls.
+
+`POST /api/report/json` returns the submitted schema 2.0 plan unchanged as the
+canonical machine-readable evidence and resume record. It is not a parallel
+report model. The HTML/PDF source-plan digest is calculated from this input.
 
 `POST /api/execution-kit` performs the same catalog rebinding and emits an
 integrity-bound ZIP. The kit is moved offline to the disposable host. Its

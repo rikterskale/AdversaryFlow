@@ -124,8 +124,8 @@ The Docker/Compose context and service-port checks should both be `PASS`;
 4. On **Review and track plan**, inspect the coverage heatmap and the first
    technique's risk, privilege, network, telemetry, and rollback preview. Do
    not select **Copy command**; nothing needs to run for this dry-run.
-5. Select **Finish & export**, then download **PDF engagement report** and
-   **Schema-versioned JSON**.
+5. Select **Finish & export**, select **Generate report**, review the preview,
+   then download **PDF** and **Schema-versioned JSON**.
 
 You are done when both files download and the page still reports `0` outcomes
 recorded. The PDF is a command-free coverage report. JSON is the canonical
@@ -585,16 +585,21 @@ On **Finish & export**:
 | Control | What you get |
 | --- | --- |
 | **Download <platform> execution kit** | ZIP: catalog-rebound CSV + PowerShell (Windows) or Bash (Linux/macOS) runner. Bounded synthetic steps add `AdversaryFlow-exercises.py` (needs Python 3.10+ beside the kit). Direct steps need no AdversaryFlow install on the destination. |
-| **PDF engagement report** | Paginated, command-free purple-team report with planned techniques, expected telemetry, ATT&CK detection guidance, catalog-provided Sigma references, recorded evidence, and coverage gaps. |
-| **HTML engagement report** | Self-contained responsive version of the same command-free report. |
+| **Generate report** | Builds a command-free, catalog-rebound HTML report and shows it in a sandboxed preview with empty, loading, error, and ready states. |
+| **PDF** | Paginated version rendered from the generated HTML, with planned techniques, expected telemetry, ATT&CK detection guidance, recorded evidence, and coverage gaps. |
+| **HTML** | Downloads the same self-contained responsive document shown in the preview. |
 | **Markdown report** | Human-readable plan, including **Outcome** and **Detection**. |
-| **Schema-versioned JSON** | Canonical schema 2.0 plan and evidence record; this is the file you resume later. |
+| **JSON** | Canonical schema 2.0 plan and evidence record; this is the file you resume later. |
 | **Commented Runbook** | `.txt` with every command commented (`REM` / `#`). It is not a script. |
 
-The service rebinds kit and report metadata to its bounded catalog before
-serialization. It never runs kit commands. The destination runner asks run /
-edit / skip / abort per step. Reports deliberately omit runnable command
-bodies; Sigma links appear only when the catalog explicitly supplies one.
+The service rebinds kit and HTML/PDF report metadata to its bounded catalog
+before serialization. JSON preserves the submitted schema 2.0 source record.
+The service never runs kit commands. The destination runner asks run / edit /
+skip / abort per step. Reports deliberately omit runnable command bodies;
+Sigma links appear only when the catalog explicitly supplies one. The current
+catalog supplies none, so reports show an explicit Sigma mapping gap rather
+than inventing a rule. See [Export formats](EXPORTS.md) for report provenance
+and coverage semantics.
 
 ### Offline
 

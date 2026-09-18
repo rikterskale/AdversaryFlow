@@ -39,7 +39,8 @@ diagnostic contacts a target system. The only external probe is an HTTPS
 | Mutation returns HTTP 403 | The same-origin request token is absent or the browser origin differs | Use the GUI, or fetch `/api/session` and send `X-AdversaryFlow-CSRF` from the same origin. |
 | Browser progress cannot be saved | Local storage is blocked, private, or full | Export schema-versioned JSON immediately, then restore it with **Resume JSON plan** in a storage-enabled profile. |
 | Execution-kit download fails | The live catalog changed, the request is too large, or the service rejected the plan | Keep the plan open, inspect the error toast and health panel, refresh only if necessary, then retry the download. The service rebinds commands to its catalog. |
-| HTML/PDF report download fails | The plan is incomplete, the request exceeded 5 MiB, or the catalog could not rebind a technique | Keep the plan open, inspect the error toast and **System health**, export JSON as a backup, then retry. Reports do not execute or include commands. |
+| Report preview shows **Report generation failed** | The plan is invalid, the request exceeded 5 MiB, or the catalog could not rebind a technique | Keep the plan open, inspect the inline message and **System health**, then choose **Retry report generation**. Reports do not execute or include commands. |
+| PDF or JSON download fails after the preview is ready | The service/session became unavailable after HTML generation | Keep the preview open, inspect the inline error and toast, restore the service or token, then retry that download. |
 
 ## Safe recovery order
 
