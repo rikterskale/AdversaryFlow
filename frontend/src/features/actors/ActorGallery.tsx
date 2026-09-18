@@ -4,6 +4,7 @@ import type { Actor, ActorsResponse, ActorType, AttackDomain } from "../../api/c
 import { Button } from "../../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../../components/Feedback";
 import { Icon } from "../../components/Icon";
+import { ActorCard } from "./ActorCard";
 
 type TypeFilter = "all" | ActorType;
 type SortOption = "name" | "ttps";
@@ -26,14 +27,6 @@ const domainOptions: { value: AttackDomain; label: string; description: string }
   { value: "ics", label: "ICS / OT", description: "Industrial control and operational technology environments" },
   { value: "mobile", label: "Mobile", description: "Android and iOS platforms" },
 ];
-
-function cleanDescription(value: string): string {
-  return value
-    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-    .replace(/\s*\(Citation:[^)]+\)/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function actorSearchText(actor: Actor): string {
   return [actor.name, actor.attack_id, actor.type, ...actor.aliases].join(" ").toLocaleLowerCase();
@@ -58,6 +51,7 @@ export function ActorGallery({
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sort, setSort] = useState<SortOption>("name");
+  const filtersActive = Boolean(query.trim()) || typeFilter !== "all";
 
   const actors = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -81,7 +75,7 @@ export function ActorGallery({
   };
 
   return (
-    <section className="screen actor-screen" aria-labelledby="actor-title">
+    <section aria-busy={loading} className="screen actor-screen" aria-labelledby="actor-title">
       <div className="screen-heading">
         <div>
           <p className="eyebrow">Step 1 of 4 · Live ATT&amp;CK catalog</p>
@@ -156,58 +150,41 @@ export function ActorGallery({
       </div>
 
       {loading ? <LoadingState detail="This usually takes a moment after the cache is ready." label="Loading actors from ATT&CK…" /> : null}
-      {error ? <ErrorState message={error.message} onRetry={onRetry} title="The actor catalog could not be loaded" /> : null}
+      {error ? <ErrorState message={error.message} onRetry={onRetry} retryLabel="Retry catalog" title="The actor catalog could not be loaded" /> : null}
 
       {!loading && !error ? (
         <>
           <div className="results-line" role="status">
-            <span id="actorResults">{actors.length} result{actors.length === 1 ? "" : "s"}</span>
-            <span className="results-source">Source · MITRE ATT&amp;CK STIX 2.1</span>
+            <span id="actorResults">
+              {actors.length} {actors.length === 1 ? "result" : "results"}
+              {actors.length !== (response?.actors.length ?? 0) ? ` of ${response?.actors.length ?? 0}` : ""}
+            </span>
+            <span className="results-source">MITRE ATT&amp;CK STIX 2.1 · <code>{response?.data_version}</code></span>
           </div>
 
           {actors.length ? (
-            <div className="actor-grid">
-              {actors.map((actor) => {
-                const selected = selectedActor?.stix_id === actor.stix_id;
-                const description = cleanDescription(actor.description);
-                return (
-                  <button
-                    aria-label={`Select ${actor.name}, ${actor.attack_id}, ${actor.technique_count} techniques`}
-                    aria-pressed={selected}
-                    className={`actorcard ${selected ? "is-selected" : ""}`}
-                    key={actor.stix_id}
-                    onClick={() => onSelect(actor)}
-                    type="button"
-                  >
-                    <span className="actorcard__top">
-                      <span className="actorcard__identity">
-                        <span className="actorcard__monogram" aria-hidden="true">{actor.name.slice(0, 2).toLocaleUpperCase()}</span>
-                        <span><strong>{actor.name}</strong><small>{actor.attack_id} · {actor.type}</small></span>
-                      </span>
-                      <span className="selection-mark" aria-hidden="true"><Icon name="check" /></span>
-                    </span>
-                    <span className="actorcard__desc">{description || "No ATT&CK summary is available for this actor."}</span>
-                    {actor.aliases.length ? <span className="actorcard__aliases"><span>Also known as</span> {actor.aliases.slice(0, 3).join(" · ")}</span> : null}
-                    <span className="actorcard__footer">
-                      <span className="metric"><strong>{actor.technique_count}</strong><span>mapped techniques</span></span>
-                      <span className="coverage-badge"><span aria-hidden="true" />ATT&amp;CK mapped</span>
-                    </span>
-                  </button>
-                );
-              })}
+            <div aria-label="ATT&CK actors and campaigns" className="actor-grid">
+              {actors.map((actor) => (
+                <ActorCard
+                  actor={actor}
+                  key={actor.stix_id}
+                  onSelect={onSelect}
+                  selected={selectedActor?.stix_id === actor.stix_id}
+                />
+              ))}
             </div>
           ) : (
             <EmptyState
-              action={query || typeFilter !== "all" ? <Button onClick={() => { setQuery(""); setTypeFilter("all"); }}>Clear filters</Button> : undefined}
-              message={query ? "Try a broader name, alias, or ATT&CK identifier." : "No actors are available for the selected domains."}
-              title={query ? "No actors match your search." : "No actors found"}
+              action={filtersActive ? <Button onClick={() => { setQuery(""); setTypeFilter("all"); }}>Clear filters</Button> : undefined}
+              message={filtersActive ? "Try a broader name, alias, ATT&CK identifier, or actor type." : "No actors are available for the selected domains."}
+              title={filtersActive ? "No actors match the active filters." : "No actors found"}
             />
           )}
         </>
       ) : null}
 
       <div className="actionbar">
-        <div className="actionbar__context">
+        <div aria-live="polite" className="actionbar__context">
           <span className={`context-dot ${selectedActor ? "is-ready" : ""}`} aria-hidden="true" />
           <div><span id="actionbarCtx">{selectedActor ? `Selected: ${selectedActor.name}` : "Select a threat actor to continue"}</span><small>{selectedActor ? `${selectedActor.attack_id} · ${pluralizeTechniques(selectedActor.technique_count)}` : "Changing actors later requires confirmation so evidence cannot be misattributed."}</small></div>
         </div>

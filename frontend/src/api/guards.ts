@@ -22,14 +22,19 @@ function isStringArray(value: unknown): value is string[] {
 
 function isActor(value: unknown): value is Actor {
   if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  const actorKeys = ["stix_id", "attack_id", "name", "type", "aliases", "description", "technique_count"];
   return (
+    keys.length === actorKeys.length &&
+    actorKeys.every((key) => key in value) &&
     typeof value.stix_id === "string" &&
     typeof value.attack_id === "string" &&
     typeof value.name === "string" &&
     (value.type === "group" || value.type === "campaign") &&
     isStringArray(value.aliases) &&
     typeof value.description === "string" &&
-    typeof value.technique_count === "number"
+    Number.isInteger(value.technique_count) &&
+    Number(value.technique_count) >= 0
   );
 }
 

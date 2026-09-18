@@ -1,6 +1,19 @@
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --font-sans: system-ui, "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-panel: 14px;
+  --radius-pill: 9999px;
   --canvas: #080d14;
   --surface: #0d1520;
   --surface-elevated: #111c2a;

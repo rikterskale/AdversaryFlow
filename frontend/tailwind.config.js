@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["system-ui", "Segoe UI Variable", "Segoe UI", "sans-serif"],
         mono: ["SFMono-Regular", "Cascadia Code", "Consolas", "monospace"],
       },
       boxShadow: {

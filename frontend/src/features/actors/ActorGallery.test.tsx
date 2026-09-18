@@ -56,4 +56,41 @@ describe("ActorGallery", () => {
     expect(onNotice).toHaveBeenCalledWith("Keep at least one ATT&CK domain selected.");
     expect(onDomainsChange).not.toHaveBeenCalled();
   });
+
+  it("opts into an additional domain without dropping Enterprise", () => {
+    const onDomainsChange = vi.fn();
+    renderGallery({ onDomainsChange });
+    fireEvent.click(screen.getByRole("button", { name: "ICS / OT" }));
+    expect(onDomainsChange).toHaveBeenCalledWith(["enterprise", "ics"]);
+  });
+
+  it("filters groups and campaigns and explains a type-only empty result", () => {
+    renderGallery();
+    fireEvent.click(screen.getByRole("button", { name: "Groups" }));
+    expect(screen.getByRole("button", { name: /Alpha Group/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Beta Campaign/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search actors"), { target: { value: "Beta" } });
+    expect(screen.getByRole("heading", { name: "No actors match the active filters." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+  });
+
+  it("selects an actor and continues with the selected record", () => {
+    const onSelect = vi.fn();
+    const onContinue = vi.fn();
+    renderGallery({ onContinue, onSelect, selectedActor: response.actors[0] });
+
+    expect(screen.getByRole("button", { name: /Select Alpha Group/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Select Beta Campaign/ }));
+    expect(onSelect).toHaveBeenCalledWith(response.actors[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Continue to scope/ }));
+    expect(onContinue).toHaveBeenCalledOnce();
+  });
+
+  it("uses a catalog-specific recovery action", () => {
+    const onRetry = vi.fn();
+    renderGallery({ error: new Error("Catalog unavailable"), onRetry, response: null });
+    fireEvent.click(screen.getByRole("button", { name: "Retry catalog" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
 });
