@@ -72,6 +72,24 @@ async function interceptApi(page, { commands = [lowRisk], multiStage = false, ac
   await page.route("**/api/bootstrap", r => r.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
   await page.route("**/api/actors?*", r => r.fulfill({ json: { actors, domains: ["enterprise"], data_version: "enterprise:bundle--uat", version: "0.3.0" } }));
   await page.route("**/api/workflow/**", r => r.fulfill({ json: workflow(commands, multiStage) }));
+  await page.route("**/api/report/html", r => r.fulfill({
+    status: 200,
+    contentType: "text/html",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_UAT_Actor_report.html"' },
+    body: "<!doctype html><html><body><h1>UAT engagement report</h1></body></html>",
+  }));
+  await page.route("**/api/report/pdf", r => r.fulfill({
+    status: 200,
+    contentType: "application/pdf",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_UAT_Actor_report.pdf"' },
+    body: Buffer.from("%PDF-1.7 UAT fixture"),
+  }));
+  await page.route("**/api/report/json", r => r.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_UAT_Actor.json"' },
+    body: JSON.stringify(r.request().postDataJSON()),
+  }));
 }
 
 async function toScope(page, options) {
@@ -338,7 +356,9 @@ test("J29 — the JSON export validates against the published schema", async ({ 
   await page.getByLabel("Outcome for T1059.001").selectOption("passed");
   await page.getByLabel("Evidence note for T1059.001").fill("Observed");
   await page.getByRole("button", { name: /Finish & export/ }).click();
-  const { artifact, text } = await exportAndRead(page, /JSON/);
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
+  const { artifact, text } = await exportAndRead(page, "Download Schema-versioned JSON");
   expect(artifact.suggestedFilename()).toBe("AdversaryFlow_G0001_UAT_Actor.json");
   const exported = JSON.parse(text);
   const schema = JSON.parse(fs.readFileSync(path.resolve("schemas/adversaryflow-plan.schema.json"), "utf-8"));
@@ -410,8 +430,10 @@ test("J33 — a default-scope export round-trips into a runnable plan", async ({
   await toScope(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /JSON/ }).click();
+  await page.getByRole("button", { name: "Download Schema-versioned JSON" }).click();
   const exportedPath = await (await download).path();
   expect(JSON.parse(fs.readFileSync(exportedPath, "utf-8")).scope.allow_high_risk).toBe(false);
 

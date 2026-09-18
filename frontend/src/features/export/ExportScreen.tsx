@@ -19,8 +19,13 @@ interface ExportScreenProps {
   onRestart: () => void;
 }
 
-type TextFormat = "json" | "markdown" | "runbook";
-type ReportFormat = "html" | "pdf";
+type TextFormat = "markdown" | "runbook";
+type ReportFormat = "html" | "pdf" | "json";
+type ReportPreviewState =
+  | { status: "empty" }
+  | { status: "loading" }
+  | { status: "ready"; html: string; filename: string }
+  | { status: "error"; message: string };
 
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -48,6 +53,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const records = useWizardStore((state) => state.records);
   const [kitLoading, setKitLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
+  const [reportPreview, setReportPreview] = useState<ReportPreviewState>({ status: "empty" });
+  const [reportDownloadError, setReportDownloadError] = useState<string | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
   const bundle = useMemo(() => buildExportBundle(actor, workflow, scope, records, domains), [actor, domains, records, scope, workflow]);
   const validationError = useMemo(() => {
@@ -71,11 +78,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       let content: string;
       let filename: string;
       let mime: string;
-      if (format === "json") {
-        content = JSON.stringify(bundle.plan, null, 2);
-        filename = `AdversaryFlow_${bundle.slug}.json`;
-        mime = "application/json";
-      } else if (format === "markdown") {
+      if (format === "markdown") {
         content = toMarkdown(bundle);
         filename = `AdversaryFlow_${bundle.slug}.md`;
         mime = "text/markdown";
@@ -111,8 +114,38 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
     }
   };
 
+  const generateReport = async (): Promise<void> => {
+    if (reportPreview.status === "loading" || reportLoading || validationError || !csrfToken) return;
+    setReportPreview({ status: "loading" });
+    setReportDownloadError(null);
+    try {
+      const response = await apiFetch("/api/report/html", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
+        body: JSON.stringify(bundle.plan),
+      });
+      if (!response.ok) await responseJson(response);
+      const html = await response.text();
+      if (!html.trim()) throw new Error("The service returned an empty HTML report.");
+      const fallback = `AdversaryFlow_${bundle.slug}_report.html`;
+      const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), fallback);
+      setReportPreview({ status: "ready", html, filename });
+      onNotice("Engagement report preview ready");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Report generation failed. Check service health and try again.";
+      setReportPreview({ status: "error", message });
+      onNotice(message);
+    }
+  };
+
   const exportReport = async (format: ReportFormat): Promise<void> => {
-    if (reportLoading || validationError) return;
+    if (reportLoading || validationError || reportPreview.status !== "ready" || !csrfToken) return;
+    setReportDownloadError(null);
+    if (format === "html") {
+      downloadBlob(new Blob([reportPreview.html], { type: "text/html;charset=utf-8" }), reportPreview.filename);
+      onNotice(`Engagement report ready: ${reportPreview.filename}`);
+      return;
+    }
     setReportLoading(format);
     try {
       const response = await apiFetch(`/api/report/${format}`, {
@@ -121,12 +154,16 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         body: JSON.stringify(bundle.plan),
       });
       if (!response.ok) await responseJson(response);
-      const fallback = `AdversaryFlow_${bundle.slug}_report.${format}`;
+      const fallback = format === "json"
+        ? `AdversaryFlow_${bundle.slug}.json`
+        : `AdversaryFlow_${bundle.slug}_report.${format}`;
       const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), fallback);
       downloadBlob(await response.blob(), filename);
       onNotice(`Engagement report ready: ${filename}`);
     } catch (error: unknown) {
-      onNotice(error instanceof Error ? error.message : "Report generation failed. Check service health and try again.");
+      const message = error instanceof Error ? error.message : "Report download failed. Check service health and try again.";
+      setReportDownloadError(message);
+      onNotice(message);
     } finally {
       setReportLoading(null);
     }
@@ -142,7 +179,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   };
 
   return (
-    <section aria-busy={kitLoading || Boolean(reportLoading)} aria-labelledby="export-title" className="screen export-screen">
+    <section aria-busy={kitLoading || reportPreview.status === "loading" || Boolean(reportLoading)} aria-labelledby="export-title" className="screen export-screen">
       <header className="export-hero">
         <span aria-hidden="true" className={`export-hero__check ${exportReady ? "" : "is-invalid"}`}><Icon name={exportReady ? "check" : "close"} /></span>
         <p className="eyebrow">Step 4 of 4 · Export kit</p>
@@ -192,10 +229,57 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
             <div><strong>{readiness.detectionAssessed}/{readiness.techniques}</strong><span>Detections assessed</span></div>
             <div><strong>{readiness.coverageGaps}</strong><span>Catalog gaps</span></div>
           </div>
-          <div className="export-card-list">
-            <button className="export-card export-card--featured" disabled={!exportReady || Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("pdf"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "pdf" ? "Building PDF report…" : "PDF engagement report"}</strong><p>Leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps.</p></div><Icon name="download" /></button>
-            <button className="export-card" disabled={!exportReady || Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("html"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "html" ? "Building HTML report…" : "HTML engagement report"}</strong><p>Self-contained, responsive report for review in any modern browser.</p></div><Icon name="download" /></button>
-            <button className="export-card" disabled={!exportReady} onClick={() => exportText("json")} type="button"><span><Icon name="file" /></span><div><strong>Schema-versioned JSON</strong><p>Canonical AdversaryFlow 2.0 plan and evidence record for validation or resume.</p></div><Icon name="download" /></button>
+          <div className="report-builder">
+            <div className="report-builder__heading">
+              <div><strong>Engagement report</strong><span>Generate once, review, then download the format you need.</span></div>
+              <Icon name="file" />
+            </div>
+
+            {reportPreview.status === "empty" ? (
+              <div className="report-state report-state--empty">
+                <Icon name="file" />
+                <strong>No report generated yet</strong>
+                <p>The preview will show the catalog-rebound telemetry, detection mappings, evidence, and gaps. Nothing is executed.</p>
+              </div>
+            ) : null}
+
+            {reportPreview.status === "loading" ? (
+              <div className="report-state report-state--loading" role="status">
+                <span aria-hidden="true" className="report-spinner" />
+                <strong>Generating report preview…</strong>
+                <p>Rebinding the plan to the catalog and assembling the command-free report.</p>
+              </div>
+            ) : null}
+
+            {reportPreview.status === "error" ? (
+              <div className="report-state report-state--error" role="alert">
+                <Icon name="close" />
+                <strong>Report generation failed</strong>
+                <p>{reportPreview.message}</p>
+              </div>
+            ) : null}
+
+            {reportPreview.status === "ready" ? (
+              <div className="report-preview">
+                <div className="report-preview__status" role="status"><span aria-hidden="true" /><strong>Preview ready</strong><small>Self-contained HTML · command bodies excluded</small></div>
+                <iframe referrerPolicy="no-referrer" sandbox="" srcDoc={reportPreview.html} title="Engagement report preview" />
+                <div aria-label="Report downloads" className="report-downloads">
+                  <button aria-label="Download HTML engagement report" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("html"); }} type="button"><Icon name="download" /><span><strong>HTML</strong><small>Self-contained</small></span></button>
+                  <button aria-label="Download PDF engagement report" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("pdf"); }} type="button"><Icon name="download" /><span><strong>{reportLoading === "pdf" ? "Building…" : "PDF"}</strong><small>Print-ready</small></span></button>
+                  <button aria-label="Download Schema-versioned JSON" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("json"); }} type="button"><Icon name="download" /><span><strong>{reportLoading === "json" ? "Building…" : "JSON"}</strong><small>Schema 2.0</small></span></button>
+                </div>
+                {reportDownloadError ? <p className="report-download-error" role="alert">{reportDownloadError}</p> : null}
+              </div>
+            ) : null}
+
+            <Button
+              className="report-generate"
+              disabled={!exportReady || reportPreview.status === "loading" || Boolean(reportLoading) || !csrfToken}
+              onClick={() => { void generateReport(); }}
+              variant="primary"
+            >
+              <Icon className="button-icon" name="file" /> {reportPreview.status === "ready" ? "Regenerate report" : reportPreview.status === "error" ? "Retry report generation" : "Generate report"}
+            </Button>
           </div>
 
           <div className="secondary-exports">

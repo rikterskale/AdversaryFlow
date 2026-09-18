@@ -134,6 +134,12 @@ async function interceptApi(page, commands = [command], actors = [{ stix_id: "in
     headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor_report.pdf"' },
     body: Buffer.from("%PDF-1.7 fixture"),
   }));
+  await page.route("**/api/report/json", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "Content-Disposition": 'attachment; filename="AdversaryFlow_G0001_Test_Actor.json"' },
+    body: JSON.stringify(route.request().postDataJSON()),
+  }));
 }
 
 async function interceptDoctor(page, onRequest = () => {}) {
@@ -178,8 +184,10 @@ test("guided workflow records evidence and exports JSON", async ({ page }) => {
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Expected process event observed");
   await expect(page.locator("#saveStatus")).toHaveText("Saved in this browser");
   await page.getByRole("button", { name: /Finish & export/ }).click();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByTitle("Engagement report preview")).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /JSON/ }).click();
+  await page.getByRole("button", { name: "Download Schema-versioned JSON" }).click();
   const artifact = await download;
   expect(artifact.suggestedFilename()).toMatch(/AdversaryFlow_G0001/);
   const exported = JSON.parse(fs.readFileSync(await artifact.path(), "utf-8"));
@@ -322,13 +330,17 @@ test("purple-team reports export catalog-rebound HTML and PDF artifacts", async 
   await page.getByLabel("Detection for T1033").selectOption("alerted");
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await expect(page.getByLabel("Report coverage snapshot")).toContainText("1/1");
+  await expect(page.getByText("No report generated yet")).toBeVisible();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("Engagement report preview")).toBeVisible();
 
   const htmlDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: /HTML engagement report/ }).click();
+  await page.getByRole("button", { name: "Download HTML engagement report" }).click();
   expect((await htmlDownload).suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_report.html");
 
   const pdfDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: /PDF engagement report/ }).click();
+  await page.getByRole("button", { name: "Download PDF engagement report" }).click();
   expect((await pdfDownload).suggestedFilename()).toBe("AdversaryFlow_G0001_Test_Actor_report.pdf");
   await expect(page.getByRole("status").filter({ hasText: "Engagement report ready:" })).toBeVisible();
 });
@@ -362,8 +374,10 @@ test("a bounded exercise receipt is digest-verified and exported as execution pr
   await page.getByRole("button", { name: "Verify and import receipt" }).click();
   await expect(page.getByText("receipt digest verified (self-reported)")).toBeVisible();
   await page.getByRole("button", { name: /Finish & export/ }).click();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /JSON/ }).click();
+  await page.getByRole("button", { name: "Download Schema-versioned JSON" }).click();
   const exported = JSON.parse(fs.readFileSync(await (await download).path(), "utf-8"));
   const evidence = exported.stages[0].techniques[0].execution;
   expect(evidence).toMatchObject({ run_id: receipt.run_id, exit_code: 0, receipt_sha256: receipt.receipt_sha256, receipt_verified: true, cleanup_completed: true, evidence_source: "exercise_receipt" });
@@ -403,8 +417,10 @@ test("a resumed plan re-exports against the published schema", async ({ page }) 
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
   await page.getByRole("button", { name: /Finish & export/ }).click();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /JSON/ }).click();
+  await page.getByRole("button", { name: "Download Schema-versioned JSON" }).click();
   const exported = JSON.parse(fs.readFileSync(await (await download).path(), "utf-8"));
   const schema = JSON.parse(fs.readFileSync(path.resolve("schemas/adversaryflow-plan.schema.json"), "utf-8"));
   const validate = new Ajv2020({ strict: false, validateFormats: false }).compile(schema);
@@ -471,8 +487,10 @@ test("a plan exported with the default scope resumes as a runnable plan", async 
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
+  await page.getByRole("button", { name: "Generate report" }).click();
+  await expect(page.getByText("Preview ready", { exact: true })).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: /JSON/ }).click();
+  await page.getByRole("button", { name: "Download Schema-versioned JSON" }).click();
   const exportedPath = await (await download).path();
   const exported = JSON.parse(fs.readFileSync(exportedPath, "utf-8"));
   expect(exported.scope.allow_high_risk).toBe(false);
