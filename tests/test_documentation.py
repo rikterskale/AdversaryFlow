@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class DocumentationContractTests(unittest.TestCase):
     readme: ClassVar[str]
     getting_started: ClassVar[str]
+    install: ClassVar[str]
     architecture: ClassVar[str]
     exports: ClassVar[str]
     troubleshooting: ClassVar[str]
@@ -18,6 +19,7 @@ class DocumentationContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
         cls.getting_started = (ROOT / "docs" / "GETTING_STARTED.md").read_text(encoding="utf-8")
+        cls.install = (ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
         cls.architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
         cls.exports = (ROOT / "docs" / "EXPORTS.md").read_text(encoding="utf-8")
         cls.troubleshooting = (ROOT / "docs" / "TROUBLESHOOTING.md").read_text(encoding="utf-8")
@@ -49,6 +51,31 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("**PDF engagement report**", section)
         self.assertIn("**Schema-versioned JSON**", section)
         self.assertIn("`0` outcomes recorded", section)
+
+    def test_install_reference_documents_compose_configuration_and_recovery(self) -> None:
+        for setting in (
+            "ADVERSARYFLOW_BIND_ADDRESS",
+            "ADVERSARYFLOW_HOST",
+            "ADVERSARYFLOW_PORT",
+            "ADVERSARYFLOW_CACHE_DIR",
+            "ADVERSARYFLOW_OFFLINE",
+            "ADVERSARYFLOW_API_TOKEN",
+            "ADVERSARYFLOW_PUBLIC_URL",
+        ):
+            with self.subTest(setting=setting):
+                self.assertIn(setting, self.install)
+        for failure in (
+            "Docker troubleshooting matrix",
+            "Cannot connect to the Docker daemon",
+            "port is already allocated",
+            "raw.githubusercontent.com",
+            "STIX cache integrity",
+            "Cache disk space",
+        ):
+            with self.subTest(failure=failure):
+                self.assertIn(failure, self.install)
+        self.assertIn("docker compose exec adversaryflow adversaryflow doctor", self.install)
+        self.assertIn("refuses a non-loopback", self.install)
 
     def test_architecture_preserves_the_planner_boundary(self) -> None:
         self.assertIn("it has no\ncode path that executes a catalog command", self.architecture)

@@ -105,6 +105,15 @@ If the token scrolls away, open another terminal in the checkout and run:
 docker compose logs adversaryflow
 ```
 
+To run the preflight against the live container:
+
+```bash
+docker compose exec adversaryflow adversaryflow doctor
+```
+
+The Docker/Compose context and service-port checks should both be `PASS`;
+`doctor` recognizes that the listening port belongs to this container.
+
 ### Minute 3–5: create a no-execution plan
 
 1. Select **Begin emulation plan**.
@@ -150,6 +159,19 @@ internal interface. The bearer token is still required because a non-loopback
 bind exists inside the Compose network. The numbered native path below remains
 supported; its unauthenticated loopback `curl` examples do not apply to the
 token-protected container API.
+
+Compose configuration uses environment variables. `ADVERSARYFLOW_PORT=5050`
+changes the host port, container port, readiness probe, and printed URL
+together. `ADVERSARYFLOW_OFFLINE=true` disables downloads and therefore needs
+a previously seeded `adversaryflow-stix-cache` volume. The cache volume target
+is `ADVERSARYFLOW_CACHE_DIR` (default `/var/lib/adversaryflow/cache`).
+
+Remote host publication is off by default. An authorized TLS-protected lab can
+set `ADVERSARYFLOW_BIND_ADDRESS=0.0.0.0`, a long random
+`ADVERSARYFLOW_API_TOKEN`, and the externally usable
+`ADVERSARYFLOW_PUBLIC_URL`. The container refuses to start if remote
+publication is requested without that explicit token. See
+[Installation](INSTALL.md) before opting in.
 
 ---
 
@@ -617,6 +639,13 @@ strings are exact CLI or HTTP output.
 
 | You see | Likely cause | Fix |
 | --- | --- | --- |
+| `docker: command not found`, `docker is not recognized`, or `docker compose version` fails | Docker or Compose v2 is missing | Install Docker Engine/Desktop with Compose v2, open a new terminal, and confirm `docker version` plus `docker compose version` |
+| `Cannot connect to the Docker daemon` | Docker is installed but stopped | Start Docker Engine/Desktop, wait until it reports ready, then rerun `docker compose up` |
+| `port is already allocated` / `address already in use` during Compose startup | Another process owns port 5000 | `ADVERSARYFLOW_PORT=5050 docker compose up`, then open the printed URL |
+| `Refusing remote container publication on … without ADVERSARYFLOW_API_TOKEN.` | `ADVERSARYFLOW_BIND_ADDRESS` is non-loopback but no explicit token was supplied | Return to the default loopback publication, or set a long random token and a TLS-protected `ADVERSARYFLOW_PUBLIC_URL` as documented in INSTALL.md |
+| Compose setup cannot download ATT&CK data | Docker proxy, DNS, CA trust, or firewall policy blocks `raw.githubusercontent.com` | Correct the Docker host's proxy/DNS/CA configuration and allow the official HTTPS source; use offline mode only after seeding the volume |
+| Compose reports corrupt STIX data or a SHA-256 mismatch | Named-volume cache is truncated or corrupt | Stop Compose, preserve provenance if needed, run `docker compose run --rm adversaryflow cache-clear --yes`, then restart online |
+| Compose reports less than 256 MiB free or `no space left on device` | Docker storage is full | Inspect `docker system df`, free space without deleting required volumes, or move Docker data storage to a larger disk |
 | `AdversaryFlow requires Python 3.10 or newer.` | Interpreter too old or missing | Install Python 3.10+, confirm with `python3 --version` / `py -3 --version`, rerun `./install.sh` |
 | `doctor` has `"ok": false` and `"frontend_available": false` | Frontend files not next to the package | Run install from a full git checkout; or set `ADVERSARYFLOW_FRONTEND_DIR` to the `frontend/` directory |
 | `doctor` has `"cache_writable": false` | Cache directory not writable | `adversaryflow --cache-dir /path/you/own doctor` then start with the same `--cache-dir` |

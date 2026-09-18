@@ -23,10 +23,22 @@ cd AdversaryFlow
 docker compose up
 ```
 
-Wait for the `AdversaryFlow container configured successfully` banner. Open
-the printed <http://127.0.0.1:5000> URL and enter the printed API token when
-the browser asks for it. The first start downloads and validates the ATT&CK
-bundle; later starts reuse the `adversaryflow-stix-cache` volume.
+Wait for this success banner:
+
+```text
+============================================================
+  AdversaryFlow container configured successfully
+  URL:       http://127.0.0.1:5000
+  API token: <random per-start value> (generated for this container start)
+  Next step: open the URL and enter this token when prompted.
+  First start: ATT&CK data downloads into the cache volume.
+  Authorized disposable labs only; see ACCEPTABLE_USE.md.
+============================================================
+```
+
+Open the printed URL and enter the printed API token when the browser asks for
+it. The first start downloads and validates the ATT&CK bundle; later starts
+reuse the `adversaryflow-stix-cache` volume.
 
 On a typical connected workstation, create a safe first dry-run
 in under five minutes entirely in the planner:
@@ -133,10 +145,12 @@ Mobile domains are supported via `?domains=enterprise,ics,mobile`.
 ## Installation alternatives
 
 Docker Compose is the recommended path above. Set `ADVERSARYFLOW_PORT` before
-startup to choose another loopback host port. Set `ADVERSARYFLOW_API_TOKEN`
-only when you need a stable container token. The host port remains
-loopback-only, while the service retains bearer authentication for its
-non-loopback bind inside the Compose network.
+startup to change the host and container port together. Set
+`ADVERSARYFLOW_OFFLINE=true` only after the named cache volume has been seeded,
+and set `ADVERSARYFLOW_API_TOKEN` when you need a stable container token. The
+host publishes on loopback even though bridge networking requires the service
+to listen on its container interface. Remote publication is off by default and
+is refused without an explicit token; see [Installation](docs/INSTALL.md).
 
 Native launchers remain supported alternatives:
 
