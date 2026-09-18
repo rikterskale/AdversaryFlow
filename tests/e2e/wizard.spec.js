@@ -136,18 +136,21 @@ async function interceptApi(page, commands = [command], actors = [{ stix_id: "in
   }));
 }
 
-async function interceptDoctor(page) {
-  await page.route("**/api/doctor", route => route.fulfill({ json: {
-    version: "0.4.0",
-    generated_at: "2026-09-17T00:00:00.000Z",
-    ok: true,
-    summary: { passed: 2, failed: 1, required_failed: 0 },
-    checks: [
-      { id: "python", label: "Python runtime", status: "PASS", required: true, detail: "Python 3.12.14; minimum supported version is 3.10.", fix: "No action required." },
-      { id: "docker", label: "Docker and Compose", status: "FAIL", required: false, detail: "Docker was not found on PATH.", fix: "Install Docker Engine or Docker Desktop with the Compose v2 plugin, then ensure docker is on PATH." },
-      { id: "port", label: "Service port", status: "PASS", required: true, detail: "This AdversaryFlow service is listening on 127.0.0.1:5000.", fix: "No action required." },
-    ],
-  } }));
+async function interceptDoctor(page, onRequest = () => {}) {
+  await page.route("**/api/doctor", route => {
+    onRequest();
+    return route.fulfill({ json: {
+      version: "0.4.0",
+      generated_at: "2026-09-17T00:00:00.000Z",
+      ok: true,
+      summary: { passed: 2, failed: 1, required_failed: 0 },
+      checks: [
+        { id: "python", label: "Python runtime", status: "PASS", required: true, detail: "Python 3.12.14; minimum supported version is 3.10.", fix: "No action required." },
+        { id: "docker", label: "Docker and Compose", status: "FAIL", required: false, detail: "Docker was not found on PATH.", fix: "Install Docker Engine or Docker Desktop with the Compose v2 plugin, then ensure docker is on PATH." },
+        { id: "port", label: "Service port", status: "PASS", required: true, detail: "This AdversaryFlow service is listening on 127.0.0.1:5000.", fix: "No action required." },
+      ],
+    } });
+  });
 }
 
 async function buildPlan(page) {
@@ -196,8 +199,9 @@ test("welcome screen has no serious accessibility violations", async ({ page }) 
 });
 
 test("system health exposes the guided doctor report and fixes", async ({ page }) => {
+  let doctorRequests = 0;
   await interceptApi(page);
-  await interceptDoctor(page);
+  await interceptDoctor(page, () => { doctorRequests += 1; });
   await page.goto("/");
   await page.getByRole("button", { name: "Open system health" }).click();
 
@@ -208,6 +212,10 @@ test("system health exposes the guided doctor report and fixes", async ({ page }
   await expect(dialog.getByText("Docker and Compose")).toBeVisible();
   await expect(dialog.getByText("Advisory", { exact: true })).toBeVisible();
   await expect(dialog.getByText(/Install Docker Engine or Docker Desktop/)).toBeVisible();
+  await expect(dialog.getByText(/^Checked /)).toBeVisible();
+  await dialog.getByRole("button", { name: "Run self-test again" }).click();
+  await expect.poll(() => doctorRequests).toBe(2);
+  await expect(dialog.getByRole("button", { name: "Run self-test again" })).toBeEnabled();
 
   const results = await new AxeBuilder({ page }).include("[role=dialog]").analyze();
   expect(results.violations).toEqual([]);

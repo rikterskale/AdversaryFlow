@@ -45,6 +45,12 @@ function initialTheme(): Theme {
   return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+function diagnosticTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "time unavailable";
+  return parsed.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
 interface HealthDetailsProps extends Pick<AppShellProps, "health" | "actors" | "healthFailed"> {
   doctor: DoctorResponse | null;
   doctorError: Error | null;
@@ -58,6 +64,13 @@ function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doct
   const serviceMode = health ? displayScalar(health.service, "bind_mode") : null;
   const advisoryFailures = doctor?.checks.filter((check) => !check.required && check.status === "FAIL").length ?? 0;
   const doctorTone = !doctor?.ok ? "is-fail" : advisoryFailures ? "is-warn" : "is-pass";
+  const rerunLabel = doctorLoading
+    ? "Running self-test…"
+    : doctorError
+      ? "Retry self-test"
+      : doctor
+        ? "Run self-test again"
+        : "Run self-test";
   return (
     <>
       <div className="health-grid">
@@ -77,22 +90,27 @@ function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doct
             <p className="eyebrow">Guided troubleshooting</p>
             <h3 id="host-self-test">Host self-test</h3>
           </div>
-          {doctor ? (
-            <span className={`doctor-summary ${doctorTone}`}>
-              {doctor.summary.required_failed
-                ? `${doctor.summary.required_failed} required failed`
-                : advisoryFailures
-                  ? `${doctor.summary.passed}/${doctor.checks.length} pass · ${advisoryFailures} advisory`
-                  : `${doctor.summary.passed}/${doctor.checks.length} passed`}
-            </span>
-          ) : null}
+          <div className="doctor-panel__controls">
+            {doctor ? (
+              <>
+                <span className={`doctor-summary ${doctorTone}`}>
+                  {doctor.summary.required_failed
+                    ? `${doctor.summary.required_failed} required failed`
+                    : advisoryFailures
+                      ? `${doctor.summary.passed}/${doctor.checks.length} pass · ${advisoryFailures} advisory`
+                      : `${doctor.summary.passed}/${doctor.checks.length} passed`}
+                </span>
+                <small>Checked {diagnosticTimestamp(doctor.generated_at)}</small>
+              </>
+            ) : null}
+            <button className="doctor-rerun" disabled={doctorLoading} onClick={onRetryDoctor} type="button">{rerunLabel}</button>
+          </div>
         </div>
 
         {doctorLoading ? <div aria-live="polite" className="doctor-loading"><span className="spinner" />Checking the host and ATT&amp;CK source…</div> : null}
         {doctorError ? (
           <div className="doctor-error" role="alert">
             <div><strong>Self-test unavailable</strong><p>{doctorError.message}</p></div>
-            <button className="button" onClick={onRetryDoctor} type="button">Retry</button>
           </div>
         ) : null}
         {doctor ? (

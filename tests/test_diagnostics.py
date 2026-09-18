@@ -1,3 +1,4 @@
+import hashlib
 import json
 import socket
 import subprocess
@@ -40,6 +41,12 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertIn("27.5.1", check["detail"])
         self.assertIn("2.32.4", check["detail"])
 
+    def test_an_unsupported_python_version_fails_with_upgrade_guidance(self):
+        with patch.object(diagnostics.sys, "version_info", (3, 9, 19)):
+            check = diagnostics._python_check()
+        self.assertEqual(check["status"], "FAIL")
+        self.assertIn("Python 3.10 or newer", check["fix"])
+
     def test_an_existing_stix_bundle_is_parsed_and_digest_checked(self):
         bundle = {
             "type": "bundle",
@@ -48,10 +55,33 @@ class DiagnosticsTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as directory:
             attack_data.configure_cache_dir(directory)
-            Path(attack_data._cache_path("enterprise")).write_text(json.dumps(bundle), encoding="utf-8")
+            serialized = json.dumps(bundle)
+            Path(attack_data._cache_path("enterprise")).write_text(serialized, encoding="utf-8")
+            Path(attack_data._metadata_path("enterprise")).write_text(
+                json.dumps({"sha256": hashlib.sha256(serialized.encode()).hexdigest()}),
+                encoding="utf-8",
+            )
             check = diagnostics._cache_integrity_check()
         self.assertEqual(check["status"], "PASS")
         self.assertIn("enterprise", check["detail"])
+
+    def test_a_stix_digest_mismatch_fails_integrity_with_recovery_guidance(self):
+        bundle = {
+            "type": "bundle",
+            "id": "bundle--fixture",
+            "objects": [{"type": "x-mitre-matrix", "id": "x-mitre-matrix--fixture"}],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            attack_data.configure_cache_dir(directory)
+            Path(attack_data._cache_path("enterprise")).write_text(json.dumps(bundle), encoding="utf-8")
+            Path(attack_data._metadata_path("enterprise")).write_text(
+                json.dumps({"sha256": "0" * 64}),
+                encoding="utf-8",
+            )
+            check = diagnostics._cache_integrity_check()
+        self.assertEqual(check["status"], "FAIL")
+        self.assertIn("recorded SHA-256", check["detail"])
+        self.assertIn("cache-clear --yes", check["fix"])
 
     def test_a_corrupt_stix_bundle_fails_with_a_bounded_recovery_command(self):
         with tempfile.TemporaryDirectory() as directory:

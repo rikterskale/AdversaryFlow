@@ -201,6 +201,11 @@ main { width: 100%; }
 .doctor-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
 .doctor-panel__heading .eyebrow { margin-bottom: 2px; font-size: 9px; }
 .doctor-panel__heading h3 { margin: 0; font-size: 15px; letter-spacing: -.015em; }
+.doctor-panel__controls { display: grid; justify-items: end; gap: 4px; }
+.doctor-panel__controls small { color: var(--text-subtle); font-size: 8px; }
+.doctor-rerun { border: 0; padding: 1px 0; background: transparent; color: var(--primary); font-size: 9px; font-weight: 750; }
+.doctor-rerun:hover { color: var(--curated); }
+.doctor-rerun:disabled { cursor: wait; color: var(--text-subtle); }
 .doctor-summary { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .doctor-summary.is-pass { border-color: color-mix(in srgb, var(--success) 32%, var(--border)); color: var(--success); background: color-mix(in srgb, var(--success) 6%, transparent); }
 .doctor-summary.is-warn { border-color: color-mix(in srgb, var(--warning) 32%, var(--border)); color: var(--warning); background: color-mix(in srgb, var(--warning) 6%, transparent); }
@@ -645,6 +650,7 @@ main { width: 100%; }
   .actionbar .button { width: 100%; }
   .actionbar__context { padding: 0 3px; }
   .health-grid { grid-template-columns: 1fr; }
+  .doctor-panel__heading { align-items: flex-start; }
   .platform-grid, .tactic-grid, .toggle-list, .field-grid { grid-template-columns: 1fr; }
   .scope-panel { padding: 16px; }
   .scope-panel__heading--action { grid-template-columns: 31px 1fr; }

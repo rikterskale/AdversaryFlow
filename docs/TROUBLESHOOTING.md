@@ -12,9 +12,10 @@ the command exit status. Docker and live-feed reachability are advisory because
 AdversaryFlow also supports native, pipx, and intentionally offline operation.
 
 In the GUI, open the status chip in the top-right corner to see the same report
-under **Host self-test**. No diagnostic contacts a target system. The only
-external probe is an HTTPS `HEAD` request to the configured official MITRE
-ATT&CK STIX source.
+under **Host self-test**. After applying a fix, select **Run self-test again**
+and confirm the updated check time and status before retrying setup. No
+diagnostic contacts a target system. The only external probe is an HTTPS
+`HEAD` request to the configured official MITRE ATT&CK STIX source.
 
 ## Symptom → cause → fix
 
