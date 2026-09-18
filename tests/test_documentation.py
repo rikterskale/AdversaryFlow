@@ -55,6 +55,7 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("**PDF engagement report**", self.exports)
         self.assertIn("**HTML engagement report**", self.exports)
         self.assertIn("Reports omit command bodies", self.exports)
+        self.assertIn("Sigma rule labels and HTTPS references", self.exports)
         self.assertIn("JSON remains the canonical machine-readable", self.exports)
 
     def test_troubleshooting_covers_compose_reports_and_diagnostics(self) -> None:

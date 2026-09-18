@@ -252,7 +252,7 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 | Card | File | Contents |
 |---|---|---|
 | **Download Windows execution kit** | `AdversaryFlow_G0016_APT29_Windows.zip` | Catalog-rebound CSV plus standalone PowerShell runner; Linux and macOS plans receive Bash. Bounded synthetic steps also include `AdversaryFlow-exercises.py` (Python 3.10+). Direct steps need no AdversaryFlow installation or network connection. |
-| **PDF engagement report** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and prioritized gaps |
+| **PDF engagement report** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps |
 | **HTML engagement report** | `AdversaryFlow_G0016_APT29_report.html` | The same command-free report as a self-contained, responsive browser document |
 | **Schema-versioned JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical schema 2.0 plan validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |

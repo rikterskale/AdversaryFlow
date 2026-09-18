@@ -482,10 +482,14 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
     layout.heading("Technique results")
     for item in report.techniques:
         guidance = _truncate(item.detection_guidance, 320) or "No ATT&CK detection guidance mapped."
-        sigma = ", ".join(reference.label for reference in item.sigma_references) or "No catalog Sigma reference"
+        sigma = "; ".join(
+            f"{reference.label} ({reference.url})" for reference in item.sigma_references
+        ) or "No catalog Sigma reference"
         sources = ", ".join(item.data_sources) or "Not mapped"
         expected = _truncate(item.expected_telemetry, 340) or "Not mapped"
         evidence = _truncate(item.evidence_notes, 220) or "No operator evidence note recorded."
+        evidence_source = _label(item.evidence_source) if item.evidence_source else "Not recorded"
+        telemetry_references = "; ".join(item.telemetry_references) or "Not recorded"
         title_lines = _wrap_pdf(f"{item.sequence:02d}  {item.technique_id} - {item.technique_name}", 11, layout.right - layout.left)
         status_lines = _wrap_pdf(
             f"{item.tactic_title} | {item.command_source} | outcome: {_label(item.outcome)} | detection: {_label(item.detection_result)}",
@@ -499,6 +503,8 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
             + _wrap_pdf(f"Detection mapping: {guidance}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Sigma: {sigma}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Evidence: {evidence}", 8.5, layout.right - layout.left - 12)
+            + _wrap_pdf(f"Evidence source: {evidence_source}", 8.5, layout.right - layout.left - 12)
+            + _wrap_pdf(f"Telemetry references: {telemetry_references}", 8.5, layout.right - layout.left - 12)
         )
         estimated = 20 + len(block_lines) * 12
         layout.ensure(min(estimated, 230))
@@ -512,6 +518,7 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
         for label, value in (
             ("Expected telemetry", expected), ("ATT&CK data sources", sources),
             ("Detection mapping", guidance), ("Sigma", sigma), ("Evidence", evidence),
+            ("Evidence source", evidence_source), ("Telemetry references", telemetry_references),
         ):
             layout.paragraph(f"{label}: {value}", size=8.5, indent=8, space_after=2)
         layout.rule()

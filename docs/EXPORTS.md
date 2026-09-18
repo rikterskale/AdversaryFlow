@@ -65,7 +65,8 @@ CSRF-protected `POST /api/report/{format}` endpoint. Both formats contain:
 - command outcome and detection-assessment progress;
 - expected telemetry from the bounded catalog;
 - ATT&CK data-source and detection guidance from the plan's live STIX data;
-- Sigma rule references only when a catalog record explicitly supplies them;
+- Sigma rule labels and HTTPS references only when a catalog record explicitly
+  supplies them;
 - operator evidence notes and independent telemetry references; and
 - categorized catalog, execution, detection, and telemetry coverage gaps.
 
