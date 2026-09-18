@@ -28,6 +28,7 @@ const plan: PlanPreview = {
 describe("CoverageHeatmap", () => {
   it("renders tactic columns with source and detection status", () => {
     render(<CoverageHeatmap onSelect={vi.fn()} plan={plan} records={{ T1059: { outcome: "passed", detection_result: "alerted" }, T1033: { outcome: "passed", detection_result: "silent" } }} selectedTechniqueId={null} />);
+    expect(screen.getByText("Planned")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /T1059.*curated coverage.*detected/ })).toHaveClass("status-detected");
     expect(screen.getByRole("button", { name: /T1033.*fallback coverage.*silent/ })).toHaveClass("coverage-fallback");
   });
@@ -43,5 +44,20 @@ describe("CoverageHeatmap", () => {
     expect(coverageStatus({ outcome: "passed", detection_result: "blocked" })).toBe("blocked");
     expect(coverageStatus({ outcome: "passed", detection_result: "not_instrumented" })).toBe("not-instrumented");
     expect(coverageStatus({ outcome: "passed", detection_result: "alerted" })).toBe("detected");
+  });
+
+  it("marks scope-withheld cells without losing their coverage source", () => {
+    const withheld: PlanPreview = {
+      ...plan,
+      stages: [{ tactic: "execution", title: "Execution", techniques: [{ ...scopedTechnique("T1059", "curated"), selectedCommand: { ...command, unsupported: true } }] }],
+      total: 1,
+      runnable: 0,
+      unsupported: 1,
+      curated: 1,
+      fallback: 0,
+      withheld: { platform: 1, network: 0, admin: 0, highRisk: 0, catalog: 0 },
+    };
+    render(<CoverageHeatmap onSelect={vi.fn()} plan={withheld} records={{}} selectedTechniqueId={null} />);
+    expect(screen.getByRole("button", { name: /T1059.*curated coverage.*withheld/ })).toHaveClass("is-unsupported", "coverage-curated");
   });
 });

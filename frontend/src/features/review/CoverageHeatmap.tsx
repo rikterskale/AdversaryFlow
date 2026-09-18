@@ -37,6 +37,7 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
         <div className="heatmap-legend" aria-label="Coverage legend">
           <span><i className="legend-square is-curated" />Curated</span>
           <span><i className="legend-square is-fallback" />Fallback</span>
+          <span><i className="legend-ring is-planned" />Planned</span>
           <span><i className="legend-ring is-ran" />Ran</span>
           <span><i className="legend-ring is-detected" />Detected</span>
           <span><i className="legend-ring is-blocked" />Blocked</span>
@@ -44,7 +45,7 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
           <span><i className="legend-ring is-not-instrumented" />No sensor</span>
         </div>
       </div>
-      <div className="heatmap-scroll" tabIndex={0}>
+      {plan.stages.length ? <div aria-label="Scrollable ATT&CK technique matrix" className="heatmap-scroll" tabIndex={0}>
         <div className="heatmap-matrix" style={{ gridTemplateColumns: `repeat(${Math.max(1, plan.stages.length)}, minmax(150px, 1fr))` }}>
           {plan.stages.map((stage, stageIndex) => (
             <div className="heatmap-column" key={stage.tactic}>
@@ -54,10 +55,11 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
                   const status = coverageStatus(records[technique.attack_id]);
                   const source = technique.command_source === "fallback" ? "fallback" : "curated";
                   const selected = technique.attack_id === selectedTechniqueId;
+                  const unsupported = Boolean(technique.selectedCommand.unsupported);
                   return (
                     <button
-                      aria-label={`${technique.attack_id} ${technique.name}, ${source} coverage, ${statusLabels[status]}`}
-                      className={`heatmap-cell coverage-${source} status-${status} ${selected ? "is-selected" : ""}`}
+                      aria-label={`${technique.attack_id} ${technique.name}, ${source} coverage, ${statusLabels[status]}${unsupported ? ", withheld on selected platform or scope" : ""}`}
+                      className={`heatmap-cell coverage-${source} status-${status} ${unsupported ? "is-unsupported" : ""} ${selected ? "is-selected" : ""}`}
                       key={`${stage.tactic}-${technique.attack_id}`}
                       onClick={() => onSelect(stageIndex, technique)}
                       title={`${technique.attack_id} · ${technique.name}`}
@@ -71,7 +73,7 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
             </div>
           ))}
         </div>
-      </div>
+      </div> : <div className="heatmap-empty"><strong>No techniques in scope</strong><span>Return to Scope Engagement and enable at least one kill-chain stage.</span></div>}
     </section>
   );
 }

@@ -5,7 +5,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { consumeStorageWriteFailure, useWizardStore } from "../../state/wizardStore";
-import { buildPlanPreview, tacticDescriptions, type PlanPreview, type ScopedTechnique } from "../scope/scopeModel";
+import { buildPlanPreview, tacticDescriptions, titlePlatform, type PlanPreview, type ScopedTechnique } from "../scope/scopeModel";
 import { CoverageHeatmap } from "./CoverageHeatmap";
 import { isMarkedRun, type ExecutionEvidence } from "./evidence";
 import { TechniqueCard } from "./TechniqueCard";
@@ -48,10 +48,6 @@ function firstLabCommand(plan: PlanPreview, platform: string): FirstLabCandidate
   });
   candidates.sort((left, right) => left.preference - right.preference || left.stageIndex - right.stageIndex);
   return candidates[0] ?? null;
-}
-
-function titlePlatform(platform: string): string {
-  return platform === "macos" ? "macOS" : `${platform[0]?.toLocaleUpperCase() ?? ""}${platform.slice(1)}`;
 }
 
 function cardForTechnique(techniqueId: string): HTMLElement | null {
@@ -210,8 +206,8 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
 
       <div className="actionbar review-actionbar">
         <Button onClick={onBack} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Back</Button>
-        <div className="actionbar__context"><span className={`context-dot ${done ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{done} / {runnableIds.size} runnable techniques marked run</span><small>Evidence autosaves locally · export when this review is complete</small></div></div>
-        <Button onClick={onFinish} variant="primary">Finish &amp; export <Icon className="button-icon" name="arrow-right" /></Button>
+        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${done ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{plan.stages.length ? `${done} / ${runnableIds.size} runnable techniques marked run` : "No techniques in scope"}</span><small>{plan.stages.length ? "Evidence autosaves locally · export when this review is complete" : "Return to Scope Engagement and enable a stage before exporting."}</small></div></div>
+        <Button disabled={!plan.stages.length} onClick={onFinish} variant="primary">Finish &amp; export <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
 
       <Dialog description="Review prerequisites, side effects, telemetry, and rollback in the technique card before copying. AdversaryFlow does not execute this command." onClose={() => setPendingCopy(null)} open={Boolean(pendingCopy)} title={`Copy this ${pendingCopy?.risk ?? ""} risk lab command?`}>

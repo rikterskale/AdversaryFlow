@@ -48,6 +48,20 @@ export function isMarkedRun(evidence: ExecutionEvidence | undefined): boolean {
   return Boolean(evidence && evidence.outcome !== "not_run");
 }
 
+export function dateTimeLocalValue(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 19);
+}
+
+export function dateTimeIsoValue(value: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -80,9 +94,9 @@ export async function evidenceFromReceipt(source: string, techniqueId: string): 
     throw new Error(`Receipt must be for ${techniqueId}.`);
   }
   if (
-    typeof parsed.run_id !== "string" || !parsed.run_id ||
+    typeof parsed.run_id !== "string" || !parsed.run_id || parsed.run_id.length > 128 ||
     !validDateTime(parsed.started_at) || !validDateTime(parsed.completed_at) ||
-    !Number.isInteger(parsed.exit_code) ||
+    !Number.isInteger(parsed.exit_code) || Number(parsed.exit_code) < -255 || Number(parsed.exit_code) > 65_535 ||
     typeof parsed.cleanup_verified !== "boolean" ||
     (parsed.status !== "passed" && parsed.status !== "failed") ||
     !Array.isArray(parsed.events)
