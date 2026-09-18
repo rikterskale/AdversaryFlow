@@ -30,8 +30,14 @@ class DocumentationContractTests(unittest.TestCase):
         )
         positions = [self.readme.index(command) for command in commands]
         self.assertEqual(positions, sorted(positions))
+        self.assertLess(self.readme.index("## Five-minute quickstart"), self.readme.index("## What it does"))
+        quickstart = self.readme[
+            self.readme.index("## Five-minute quickstart"):self.readme.index("## What it does")
+        ]
+        self.assertIn("Do **not** select **Copy command**", quickstart)
+        self.assertIn("`0` outcomes recorded", quickstart)
         self.assertIn("[Architecture](docs/ARCHITECTURE.md)", self.readme)
-        self.assertIn("less than five minutes", self.readme)
+        self.assertIn("under five minutes", self.readme)
 
     def test_getting_started_has_a_no_execution_five_minute_path(self) -> None:
         compose = self.getting_started.index("## Five-minute dry-run with Docker Compose")
@@ -50,6 +56,9 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("frontend/\n├── src/", self.architecture)
         self.assertIn("browser-supplied command bodies are discarded", self.architecture.lower())
         self.assertIn("loopback-only publication", self.architecture)
+        self.assertIn("## Repository and deployment layout", self.architecture)
+        self.assertIn("docker-compose.yml", self.architecture)
+        self.assertIn("entrypoint.sh", self.architecture)
 
     def test_report_formats_and_json_authority_are_documented(self) -> None:
         self.assertIn("**PDF engagement report**", self.exports)

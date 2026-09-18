@@ -13,6 +13,17 @@ Deeper contracts live in [INSTALL.md](INSTALL.md), [OPERATIONS.md](OPERATIONS.md
 [EXPORTS.md](EXPORTS.md), [TELEMETRY.md](TELEMETRY.md), and
 [USER_JOURNEY.md](USER_JOURNEY.md).
 
+Choose the path that matches the machine:
+
+| Path | Host prerequisites | Best for |
+| --- | --- | --- |
+| **Docker Compose** (recommended) | Git, Docker Engine/Desktop, Compose v2 | First plan in under five minutes; no host Python or Node |
+| **Native launcher** | Git and Python 3.10+ | Local development and direct CLI access |
+| **Release wheel with pipx** | Python 3.10+, pipx, downloaded `.whl` | Isolated install without a source checkout |
+
+Start with [Five-minute dry-run with Docker Compose](#five-minute-dry-run-with-docker-compose)
+unless you specifically need a native or wheel installation.
+
 ---
 
 ## What you are installing
@@ -111,6 +122,14 @@ You are done when both files download and the page still reports `0` outcomes
 recorded. The PDF is a command-free coverage report. JSON is the canonical
 schema 2.0 plan that can resume the session later. AdversaryFlow has not
 contacted a target or executed a command.
+
+First-run success checklist:
+
+- [ ] The container banner printed a loopback URL and API token.
+- [ ] The browser accepted the token and loaded the actor gallery.
+- [ ] The scope preview showed at least one runnable technique.
+- [ ] The review screen showed the coverage heatmap and pre-action metadata.
+- [ ] PDF and JSON downloaded with `0` outcomes recorded.
 
 ### Stop, restart, or run detached
 

@@ -12,6 +12,39 @@ and measure coverage.
 
 ---
 
+## Five-minute quickstart
+
+You need Git, a running Docker Engine or Docker Desktop, and Docker Compose v2.
+No host Python or Node installation is required.
+
+```bash
+git clone https://github.com/rikterskale/AdversaryFlow.git
+cd AdversaryFlow
+docker compose up
+```
+
+Wait for the `AdversaryFlow container configured successfully` banner. Open
+the printed <http://127.0.0.1:5000> URL and enter the printed API token when
+the browser asks for it. The first start downloads and validates the ATT&CK
+bundle; later starts reuse the `adversaryflow-stix-cache` volume.
+
+On a typical connected workstation, create a safe first dry-run
+in under five minutes entirely in the planner:
+
+1. Select **Begin emulation plan**, choose any actor or campaign, and continue.
+2. Keep the detected platform and all three Allow-* guardrails off, then select
+   **Build plan**.
+3. Review the coverage heatmap and the first technique's risk, privilege,
+   network, telemetry, and rollback preview.
+4. Do **not** select **Copy command**. Select **Finish & export** instead.
+5. Download **PDF engagement report** and **Schema-versioned JSON**.
+
+Success is two downloaded planning artifacts and `0` outcomes recorded. The
+service has not executed a command or contacted a target. Stop with Ctrl+C;
+`docker compose up` is idempotent and reuses the validated cache on the next
+start. The detailed copy/paste walkthrough, detached mode, port selection, and
+recovery steps are in [Getting started](docs/GETTING_STARTED.md).
+
 ## What it does
 
 AdversaryFlow is a **fully guided, 4-step wizard** — no dead ends, every screen
@@ -97,43 +130,13 @@ build pipeline are documented in [Architecture](docs/ARCHITECTURE.md).
 (`master` tracks the latest ATT&CK release). Enterprise by default; ICS and
 Mobile domains are supported via `?domains=enterprise,ics,mobile`.
 
-## Run it
+## Installation alternatives
 
-New operators should follow the copy/paste handbook
-[Getting started](docs/GETTING_STARTED.md) (install, first verified PoC,
-everyday use, remediation, recovery, upgrades, and support).
-
-The fastest supported path from a source checkout is Docker Compose:
-
-```bash
-git clone https://github.com/rikterskale/AdversaryFlow.git
-cd AdversaryFlow
-docker compose up
-```
-
-The startup banner prints <http://127.0.0.1:5000>, a per-start API token,
-and the exact next step. Enter that token when the browser asks for it. The
-host port is published on loopback only, the service still enforces its
-non-loopback bearer-token gate inside the container, and the validated ATT&CK
-STIX cache persists in the `adversaryflow-stix-cache` volume. Set
-`ADVERSARYFLOW_PORT` to choose another host port; set
-`ADVERSARYFLOW_API_TOKEN` before startup only when you need a stable token.
-
-Stop with Ctrl+C. A later `docker compose up` is safe to rerun and reuses the
-cache.
-
-For a safe first dry-run, open the printed URL, enter the printed token, and:
-
-1. Choose any ATT&CK actor or campaign.
-2. Keep the detected platform and default guardrails, then select **Build plan**.
-3. Review the heatmap and first technique card without copying a command.
-4. Select **Finish & export**, then download the PDF report or schema-versioned
-   JSON record.
-
-That completes the planner journey without executing anything. On a typical
-connected workstation it takes less than five minutes; the initial ATT&CK
-download is the only network-dependent step. See the exact copy/paste path in
-[Getting started](docs/GETTING_STARTED.md).
+Docker Compose is the recommended path above. Set `ADVERSARYFLOW_PORT` before
+startup to choose another loopback host port. Set `ADVERSARYFLOW_API_TOKEN`
+only when you need a stable container token. The host port remains
+loopback-only, while the service retains bearer authentication for its
+non-loopback bind inside the Compose network.
 
 Native launchers remain supported alternatives:
 

@@ -160,6 +160,38 @@ the operator to run, edit, skip, or abort. It never calls the web service.
 
 The service has no database and does not upload plans, evidence, or reports.
 
+## Repository and deployment layout
+
+```text
+AdversaryFlow/
+├── backend/                 # Flask planner, STIX, catalog, kits and reports
+├── frontend/
+│   ├── src/                 # React + TypeScript source
+│   └── index.html, app.js, styles.css  # checked-in production bundle
+├── schemas/                 # schema-versioned plan and evidence contracts
+├── docs/                    # operator, architecture, API and release guides
+├── tests/                   # Python contracts plus Playwright journeys
+├── docker/
+│   ├── entrypoint.sh        # token generation + printed startup handoff
+│   └── healthcheck.py       # authenticated container readiness probe
+├── Dockerfile               # pinned Node build + Python wheel/runtime stages
+├── docker-compose.yml       # loopback port, cache volume and hardening
+├── run.sh / run.ps1         # supported native launchers
+└── pyproject.toml + requirements*.lock
+```
+
+The same application artifact is used across all supported launch paths:
+
+| Profile | Process boundary | Persistent state | Authentication |
+| --- | --- | --- | --- |
+| Docker Compose | Non-root, read-only container with dropped capabilities | Named STIX cache volume | Generated or supplied bearer token plus same-origin mutation token |
+| Native launcher | Waitress on loopback by default | Per-user STIX cache | Same-origin mutation token; bearer required only after explicit remote opt-in |
+| pipx wheel | Isolated packaged CLI and checked-in SPA bundle | Per-user STIX cache | Same as native launcher |
+
+Compose publishes only `127.0.0.1:${ADVERSARYFLOW_PORT:-5000}`. Its internal
+`0.0.0.0` bind deliberately exercises the service's remote-mode bearer gate;
+it does not make the host listener public.
+
 ## Packaging and deployment
 
 Vite compiles stable frontend assets before package builds. `pyproject.toml`
