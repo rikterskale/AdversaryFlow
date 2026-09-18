@@ -284,7 +284,10 @@ test("J26 — recording an outcome advances the progress indicator", async ({ pa
 
 test("J27 — unavailable local storage is reported, not swallowed", async ({ page }) => {
   await page.addInitScript(() => {
-    Storage.prototype.setItem = () => { throw new Error("storage unavailable"); };
+    Object.defineProperty(window.localStorage, "setItem", {
+      configurable: true,
+      value: () => { throw new Error("storage unavailable"); },
+    });
   });
   await toScope(page);
   await page.getByRole("button", { name: /Build plan/ }).click();

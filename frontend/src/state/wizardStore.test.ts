@@ -38,4 +38,19 @@ describe("wizardStore", () => {
       selectedActor: null,
     });
   });
+
+  it("returns to the guided actor step when an in-progress plan changes actors", () => {
+    useWizardStore.getState().selectActor(actor);
+    useWizardStore.getState().setStep(3);
+    useWizardStore.getState().updateEvidence("T1033", { outcome: "passed" });
+
+    useWizardStore.getState().selectActor({ ...actor, stix_id: "intrusion-set--other", attack_id: "G0002", name: "Other Actor" });
+
+    expect(useWizardStore.getState()).toMatchObject({
+      currentStep: 1,
+      maxStep: 1,
+      records: {},
+      scopeInitializedFor: null,
+    });
+  });
 });

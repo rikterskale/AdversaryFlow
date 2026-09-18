@@ -2,7 +2,16 @@ import { isRecord, parseActors, parseBootstrap, parseDoctor, parseHealth, parseS
 import type { ActorsResponse, AttackDomain, BootstrapResponse, DoctorResponse, HealthResponse, SessionResponse, WorkflowResponse } from "./contract";
 
 const TOKEN_KEY = "af_api_token";
-let apiToken = sessionStorage.getItem(TOKEN_KEY) ?? "";
+
+function storedApiToken(): string {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+let apiToken = storedApiToken();
 
 export class ApiError extends Error {
   readonly status: number;
@@ -20,8 +29,12 @@ export class ApiError extends Error {
 
 export function setApiToken(token: string): void {
   apiToken = token.trim();
-  if (apiToken) sessionStorage.setItem(TOKEN_KEY, apiToken);
-  else sessionStorage.removeItem(TOKEN_KEY);
+  try {
+    if (apiToken) sessionStorage.setItem(TOKEN_KEY, apiToken);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Keep the token in memory for this tab when session storage is denied.
+  }
 }
 
 function authorizationHeaders(headers?: HeadersInit): Headers {

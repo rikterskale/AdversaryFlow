@@ -36,7 +36,13 @@ const domainLabels: Record<AttackDomain, string> = {
 };
 
 function initialTheme(): Theme {
-  return localStorage.getItem("adversaryflow-theme") === "light" ? "light" : "dark";
+  try {
+    const stored = localStorage.getItem("adversaryflow-theme");
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // Storage can be unavailable in hardened or private browser contexts.
+  }
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
 interface HealthDetailsProps extends Pick<AppShellProps, "health" | "actors" | "healthFailed"> {
@@ -113,10 +119,13 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   const maxStep = useWizardStore((state) => state.maxStep);
   const setStep = useWizardStore((state) => state.setStep);
   const restart = useWizardStore((state) => state.restart);
+  const selectedActor = useWizardStore((state) => state.selectedActor);
+  const records = useWizardStore((state) => state.records);
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [helpOpen, setHelpOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
   const [refreshOpen, setRefreshOpen] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
   const doctorQuery = useQuery({
     queryKey: ["doctor"],
     queryFn: getDoctor,
@@ -145,8 +154,22 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   const toggleTheme = (): void => {
     const next: Theme = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    localStorage.setItem("adversaryflow-theme", next);
+    try {
+      localStorage.setItem("adversaryflow-theme", next);
+    } catch {
+      // The active theme still changes for this session when storage is denied.
+    }
   };
+
+  const requestRestart = (): void => {
+    if (maxStep > 0 || selectedActor) {
+      setRestartOpen(true);
+      return;
+    }
+    restart();
+  };
+
+  const recordedCount = Object.values(records).filter((record) => record.outcome !== "not_run").length;
 
   const requestRefresh = (): void => {
     if (maxStep >= 2) setRefreshOpen(true);
@@ -157,7 +180,7 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="app-header">
-        <button aria-label="Restart AdversaryFlow" className="brand" onClick={restart} type="button">
+        <button aria-label="Start a new AdversaryFlow plan" className="brand" onClick={requestRestart} type="button">
           <span className="brand-mark"><Icon className="brand-icon" name="shield" /></span>
           <span className="brand-word">Adversary<span>Flow</span></span>
         </button>
@@ -221,6 +244,11 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
           onRetryDoctor={() => { void doctorQuery.refetch(); }}
         />
         <p className="doctor-hint">Run <code>adversaryflow doctor</code> on the host to capture the same structured report for support.</p>
+      </Dialog>
+
+      <Dialog description="Starting over clears the browser-saved scope and evidence for this plan." onClose={() => setRestartOpen(false)} open={restartOpen} title="Start a new plan?">
+        <div className="callout"><strong>{selectedActor ? `${selectedActor.name} · ${selectedActor.attack_id}` : "Current browser plan"}</strong><p>{recordedCount ? `${recordedCount} technique outcome${recordedCount === 1 ? " is" : "s are"} recorded. Export anything you need to keep first.` : "No outcomes are recorded yet, but current scope settings will be cleared."}</p></div>
+        <div className="dialog-actions"><button className="button button--ghost" onClick={() => setRestartOpen(false)} type="button">Keep current plan</button><button className="button button--primary" onClick={() => { setRestartOpen(false); restart(); }} type="button">Start new plan</button></div>
       </Dialog>
 
       <Dialog description="Refreshing can change technique mappings and will rebuild the current plan." onClose={() => setRefreshOpen(false)} open={refreshOpen} title="Refresh the ATT&CK feed?">

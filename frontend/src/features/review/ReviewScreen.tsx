@@ -54,6 +54,10 @@ function titlePlatform(platform: string): string {
   return platform === "macos" ? "macOS" : `${platform[0]?.toLocaleUpperCase() ?? ""}${platform.slice(1)}`;
 }
 
+function cardForTechnique(techniqueId: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`.techcard[data-tid="${CSS.escape(techniqueId)}"]`);
+}
+
 export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: ReviewScreenProps): JSX.Element {
   const scope = useWizardStore((state) => state.scope);
   const records = useWizardStore((state) => state.records);
@@ -93,15 +97,22 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   useEffect(() => {
     const targetIndex = focusTarget ? stageTechniques.findIndex((technique) => technique.attack_id === focusTarget) : 0;
     const nextIndex = Math.max(0, targetIndex);
+    const moveDomFocus = Boolean(focusTarget);
     setFocusedIndex(nextIndex);
     setFocusTarget(null);
     window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`.techcard[data-tid="${CSS.escape(stageTechniques[nextIndex]?.attack_id ?? "")}"]`)?.scrollIntoView({ block: "nearest" });
+      const card = cardForTechnique(stageTechniques[nextIndex]?.attack_id ?? "");
+      if (moveDomFocus) card?.focus({ preventScroll: true });
+      card?.scrollIntoView({ block: "nearest" });
     });
   }, [activeStage, focusTarget, stageTechniques]);
 
   const runnableIds = useMemo(() => new Set(plan.stages.flatMap((item) => item.techniques.filter((technique) => !technique.selectedCommand.unsupported).map((technique) => technique.attack_id))), [plan.stages]);
   const done = [...runnableIds].filter((id) => isMarkedRun(records[id])).length;
+  const detectionsAssessed = [...runnableIds].filter((id) => {
+    const result = records[id]?.detection_result;
+    return Boolean(result && result !== "not_assessed");
+  }).length;
   const progress = runnableIds.size ? Math.round((done / runnableIds.size) * 100) : 0;
   const focusedTechnique = stageTechniques[focusedIndex] ?? null;
 
@@ -136,7 +147,11 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
     const bounded = Math.max(0, Math.min(next, stageTechniques.length - 1));
     setFocusedIndex(bounded);
     const id = stageTechniques[bounded]?.attack_id;
-    if (id) document.querySelector<HTMLElement>(`.techcard[data-tid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (id) {
+      const card = cardForTechnique(id);
+      card?.focus({ preventScroll: true });
+      window.requestAnimationFrame(() => card?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    }
   }, [stageTechniques]);
 
   useEffect(() => {
@@ -165,7 +180,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
         <div><p className="eyebrow">Step 3 of 4 · Review and track</p><h1 id="plan-title">{actor.name} · {actor.attack_id}</h1><p id="planActorMeta">Authorized lab plan · commands target <strong>{titlePlatform(scope.commandPlatform)}</strong> · every copy remains operator initiated</p></div>
         <div className="plan-progress">
           <div aria-label="Runnable technique progress" aria-valuemax={100} aria-valuemin={0} aria-valuenow={progress} aria-valuetext={`${done} of ${runnableIds.size} runnable techniques`} className="progress-ring" id="progressRing" role="progressbar" style={{ "--progress": `${progress * 3.6}deg` } as React.CSSProperties}><span id="progressPct">{progress}%</span></div>
-          <div><strong id="progressCount">{done} / {runnableIds.size}</strong><span>techniques recorded</span><small className={saveFailed ? "is-error" : ""} id="saveStatus">{saveFailed ? "Not saved in this browser" : "Saved in this browser"}</small></div>
+          <div><strong id="progressCount">{done} / {runnableIds.size}</strong><span>techniques recorded</span><small className="detection-progress">{detectionsAssessed} / {runnableIds.size} detections assessed</small><small className={saveFailed ? "is-error" : ""} id="saveStatus">{saveFailed ? "Not saved in this browser" : "Saved in this browser"}</small></div>
         </div>
       </header>
 

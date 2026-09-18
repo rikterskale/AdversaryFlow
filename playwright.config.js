@@ -1,4 +1,5 @@
 const { defineConfig } = require("@playwright/test");
+const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === "1";
 
 module.exports = defineConfig({
   testDir: "tests/e2e",
@@ -13,7 +14,7 @@ module.exports = defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
-  webServer: {
+  webServer: useExternalServer ? undefined : {
     command: "node tests/e2e/static-server.js",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,

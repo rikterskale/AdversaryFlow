@@ -8,7 +8,7 @@
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "check:frontend": "tsc --project frontend/tsconfig.json --noEmit && npm run build:frontend && npm run test:frontend",
     "pretest:e2e": "npm run build:frontend",
-    "test:e2e": "playwright test"
+    "test:e2e": "node tests/e2e/run.js"
   },
   "dependencies": {
     "@tanstack/react-query": "5.103.1",

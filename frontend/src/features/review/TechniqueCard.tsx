@@ -79,7 +79,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
   };
 
   return (
-    <article className={`techcard ${marked ? "is-run" : ""} ${focused ? "is-focused" : ""} ${firstLab ? "is-firstlab" : ""}`} data-tid={technique.attack_id} onClick={onFocus} tabIndex={-1}>
+    <article className={`techcard ${marked ? "is-run" : ""} ${focused ? "is-focused" : ""} ${firstLab ? "is-firstlab" : ""}`} data-tid={technique.attack_id} onClick={onFocus} onFocus={onFocus} tabIndex={focused ? 0 : -1}>
       <header className="techcard__header">
         <button
           aria-label={unsupported ? `No ${technique.attack_id} test available for this platform` : `Mark ${technique.attack_id} as run`}

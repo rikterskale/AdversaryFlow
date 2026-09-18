@@ -72,7 +72,15 @@ export const useWizardStore = create<WizardState>()(
       setDomains: (domains) => set({ domains, selectedActor: null, scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {}, importedWorkflow: null, currentStep: 1, maxStep: 1 }),
       selectActor: (actor) => set((state) => ({
         selectedActor: actor,
-        ...(actor?.stix_id !== state.selectedActor?.stix_id ? { scope: defaultScope(), scopeInitializedFor: null, evidenceKey: null, records: {}, importedWorkflow: null } : {}),
+        ...(actor?.stix_id !== state.selectedActor?.stix_id ? {
+          currentStep: 1,
+          maxStep: 1,
+          scope: defaultScope(),
+          scopeInitializedFor: null,
+          evidenceKey: null,
+          records: {},
+          importedWorkflow: null,
+        } : {}),
       })),
       initializeScope: (actorId, tactics) => set((state) => state.scopeInitializedFor === actorId
         ? state

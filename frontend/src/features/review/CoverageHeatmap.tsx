@@ -9,11 +9,22 @@ interface CoverageHeatmapProps {
   onSelect: (stageIndex: number, technique: ScopedTechnique) => void;
 }
 
-type CellStatus = "planned" | "ran" | "detected" | "silent";
+type CellStatus = "planned" | "ran" | "detected" | "blocked" | "silent" | "not-instrumented";
+
+const statusLabels: Record<CellStatus, string> = {
+  planned: "planned",
+  ran: "ran",
+  detected: "detected",
+  blocked: "blocked",
+  silent: "silent",
+  "not-instrumented": "not instrumented",
+};
 
 export function coverageStatus(evidence: ExecutionEvidence | undefined): CellStatus {
-  if (evidence?.detection_result === "alerted" || evidence?.detection_result === "blocked") return "detected";
+  if (evidence?.detection_result === "alerted") return "detected";
+  if (evidence?.detection_result === "blocked") return "blocked";
   if (evidence?.detection_result === "silent") return "silent";
+  if (evidence?.detection_result === "not_instrumented") return "not-instrumented";
   if (isMarkedRun(evidence)) return "ran";
   return "planned";
 }
@@ -28,7 +39,9 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
           <span><i className="legend-square is-fallback" />Fallback</span>
           <span><i className="legend-ring is-ran" />Ran</span>
           <span><i className="legend-ring is-detected" />Detected</span>
+          <span><i className="legend-ring is-blocked" />Blocked</span>
           <span><i className="legend-ring is-silent" />Silent</span>
+          <span><i className="legend-ring is-not-instrumented" />No sensor</span>
         </div>
       </div>
       <div className="heatmap-scroll" tabIndex={0}>
@@ -43,7 +56,7 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
                   const selected = technique.attack_id === selectedTechniqueId;
                   return (
                     <button
-                      aria-label={`${technique.attack_id} ${technique.name}, ${source} coverage, ${status}`}
+                      aria-label={`${technique.attack_id} ${technique.name}, ${source} coverage, ${statusLabels[status]}`}
                       className={`heatmap-cell coverage-${source} status-${status} ${selected ? "is-selected" : ""}`}
                       key={`${stage.tactic}-${technique.attack_id}`}
                       onClick={() => onSelect(stageIndex, technique)}

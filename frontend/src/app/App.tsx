@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, getActors, getHealth, getSession, getWorkflow, prepareService, refreshAttackData, setApiToken } from "../api/client";
-import type { SessionResponse } from "../api/contract";
+import type { Actor, AttackDomain, SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
+import { Dialog } from "../components/Dialog";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
 import { ExportScreen } from "../features/export/ExportScreen";
@@ -16,6 +17,9 @@ import { AppShell } from "./AppShell";
 import { AuthDialog } from "./AuthDialog";
 
 type StartupPhase = "connecting" | "preparing" | "ready" | "failed";
+type PendingPlanReset =
+  | { kind: "actor"; actor: Actor }
+  | { kind: "domains"; domains: AttackDomain[] };
 
 export function App(): JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
@@ -40,6 +44,7 @@ export function App(): JSX.Element {
   const [authAttempted, setAuthAttempted] = useState(false);
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingPlanReset, setPendingPlanReset] = useState<PendingPlanReset | null>(null);
 
   const start = useCallback(async (): Promise<void> => {
     setStartupError("");
@@ -108,6 +113,34 @@ export function App(): JSX.Element {
     setStartupAttempt((value) => value + 1);
   };
 
+  const requestDomainsChange = (nextDomains: AttackDomain[]): void => {
+    if (maxStep >= 2) {
+      setPendingPlanReset({ kind: "domains", domains: nextDomains });
+      return;
+    }
+    setDomains(nextDomains);
+  };
+
+  const requestActorChange = (actor: Actor): void => {
+    if (maxStep >= 2 && selectedActor?.stix_id !== actor.stix_id) {
+      setPendingPlanReset({ kind: "actor", actor });
+      return;
+    }
+    selectActor(actor);
+  };
+
+  const confirmPlanReset = (): void => {
+    if (!pendingPlanReset) return;
+    if (pendingPlanReset.kind === "domains") {
+      setDomains(pendingPlanReset.domains);
+      setNotice("ATT&CK domains changed; choose an actor to rebuild the plan");
+    } else {
+      selectActor(pendingPlanReset.actor);
+      setNotice(`Threat actor changed to ${pendingPlanReset.actor.name}; scope and evidence were reset`);
+    }
+    setPendingPlanReset(null);
+  };
+
   const beginPlan = (): void => {
     if (selectedActor || maxStep > 0) restart();
     useWizardStore.getState().setStep(1);
@@ -170,10 +203,10 @@ export function App(): JSX.Element {
         error={actorsQuery.error}
         loading={actorsQuery.isPending || actorsQuery.isFetching}
         onContinue={() => setStep(2)}
-        onDomainsChange={setDomains}
+        onDomainsChange={requestDomainsChange}
         onNotice={setNotice}
         onRetry={() => { void actorsQuery.refetch(); }}
-        onSelect={selectActor}
+        onSelect={requestActorChange}
         response={actorsQuery.data ?? null}
         selectedActor={selectedActor}
       />
@@ -207,6 +240,21 @@ export function App(): JSX.Element {
         onConnect={connect}
         open={authOpen}
       />
+      <Dialog
+        description="Changing the plan source rebuilds the workflow so evidence cannot be attributed to the wrong actor or ATT&CK data set."
+        onClose={() => setPendingPlanReset(null)}
+        open={Boolean(pendingPlanReset)}
+        title={pendingPlanReset?.kind === "domains" ? "Change ATT&CK domains?" : "Change threat actor?"}
+      >
+        <div className="callout">
+          <strong>Current browser plan</strong>
+          <p>Scope settings and recorded evidence will be cleared. Export anything you need to keep before confirming.</p>
+        </div>
+        <div className="dialog-actions">
+          <Button onClick={() => setPendingPlanReset(null)} variant="ghost">Keep current plan</Button>
+          <Button onClick={confirmPlanReset} variant="primary">Clear and rebuild</Button>
+        </div>
+      </Dialog>
       {notice ? <div aria-live="polite" className="toast" role="status"><span aria-hidden="true">i</span>{notice}</div> : null}
     </AppShell>
   );

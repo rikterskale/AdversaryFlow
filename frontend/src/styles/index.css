@@ -333,6 +333,7 @@ main { width: 100%; }
 .plan-progress > div:last-child strong { font-family: ui-monospace, monospace; font-size: 15px; }
 .plan-progress > div:last-child span { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
 .plan-progress > div:last-child small { margin-top: 3px; color: var(--success); font-size: 9px; }
+.plan-progress > div:last-child small.detection-progress { color: var(--primary); }
 .plan-progress > div:last-child small.is-error { color: var(--danger); }
 .plan-coach { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; margin: 0 0 15px; padding: 0; border: 1px solid var(--border); border-radius: 10px; list-style: none; background: var(--border); }
 .plan-coach li { display: flex; align-items: center; gap: 10px; padding: 11px 13px; background: var(--surface); }
@@ -353,7 +354,9 @@ main { width: 100%; }
 .legend-ring { width: 8px; height: 8px; border: 2px solid var(--text-subtle); border-radius: 50%; }
 .legend-ring.is-ran { border-color: var(--text); }
 .legend-ring.is-detected { border-color: var(--success); background: var(--success); }
+.legend-ring.is-blocked { border-color: var(--warning); background: var(--warning); }
 .legend-ring.is-silent { border-color: var(--danger); background: var(--danger); }
+.legend-ring.is-not-instrumented { border-color: var(--text-subtle); border-style: dashed; }
 .heatmap-scroll { overflow-x: auto; padding: 12px; scrollbar-color: var(--border-strong) transparent; }
 .heatmap-matrix { display: grid; min-width: max-content; gap: 7px; }
 .heatmap-column { min-width: 150px; }
@@ -367,7 +370,9 @@ main { width: 100%; }
 .heatmap-cell i { width: 7px; height: 7px; border: 2px solid color-mix(in srgb, var(--text) 35%, transparent); border-radius: 50%; }
 .heatmap-cell.status-ran i { border-color: var(--text); }
 .heatmap-cell.status-detected i { border-color: var(--success); background: var(--success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 12%, transparent); }
+.heatmap-cell.status-blocked i { border-color: var(--warning); background: var(--warning); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 12%, transparent); }
 .heatmap-cell.status-silent i { border-color: var(--danger); background: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent); }
+.heatmap-cell.status-not-instrumented i { border-color: var(--text-subtle); border-style: dashed; }
 
 .first-lab-hint { margin-bottom: 13px; border-left: 2px solid var(--success); border-radius: 0 7px 7px 0; padding: 9px 12px; background: color-mix(in srgb, var(--success) 5%, transparent); color: var(--text-muted); font-size: 10px; }
 .first-lab-hint strong { color: var(--success); }

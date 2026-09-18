@@ -108,11 +108,11 @@ function writePlan(plan) {
   return file;
 }
 
-async function interceptApi(page, commands = [command]) {
+async function interceptApi(page, commands = [command], actors = [{ stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: ["Example"], description: "[Test Actor](https://attack.mitre.org/groups/G0001/) fixture. (Citation: Test source)", technique_count: 1 }]) {
   await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "test-token", version: "0.3.0" } }));
   await page.route("**/api/bootstrap", route => route.fulfill({ json: { status: "ready", runtime: { ready: true, phase: "ready" }, cache: { domains: {} } } }));
   await page.route("**/api/actors?*", route => route.fulfill({ json: {
-    actors: [{ stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: ["Example"], description: "[Test Actor](https://attack.mitre.org/groups/G0001/) fixture. (Citation: Test source)", technique_count: 1 }],
+    actors,
     domains: ["enterprise"], data_version: "enterprise:bundle--test", version: "0.3.0",
   } }));
   await page.route("**/api/workflow/**", route => route.fulfill({ json: workflowBody(commands) }));
@@ -545,7 +545,10 @@ test("a new actor starts with an empty execution context", async ({ page }) => {
 
 test("unavailable local storage is reported instead of silently losing evidence", async ({ page }) => {
   await page.addInitScript(() => {
-    Storage.prototype.setItem = () => { throw new Error("storage is unavailable"); };
+    Object.defineProperty(window.localStorage, "setItem", {
+      configurable: true,
+      value: () => { throw new Error("storage is unavailable"); },
+    });
   });
   await interceptApi(page);
   await buildPlan(page);
@@ -625,8 +628,10 @@ test("plan keyboard shortcuts move focus and copy the command", async ({ page, c
   await expect(cards.nth(0)).toHaveClass(/is-focused/);
   await page.keyboard.press("j");
   await expect(cards.nth(1)).toHaveClass(/is-focused/);
+  expect(await cards.nth(1).evaluate(element => document.activeElement === element)).toBe(true);
   await page.keyboard.press("k");
   await expect(cards.nth(0)).toHaveClass(/is-focused/);
+  expect(await cards.nth(0).evaluate(element => document.activeElement === element)).toBe(true);
   await page.keyboard.press("c");
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("whoami");
@@ -760,4 +765,89 @@ test("the actor gallery lists every loaded actor", async ({ page }) => {
   await expect(page.locator(".actorcard")).toHaveCount(30);
   await expect(page.locator("#actorResults")).toHaveText("30 results");
   await expect(page.getByRole("button", { name: /Show all/ })).toHaveCount(0);
+});
+
+test("restarting from the brand requires confirmation before clearing evidence", async ({ page }) => {
+  await interceptApi(page);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByLabel("Outcome for T1033").selectOption("passed");
+
+  await page.getByRole("button", { name: "Start a new AdversaryFlow plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "Start a new plan?" });
+  await expect(dialog).toContainText("1 technique outcome is recorded");
+  await dialog.getByRole("button", { name: "Keep current plan" }).click();
+  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Start a new AdversaryFlow plan" }).click();
+  await dialog.getByRole("button", { name: "Start new plan" }).click();
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
+});
+
+test("changing an in-progress plan actor is confirmed and resets wizard reach", async ({ page }) => {
+  const actors = [
+    { stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: [], description: "Fixture actor", technique_count: 1 },
+    { stix_id: "intrusion-set--other", attack_id: "G0002", name: "Other Actor", type: "campaign", aliases: [], description: "Second fixture", technique_count: 1 },
+  ];
+  await interceptApi(page, [command], actors);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Choose threat actor/ }).click();
+
+  await page.getByRole("button", { name: /Select Other Actor/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Change threat actor?" });
+  await expect(dialog).toContainText("Scope settings and recorded evidence will be cleared");
+  await dialog.getByRole("button", { name: "Keep current plan" }).click();
+  await expect(page.getByRole("button", { name: /Select Test Actor/ })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: /Select Other Actor/ }).click();
+  await dialog.getByRole("button", { name: "Clear and rebuild" }).click();
+  await expect(page.locator("#actionbarCtx")).toContainText("Selected: Other Actor");
+  await expect(page.getByRole("button", { name: /Review and track plan/ })).toBeDisabled();
+});
+
+test("changing ATT&CK domains is confirmed before rebuilding an in-progress plan", async ({ page }) => {
+  await interceptApi(page);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: /Choose threat actor/ }).click();
+
+  await page.getByRole("button", { name: "ICS / OT" }).click();
+  const dialog = page.getByRole("dialog", { name: "Change ATT&CK domains?" });
+  await dialog.getByRole("button", { name: "Clear and rebuild" }).click();
+  await expect(page.getByRole("button", { name: "ICS / OT" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#actionbarCtx")).toContainText("Select a threat actor to continue");
+  await expect(page.getByRole("button", { name: /Scope engagement/ })).toBeDisabled();
+});
+
+test("theme switching remains usable when browser storage is unavailable", async ({ page }) => {
+  await page.addInitScript(() => {
+    for (const method of ["getItem", "setItem"]) {
+      Object.defineProperty(window.localStorage, method, {
+        configurable: true,
+        value: () => { throw new Error("storage is unavailable"); },
+      });
+    }
+  });
+  await interceptApi(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
+  const before = await page.locator("html").getAttribute("data-theme");
+  await page.getByRole("button", { name: /Use (light|dark) theme/ }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", before ?? "");
+});
+
+test("the coverage matrix distinguishes blocked and uninstrumented detections", async ({ page }) => {
+  await interceptApi(page);
+  await buildPlan(page);
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const cell = page.getByRole("button", { name: /T1033.*curated coverage/ });
+
+  await page.getByLabel("Detection for T1033").selectOption("blocked");
+  await expect(cell).toHaveClass(/status-blocked/);
+  await expect(cell).toHaveAccessibleName(/blocked$/);
+
+  await page.getByLabel("Detection for T1033").selectOption("not_instrumented");
+  await expect(cell).toHaveClass(/status-not-instrumented/);
+  await expect(cell).toHaveAccessibleName(/not instrumented$/);
 });

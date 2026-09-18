@@ -209,7 +209,7 @@ export function ActorGallery({
       <div className="actionbar">
         <div className="actionbar__context">
           <span className={`context-dot ${selectedActor ? "is-ready" : ""}`} aria-hidden="true" />
-          <div><span id="actionbarCtx">{selectedActor ? `Selected: ${selectedActor.name}` : "Select a threat actor to continue"}</span><small>{selectedActor ? `${selectedActor.attack_id} · ${pluralizeTechniques(selectedActor.technique_count)}` : "You can change this later without losing safety settings."}</small></div>
+          <div><span id="actionbarCtx">{selectedActor ? `Selected: ${selectedActor.name}` : "Select a threat actor to continue"}</span><small>{selectedActor ? `${selectedActor.attack_id} · ${pluralizeTechniques(selectedActor.technique_count)}` : "Changing actors later requires confirmation so evidence cannot be misattributed."}</small></div>
         </div>
         <Button disabled={!selectedActor} onClick={onContinue} variant="primary">Continue to scope <Icon className="button-icon" name="arrow-right" /></Button>
       </div>

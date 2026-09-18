@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Command } from "../../api/contract";
 import type { PlanPreview, ScopedTechnique } from "../scope/scopeModel";
-import { CoverageHeatmap } from "./CoverageHeatmap";
+import { CoverageHeatmap, coverageStatus } from "./CoverageHeatmap";
 
 const command: Command = {
   platform: "windows", command: "whoami", note: "", cleanup: "", risk: "low",
@@ -36,5 +36,11 @@ describe("CoverageHeatmap", () => {
     render(<CoverageHeatmap onSelect={onSelect} plan={plan} records={{}} selectedTechniqueId={null} />);
     fireEvent.click(screen.getByRole("button", { name: /T1033/ }));
     expect(onSelect).toHaveBeenCalledWith(1, expect.objectContaining({ attack_id: "T1033" }));
+  });
+
+  it("keeps blocked and missing-sensor results distinct from alerted detections", () => {
+    expect(coverageStatus({ outcome: "passed", detection_result: "blocked" })).toBe("blocked");
+    expect(coverageStatus({ outcome: "passed", detection_result: "not_instrumented" })).toBe("not-instrumented");
+    expect(coverageStatus({ outcome: "passed", detection_result: "alerted" })).toBe("detected");
   });
 });
