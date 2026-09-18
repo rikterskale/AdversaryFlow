@@ -51,7 +51,8 @@ export function ActorGallery({
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sort, setSort] = useState<SortOption>("name");
-  const filtersActive = Boolean(query.trim()) || typeFilter !== "all";
+  const hasQuery = Boolean(query.trim());
+  const filtersActive = hasQuery || typeFilter !== "all";
 
   const actors = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -150,7 +151,7 @@ export function ActorGallery({
       </div>
 
       {loading ? <LoadingState detail="This usually takes a moment after the cache is ready." label="Loading actors from ATT&CK…" /> : null}
-      {error ? <ErrorState message={error.message} onRetry={onRetry} retryLabel="Retry catalog" title="The actor catalog could not be loaded" /> : null}
+      {error ? <ErrorState message={error.message} onRetry={onRetry} retryLabel="Retry setup" title="The actor catalog could not be loaded" /> : null}
 
       {!loading && !error ? (
         <>
@@ -177,7 +178,7 @@ export function ActorGallery({
             <EmptyState
               action={filtersActive ? <Button onClick={() => { setQuery(""); setTypeFilter("all"); }}>Clear filters</Button> : undefined}
               message={filtersActive ? "Try a broader name, alias, ATT&CK identifier, or actor type." : "No actors are available for the selected domains."}
-              title={filtersActive ? "No actors match the active filters." : "No actors found"}
+              title={hasQuery ? "No actors match your search." : typeFilter !== "all" ? "No actors match the active filters." : "No actors found"}
             />
           )}
         </>

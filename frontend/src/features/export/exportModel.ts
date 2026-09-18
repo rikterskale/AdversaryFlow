@@ -36,7 +36,10 @@ function compactEvidence(value: ExecutionEvidence | undefined): ExecutionEvidenc
   if (value.stderr_sha256 && /^[a-fA-F0-9]{64}$/.test(value.stderr_sha256)) output.stderr_sha256 = value.stderr_sha256;
   if (value.receipt_sha256 && /^[a-fA-F0-9]{64}$/.test(value.receipt_sha256)) output.receipt_sha256 = value.receipt_sha256;
   if (typeof value.receipt_verified === "boolean") output.receipt_verified = value.receipt_verified;
-  if (value.telemetry_refs?.length) output.telemetry_refs = [...new Set(value.telemetry_refs.filter(Boolean))].slice(0, 20);
+  if (value.telemetry_refs?.length) {
+    const references = [...new Set(value.telemetry_refs.map((reference) => reference.trim()).filter((reference) => reference.length > 0 && reference.length <= 500))].slice(0, 20);
+    if (references.length) output.telemetry_refs = references;
+  }
   if (value.evidence_source) output.evidence_source = value.evidence_source;
   if (value.detection_result) output.detection_result = value.detection_result;
   return output;
@@ -106,7 +109,7 @@ export function buildExportBundle(
       allow_network: scope.allowNetwork,
       allow_admin: scope.allowAdmin,
       allow_high_risk: scope.allowHighRisk,
-      stages: [...scope.tactics],
+      stages: preview.stages.map((stage) => stage.tactic),
     },
     execution_context: { operator: scope.operator, target: scope.target },
     summary: {
@@ -137,6 +140,18 @@ export function buildExportBundle(
     })),
   };
   return { preview, plan, slug: `${actor.attack_id}_${actor.name.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}` };
+}
+
+export function summarizeExportReadiness(plan: PlanExport): { techniques: number; detectionAssessed: number; coverageGaps: number } {
+  const techniqueIds = new Set<string>();
+  const detectionIds = new Set<string>();
+  const gapIds = new Set<string>();
+  plan.stages.forEach((stage) => stage.techniques.forEach((technique) => {
+    techniqueIds.add(technique.id);
+    if (technique.execution.detection_result && technique.execution.detection_result !== "not_assessed") detectionIds.add(technique.id);
+    if (!technique.supported || technique.command_source === "fallback") gapIds.add(technique.id);
+  }));
+  return { techniques: techniqueIds.size, detectionAssessed: detectionIds.size, coverageGaps: gapIds.size };
 }
 
 export function toMarkdown(bundle: ExportBundle): string {

@@ -71,7 +71,7 @@ describe("ActorGallery", () => {
     expect(screen.queryByRole("button", { name: /Beta Campaign/ })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search actors"), { target: { value: "Beta" } });
-    expect(screen.getByRole("heading", { name: "No actors match the active filters." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No actors match your search." })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
   });
 
@@ -87,10 +87,10 @@ describe("ActorGallery", () => {
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
-  it("uses a catalog-specific recovery action", () => {
+  it("uses the established setup recovery action", () => {
     const onRetry = vi.fn();
     renderGallery({ error: new Error("Catalog unavailable"), onRetry, response: null });
-    fireEvent.click(screen.getByRole("button", { name: "Retry catalog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry setup" }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
 });

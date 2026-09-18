@@ -6,7 +6,8 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { useWizardStore } from "../../state/wizardStore";
-import { buildExportBundle, executiveSummary, platformLabel, toMarkdown, toRunbook } from "./exportModel";
+import { buildExportBundle, executiveSummary, platformLabel, summarizeExportReadiness, toMarkdown, toRunbook } from "./exportModel";
+import { validateImportedPlan } from "./planContract";
 
 interface ExportScreenProps {
   actor: Actor;
@@ -49,16 +50,24 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
   const bundle = useMemo(() => buildExportBundle(actor, workflow, scope, records, domains), [actor, domains, records, scope, workflow]);
+  const validationError = useMemo(() => {
+    try {
+      validateImportedPlan(bundle.plan);
+      return null;
+    } catch (error: unknown) {
+      return error instanceof Error ? error.message : "The plan does not match the published export schema.";
+    }
+  }, [bundle]);
+  const exportReady = validationError === null;
   const markedRun = bundle.plan.summary.marked_run.length;
   const platform = platformLabel(scope.commandPlatform);
   const runner = scope.commandPlatform === "windows" ? "PowerShell" : "Bash";
   const hasBoundedExercise = bundle.plan.stages.some((stage) => stage.techniques.some((technique) => technique.supported && technique.command.fidelity === "bounded_synthetic"));
-  const techniques = bundle.plan.stages.flatMap((stage) => stage.techniques);
-  const detectionAssessed = techniques.filter((technique) => technique.execution.detection_result && technique.execution.detection_result !== "not_assessed").length;
-  const coverageGaps = techniques.filter((technique) => !technique.supported || technique.command_source === "fallback").length;
+  const readiness = useMemo(() => summarizeExportReadiness(bundle.plan), [bundle]);
 
   const exportText = (format: TextFormat): void => {
     try {
+      if (validationError) throw new Error(validationError);
       let content: string;
       let filename: string;
       let mime: string;
@@ -83,7 +92,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   };
 
   const exportKit = async (): Promise<void> => {
-    if (kitLoading) return;
+    if (kitLoading || validationError) return;
     setKitLoading(true);
     try {
       const response = await apiFetch("/api/execution-kit", {
@@ -103,7 +112,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   };
 
   const exportReport = async (format: ReportFormat): Promise<void> => {
-    if (reportLoading) return;
+    if (reportLoading || validationError) return;
     setReportLoading(format);
     try {
       const response = await apiFetch(`/api/report/${format}`, {
@@ -133,13 +142,15 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   };
 
   return (
-    <section aria-labelledby="export-title" className="screen export-screen">
+    <section aria-busy={kitLoading || Boolean(reportLoading)} aria-labelledby="export-title" className="screen export-screen">
       <header className="export-hero">
-        <span aria-hidden="true" className="export-hero__check"><Icon name="check" /></span>
+        <span aria-hidden="true" className={`export-hero__check ${exportReady ? "" : "is-invalid"}`}><Icon name={exportReady ? "check" : "close"} /></span>
         <p className="eyebrow">Step 4 of 4 · Export kit</p>
-        <h1 id="export-title">Your emulation plan is ready</h1>
+        <h1 id="export-title">{exportReady ? "Your emulation plan is ready" : "Your plan needs attention"}</h1>
         <p>{actor.name} · {actor.attack_id} · {platform} · generated from ATT&amp;CK data <code>{workflow.metadata.data_version}</code></p>
       </header>
+
+      {validationError ? <div className="export-validation" role="alert"><Icon name="shield" /><div><strong>Export is paused</strong><p>{validationError} Return to review or scope, correct the plan, then try again.</p></div></div> : null}
 
       <div aria-label="Plan summary" className="export-stats">
         <div className="statbox"><strong>{bundle.preview.total}</strong><span>Techniques</span></div>
@@ -151,7 +162,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       <div className="export-layout">
         <div className="export-primary">
           <div className="export-section-heading"><div><p className="eyebrow">Operator handoff</p><h2>Take the plan to the disposable lab</h2></div><span className="export-safety"><Icon name="shield" /> Catalog rebound</span></div>
-          <button className={`kit-card ${kitLoading ? "is-loading" : ""}`} disabled={kitLoading || !csrfToken} onClick={() => { void exportKit(); }} type="button">
+          <button className={`kit-card ${kitLoading ? "is-loading" : ""}`} disabled={!exportReady || kitLoading || !csrfToken} onClick={() => { void exportKit(); }} type="button">
             <span className="kit-card__icon"><Icon name="package" /></span>
             <span className="kit-card__copy">
               <span className="kit-card__eyebrow">Recommended · offline handoff</span>
@@ -178,19 +189,19 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
           <div className="export-section-heading"><div><p className="eyebrow">Purple-team reporting</p><h2>Package outcomes and gaps</h2></div></div>
           <div className="report-readiness" aria-label="Report coverage snapshot">
             <div><strong>{markedRun}/{bundle.preview.runnable}</strong><span>Outcomes recorded</span></div>
-            <div><strong>{detectionAssessed}/{techniques.length}</strong><span>Detections assessed</span></div>
-            <div><strong>{coverageGaps}</strong><span>Catalog gaps</span></div>
+            <div><strong>{readiness.detectionAssessed}/{readiness.techniques}</strong><span>Detections assessed</span></div>
+            <div><strong>{readiness.coverageGaps}</strong><span>Catalog gaps</span></div>
           </div>
           <div className="export-card-list">
-            <button className="export-card export-card--featured" disabled={Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("pdf"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "pdf" ? "Building PDF report…" : "PDF engagement report"}</strong><p>Leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps.</p></div><Icon name="download" /></button>
-            <button className="export-card" disabled={Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("html"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "html" ? "Building HTML report…" : "HTML engagement report"}</strong><p>Self-contained, responsive report for review in any modern browser.</p></div><Icon name="download" /></button>
-            <button className="export-card" onClick={() => exportText("json")} type="button"><span><Icon name="file" /></span><div><strong>Schema-versioned JSON</strong><p>Canonical AdversaryFlow 2.0 plan and evidence record for validation or resume.</p></div><Icon name="download" /></button>
+            <button className="export-card export-card--featured" disabled={!exportReady || Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("pdf"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "pdf" ? "Building PDF report…" : "PDF engagement report"}</strong><p>Leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps.</p></div><Icon name="download" /></button>
+            <button className="export-card" disabled={!exportReady || Boolean(reportLoading) || !csrfToken} onClick={() => { void exportReport("html"); }} type="button"><span><Icon name="file" /></span><div><strong>{reportLoading === "html" ? "Building HTML report…" : "HTML engagement report"}</strong><p>Self-contained, responsive report for review in any modern browser.</p></div><Icon name="download" /></button>
+            <button className="export-card" disabled={!exportReady} onClick={() => exportText("json")} type="button"><span><Icon name="file" /></span><div><strong>Schema-versioned JSON</strong><p>Canonical AdversaryFlow 2.0 plan and evidence record for validation or resume.</p></div><Icon name="download" /></button>
           </div>
 
           <div className="secondary-exports">
             <span>Additional planning artifacts</span>
-            <button onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
-            <button onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>
+            <button disabled={!exportReady} onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
+            <button disabled={!exportReady} onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>
           </div>
 
           <div className="verification-card">
@@ -201,13 +212,13 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
               <li>JSON keeps the schema 2.0 source record intact.</li>
             </ul>
           </div>
-          <Button className="summary-copy" onClick={() => { void copySummary(); }} variant="ghost"><Icon className="button-icon" name="copy" /> Copy plan summary</Button>
+          <Button className="summary-copy" disabled={!exportReady} onClick={() => { void copySummary(); }} variant="ghost"><Icon className="button-icon" name="copy" /> Copy plan summary</Button>
         </aside>
       </div>
 
       <div className="actionbar export-actionbar">
         <Button onClick={onBack} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Back to review</Button>
-        <div className="actionbar__context"><span aria-hidden="true" className="context-dot is-ready" /><div><span id="actionbarCtx">Plan complete</span><small>Downloads are generated only when you choose them</small></div></div>
+        <div aria-live="polite" className="actionbar__context"><span aria-hidden="true" className={`context-dot ${exportReady ? "is-ready" : ""}`} /><div><span id="actionbarCtx">{exportReady ? "Plan complete" : "Export paused"}</span><small>{exportReady ? "Downloads are generated only when you choose them" : "Return to review or scope to correct the plan"}</small></div></div>
         <Button onClick={() => setRestartOpen(true)}>Plan another actor <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
 
