@@ -4,11 +4,13 @@ import type { Actor, WorkflowResponse } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 import { useWizardStore } from "../../state/wizardStore";
+import { PlanPreview } from "./PlanPreview";
 import {
   buildPlanPreview,
   detectedPlatform,
   preCompromiseTactics,
   tacticDescriptions,
+  titlePlatform,
   type CommandPlatform,
 } from "./scopeModel";
 
@@ -24,10 +26,6 @@ const platformOptions: { value: CommandPlatform; label: string; detail: string }
   { value: "linux", label: "Linux", detail: "POSIX shell and Linux-native exercises" },
   { value: "macos", label: "macOS", detail: "Shell and macOS-native exercises" },
 ];
-
-function titlePlatform(platform: CommandPlatform): string {
-  return platform === "macos" ? "macOS" : `${platform[0]?.toLocaleUpperCase() ?? ""}${platform.slice(1)}`;
-}
 
 function GuardrailToggle({
   id,
@@ -69,6 +67,7 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
   const browserPlatform = detectedPlatform();
   const selectableTactics = availableTactics.filter((tactic) => scope.includePre || !preCompromiseTactics.has(tactic));
   const allSelected = selectableTactics.length > 0 && selectableTactics.every((tactic) => scope.tactics.includes(tactic));
+  const elevatedGuardrails = [scope.allowNetwork, scope.allowAdmin, scope.allowHighRisk].filter(Boolean).length;
 
   const toggleTactic = (tactic: string): void => {
     updateScope({
@@ -89,9 +88,6 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
   const contextText = preview.total === 0
     ? "No techniques in scope — enable a stage"
     : `${preview.runnable} runnable · ${preview.unsupported} unsupported across ${preview.stages.length} stages`;
-  const curatedWidth = preview.total ? `${(preview.curated / preview.total) * 100}%` : "0%";
-  const fallbackWidth = preview.total ? `${(preview.fallback / preview.total) * 100}%` : "0%";
-
   return (
     <section className="screen scope-screen" aria-labelledby="scope-title">
       <div className="screen-heading scope-heading">
@@ -138,6 +134,7 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
                 const hue = Math.round(240 - (index / Math.max(1, workflow.kill_chain.length - 1)) * 225);
                 return (
                   <button
+                    aria-label={`${item.title}, ${stage.techniques.length} mapped techniques${disabled ? ", excluded while pre-compromise tactics are off" : ""}`}
                     aria-pressed={selected}
                     className={`tactic-chip ${selected ? "is-on" : ""}`}
                     disabled={disabled}
@@ -157,7 +154,13 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
 
           <section className="scope-panel">
             <div className="scope-panel__heading"><span className="panel-number">03</span><div><h2>Safety guardrails</h2><p>Conservative defaults keep elevated, network-active, and high-risk commands out of the runnable plan.</p></div></div>
-            <div className="safe-defaults" role="status"><Icon name="shield" /><p><strong>Safe defaults active</strong>Nothing below is enabled unless you choose it.</p></div>
+            <div aria-live="polite" className={`safe-defaults ${elevatedGuardrails ? "is-elevated" : ""}`} role="status">
+              <Icon name="shield" />
+              <p>
+                <strong>{elevatedGuardrails ? `${elevatedGuardrails} elevated guardrail${elevatedGuardrails === 1 ? "" : "s"} enabled` : "Safe defaults active"}</strong>
+                {elevatedGuardrails ? "The live preview now includes commands allowed by those explicit opt-ins." : "Network, administrator, and high-risk commands remain withheld."}
+              </p>
+            </div>
             <div className="toggle-list">
               <GuardrailToggle checked={scope.allowNetwork} description="Permits catalog commands that contact a documented host or service." id="optNetwork" onChange={(allowNetwork) => updateScope({ allowNetwork })} title="Allow network-active commands" />
               <GuardrailToggle checked={scope.allowAdmin} description="Permits commands that require administrator or root privileges." id="optAdmin" onChange={(allowAdmin) => updateScope({ allowAdmin })} title="Allow administrator commands" />
@@ -176,26 +179,12 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
           </section>
         </div>
 
-        <aside className="scope-summary" id="scopeSummary">
-          <div className="summary-status"><span className={preview.runnable ? "is-ready" : ""} aria-hidden="true" /><div><p>Live plan preview</p><strong>{preview.runnable ? `${preview.runnable} lab tests ready` : "No runnable tests"}</strong></div></div>
-          <div className="summary-actor"><span>{actor.attack_id}</span><div><strong>{actor.name}</strong><p>{workflow.metadata.data_version}</p></div></div>
-          <dl className="summary-metrics">
-            <div><dt>Techniques</dt><dd>{preview.total}</dd></div>
-            <div><dt>Runnable on {titlePlatform(scope.commandPlatform)}</dt><dd>{preview.runnable}</dd></div>
-            <div><dt>Unsupported or withheld</dt><dd>{preview.unsupported}</dd></div>
-            <div><dt>Kill-chain stages</dt><dd>{preview.stages.length}</dd></div>
-          </dl>
-          <div className="coverage-summary">
-            <div className="coverage-summary__bar"><span className="is-curated" style={{ width: curatedWidth }} /><span className="is-fallback" style={{ width: fallbackWidth }} /></div>
-            <div><span><i className="legend-dot legend-dot--curated" />{preview.curated} curated</span><span><i className="legend-dot legend-dot--fallback" />{preview.fallback} fallback</span></div>
-          </div>
-          <div className="summary-boundary"><Icon name="shield" /><p><strong>Planner boundary intact</strong>No commands execute from this service.</p></div>
-        </aside>
+        <PlanPreview actor={actor} commandPlatform={scope.commandPlatform} dataVersion={workflow.metadata.data_version} preview={preview} />
       </div>
 
       <div className="actionbar scope-actionbar">
         <Button onClick={onBack} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Back</Button>
-        <div className="actionbar__context"><span className={`context-dot ${preview.runnable ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{contextText}</span><small>{preview.runnable ? `Commands target ${titlePlatform(scope.commandPlatform)} · review remains required before copy` : "Adjust platform, stages, or guardrails to continue."}</small></div></div>
+        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${preview.runnable ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{contextText}</span><small>{preview.runnable ? `Commands target ${titlePlatform(scope.commandPlatform)} · review remains required before copy` : "Adjust platform, stages, or guardrails to continue."}</small></div></div>
         <Button disabled={preview.runnable === 0} onClick={onBuild} variant="primary">Build plan <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
     </section>

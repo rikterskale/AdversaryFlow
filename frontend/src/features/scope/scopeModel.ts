@@ -29,6 +29,14 @@ export interface PlanPreview {
   unsupported: number;
   curated: number;
   fallback: number;
+  filteredFallback: number;
+  withheld: {
+    platform: number;
+    network: number;
+    admin: number;
+    highRisk: number;
+    catalog: number;
+  };
 }
 
 export const preCompromiseTactics = new Set(["reconnaissance", "resource-development"]);
@@ -60,6 +68,10 @@ export function detectedPlatform(): CommandPlatform {
   return "windows";
 }
 
+export function titlePlatform(platform: CommandPlatform): string {
+  return platform === "macos" ? "macOS" : `${platform[0]?.toLocaleUpperCase() ?? ""}${platform.slice(1)}`;
+}
+
 export function defaultScope(): ScopeSettings {
   return {
     commandPlatform: detectedPlatform(),
@@ -77,7 +89,7 @@ export function defaultScope(): ScopeSettings {
 export function resolveCommand(technique: Technique, scope: ScopeSettings): Command {
   const exact = technique.commands.find((command) => command.platform === scope.commandPlatform);
   if (!exact) {
-    const platform = scope.commandPlatform === "macos" ? "macOS" : `${scope.commandPlatform[0]?.toLocaleUpperCase() ?? ""}${scope.commandPlatform.slice(1)}`;
+    const platform = titlePlatform(scope.commandPlatform);
     return {
       platform: scope.commandPlatform,
       command: `No ${platform} test is available for this technique.`,
@@ -117,15 +129,36 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
   const techniqueIds = new Set<string>();
   const runnableIds = new Set<string>();
   const curatedIds = new Set<string>();
+  const filteredFallbackIds = new Set<string>();
+  const platformIds = new Set<string>();
+  const networkIds = new Set<string>();
+  const adminIds = new Set<string>();
+  const highRiskIds = new Set<string>();
+  const catalogIds = new Set<string>();
   const stages: ScopedStage[] = [];
 
   for (const stage of workflow.stages) {
     if (!scope.tactics.includes(stage.tactic)) continue;
     if (!scope.includePre && preCompromiseTactics.has(stage.tactic)) continue;
 
-    const techniques = stage.techniques
-      .filter((technique) => !(scope.curatedOnly && technique.command_source === "fallback"))
-      .map((technique): ScopedTechnique => ({ ...technique, selectedCommand: resolveCommand(technique, scope) }));
+    const techniques: ScopedTechnique[] = [];
+    for (const technique of stage.techniques) {
+      if (scope.curatedOnly && technique.command_source === "fallback") {
+        filteredFallbackIds.add(technique.attack_id);
+        continue;
+      }
+
+      const exact = technique.commands.find((command) => command.platform === scope.commandPlatform);
+      if (!exact) {
+        platformIds.add(technique.attack_id);
+      } else {
+        if (exact.unsupported) catalogIds.add(technique.attack_id);
+        if (exact.requires_network && !scope.allowNetwork) networkIds.add(technique.attack_id);
+        if (exact.requires_admin && !scope.allowAdmin) adminIds.add(technique.attack_id);
+        if (exact.risk === "high" && !scope.allowHighRisk) highRiskIds.add(technique.attack_id);
+      }
+      techniques.push({ ...technique, selectedCommand: resolveCommand(technique, scope) });
+    }
     if (!techniques.length) continue;
 
     for (const technique of techniques) {
@@ -143,5 +176,13 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
     unsupported: techniqueIds.size - runnableIds.size,
     curated: curatedIds.size,
     fallback: techniqueIds.size - curatedIds.size,
+    filteredFallback: filteredFallbackIds.size,
+    withheld: {
+      platform: platformIds.size,
+      network: networkIds.size,
+      admin: adminIds.size,
+      highRisk: highRiskIds.size,
+      catalog: catalogIds.size,
+    },
   };
 }

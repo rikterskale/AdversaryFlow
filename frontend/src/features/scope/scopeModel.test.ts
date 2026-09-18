@@ -78,7 +78,31 @@ describe("scopeModel", () => {
       technique({ attack_id: "T1059", name: "Command and Scripting Interpreter", command_source: "fallback" }),
     ]);
     const preview = buildPlanPreview(mixed, scope({ includePre: false, curatedOnly: true }));
-    expect(preview).toMatchObject({ total: 1, runnable: 1, unsupported: 0, curated: 1, fallback: 0 });
+    expect(preview).toMatchObject({ total: 1, runnable: 1, unsupported: 0, curated: 1, fallback: 0, filteredFallback: 1 });
     expect(preview.stages.map((stage) => stage.tactic)).toEqual(["execution"]);
+  });
+
+  it("explains every reason a scoped technique is withheld", () => {
+    const risky = technique({
+      attack_id: "T1001",
+      commands: [{ ...baseCommand, risk: "high", requires_admin: true, requires_network: true }],
+    });
+    const wrongPlatform = technique({
+      attack_id: "T1002",
+      commands: [{ ...baseCommand, platform: "linux" }],
+    });
+    const catalogUnsupported = technique({
+      attack_id: "T1003",
+      commands: [{ ...baseCommand, unsupported: true }],
+    });
+    const filteredFallback = technique({ attack_id: "T1004", command_source: "fallback" });
+
+    const preview = buildPlanPreview(
+      workflow([risky, wrongPlatform, catalogUnsupported, filteredFallback]),
+      scope({ tactics: ["execution"], curatedOnly: true }),
+    );
+
+    expect(preview).toMatchObject({ total: 3, runnable: 0, unsupported: 3, filteredFallback: 1 });
+    expect(preview.withheld).toEqual({ platform: 1, network: 1, admin: 1, highRisk: 1, catalog: 1 });
   });
 });
