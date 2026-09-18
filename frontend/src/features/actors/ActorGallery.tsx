@@ -47,7 +47,7 @@ export function ActorGallery({
   onContinue,
   onRetry,
   onNotice,
-}: ActorGalleryProps): JSX.Element {
+}: ActorGalleryProps): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sort, setSort] = useState<SortOption>("name");

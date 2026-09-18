@@ -9,7 +9,7 @@ interface AuthDialogProps {
   onConnect: (token: string) => void;
 }
 
-export function AuthDialog({ open, message, onConnect }: AuthDialogProps): JSX.Element | null {
+export function AuthDialog({ open, message, onConnect }: AuthDialogProps): React.JSX.Element | null {
   const [token, setToken] = useState("");
   const [validation, setValidation] = useState("");
 

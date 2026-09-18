@@ -48,7 +48,7 @@ function contentDispositionFilename(value: string | null, fallback: string): str
   }
 }
 
-export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNotice, onRestart }: ExportScreenProps): JSX.Element {
+export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNotice, onRestart }: ExportScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
   const records = useWizardStore((state) => state.records);
   const [kitLoading, setKitLoading] = useState(false);
