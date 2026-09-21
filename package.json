@@ -7,6 +7,7 @@
     "dev:frontend": "vite --config frontend/vite.config.ts",
     "test:frontend": "vitest run --config frontend/vitest.config.ts",
     "check:frontend": "tsc --project frontend/tsconfig.json --noEmit && npm run build:frontend && npm run test:frontend",
+    "check:frontend-assets": "git diff --exit-code -- frontend/index.html frontend/styles.css frontend/app.js frontend/favicon.svg",
     "pretest:e2e": "npm run build:frontend",
     "test:e2e": "node tests/e2e/run.js"
   },

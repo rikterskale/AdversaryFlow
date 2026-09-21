@@ -84,8 +84,16 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.15.0"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:frontend
+      - run: npm run check:frontend-assets
       - run: python -m pip install --require-hashes --requirement requirements-build.lock
       - run: python -m build --no-isolation
+      - run: python scripts/verify_distribution_assets.py
       - run: python scripts/build_sbom.py
       - run: cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -102,7 +110,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      - run: npm run check:frontend
+      - run: npm run check:frontend-assets
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - if: failure()
