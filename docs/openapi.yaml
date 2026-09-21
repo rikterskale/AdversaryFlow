@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AdversaryFlow API
-  version: 0.5.0
+  version: 0.5.1
   description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication.
 servers:
   - url: http://127.0.0.1:5000

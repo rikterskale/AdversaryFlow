@@ -128,7 +128,7 @@ Download the `.whl` from the [GitHub Releases](https://github.com/rikterskale/Ad
 page, or build one with `python -m build`, then install that file:
 
 ~~~bash
-pipx install ./adversaryflow-0.5.0-py3-none-any.whl
+pipx install ./adversaryflow-0.5.1-py3-none-any.whl
 adversaryflow --open
 ~~~
 

@@ -11,6 +11,7 @@ class DeliveryContractTests(unittest.TestCase):
     package: ClassVar[dict]
     workflow: ClassVar[str]
     release_workflow: ClassVar[str]
+    workflows: ClassVar[dict[str, str]]
     dockerfile: ClassVar[str]
 
     @classmethod
@@ -18,7 +19,17 @@ class DeliveryContractTests(unittest.TestCase):
         cls.package = json.loads(Path("package.json").read_text(encoding="utf-8"))
         cls.workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
         cls.release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+        cls.workflows = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in Path(".github/workflows").glob("*.yml")
+        }
         cls.dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    def test_linux_workflow_runners_are_pinned(self):
+        for name, workflow in self.workflows.items():
+            with self.subTest(workflow=name):
+                self.assertNotIn("ubuntu-latest", workflow)
+                self.assertIn("ubuntu-24.04", workflow)
 
     def test_frontend_asset_freshness_has_a_named_gate(self):
         command = self.package["scripts"]["check:frontend-assets"]
