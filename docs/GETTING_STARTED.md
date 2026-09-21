@@ -555,6 +555,9 @@ throws).
 - On the plan screen, `j` / `k` move the focused card and `c` copies its
   lab command. Evidence edits do not rebuild the stage, so notes and an
   open proof panel stay put.
+- Moving forward, back, or through a reached step places keyboard and screen
+  reader focus on the new screen heading. Dialogs keep focus inside while open
+  and return it to the invoking control when closed.
 - High-risk copy opens an in-app dialog that shows the command. Cancel is
   always allowed.
 

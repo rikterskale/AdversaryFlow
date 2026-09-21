@@ -183,6 +183,7 @@ export function App(): JSX.Element {
   };
 
   let content: JSX.Element;
+  let focusKey = "welcome";
   if (startupPhase === "failed") {
     content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
   } else if (startupPhase !== "ready") {
@@ -197,6 +198,7 @@ export function App(): JSX.Element {
   } else if (currentStep === 0) {
     content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
   } else if (currentStep === 1 || !selectedActor) {
+    focusKey = "actors";
     content = (
       <ActorGallery
         domains={domains}
@@ -212,14 +214,19 @@ export function App(): JSX.Element {
       />
     );
   } else if (!workflow && (workflowQuery.isPending || workflowQuery.isFetching)) {
+    focusKey = `scope-loading-${selectedActor.stix_id}`;
     content = <section className="screen setup-screen"><LoadingState detail="Resolving mapped techniques and bounded catalog exercises." label={`Building ${selectedActor.name}'s lab plan…`} /></section>;
   } else if (workflowQuery.error || !workflow) {
+    focusKey = `scope-error-${selectedActor.stix_id}`;
     content = <section className="screen setup-screen"><ErrorState message={workflowQuery.error?.message ?? "The workflow response was empty."} onRetry={() => { void workflowQuery.refetch(); }} title="Could not build the actor workflow" /><Button onClick={() => setStep(1)} variant="ghost"><span aria-hidden="true">←</span> Back to threat actors</Button></section>;
   } else if (currentStep === 2) {
+    focusKey = `scope-${selectedActor.stix_id}`;
     content = <ScopeScreen actor={selectedActor} onBack={() => setStep(1)} onBuild={() => setStep(3)} workflow={workflow} />;
   } else if (currentStep === 3) {
+    focusKey = `review-${selectedActor.stix_id}`;
     content = <ReviewScreen actor={selectedActor} onBack={() => setStep(2)} onFinish={() => setStep(4)} onNotice={setNotice} workflow={workflow} />;
   } else {
+    focusKey = `export-${selectedActor.stix_id}`;
     content = <ExportScreen actor={selectedActor} csrfToken={session?.csrf_token ?? ""} domains={domains} onBack={() => setStep(3)} onNotice={setNotice} onRestart={restart} workflow={workflow} />;
   }
 
@@ -227,6 +234,7 @@ export function App(): JSX.Element {
     <AppShell
       actors={actorsQuery.data ?? null}
       domains={domains}
+      focusKey={focusKey}
       health={healthQuery.data ?? null}
       healthFailed={healthQuery.isError}
       onRefresh={refreshFeed}
