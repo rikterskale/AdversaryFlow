@@ -178,7 +178,7 @@ To install an isolated copy from a [GitHub Release](https://github.com/rikterska
 wheel (or a wheel you built):
 
 ```bash
-pipx install ./adversaryflow-0.4.0-py3-none-any.whl
+pipx install ./adversaryflow-0.5.0-py3-none-any.whl
 adversaryflow --open
 ```
 

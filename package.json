@@ -1,7 +1,7 @@
 {
   "name": "adversaryflow-frontend",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "scripts": {
     "build:frontend": "vite build --config frontend/vite.config.ts",
     "dev:frontend": "vite --config frontend/vite.config.ts",
