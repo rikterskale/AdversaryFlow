@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getDoctor } from "../api/client";
@@ -18,6 +18,7 @@ interface AppShellProps {
   setupFailed: boolean;
   actors: ActorsResponse | null;
   domains: AttackDomain[];
+  focusKey: string;
   onRefresh: () => Promise<void>;
   refreshing: boolean;
 }
@@ -132,7 +133,7 @@ function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doct
   );
 }
 
-export function AppShell({ children, session, health, healthFailed, setupFailed, actors, domains, onRefresh, refreshing }: AppShellProps): React.JSX.Element {
+export function AppShell({ children, session, health, healthFailed, setupFailed, actors, domains, focusKey, onRefresh, refreshing }: AppShellProps): React.JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const maxStep = useWizardStore((state) => state.maxStep);
   const setStep = useWizardStore((state) => state.setStep);
@@ -144,6 +145,8 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   const [healthOpen, setHealthOpen] = useState(false);
   const [refreshOpen, setRefreshOpen] = useState(false);
   const [restartOpen, setRestartOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousFocusKey = useRef(focusKey);
   const doctorQuery = useQuery({
     queryKey: ["doctor"],
     queryFn: getDoctor,
@@ -155,6 +158,23 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (previousFocusKey.current === focusKey) return undefined;
+    previousFocusKey.current = focusKey;
+    const frame = window.requestAnimationFrame(() => {
+      const main = mainRef.current;
+      if (!main) return;
+      const heading = main.querySelector<HTMLElement>("h1");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus();
+      } else {
+        main.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusKey]);
 
   const dataStatus = useMemo(() => {
     if (setupFailed) return "setup needs attention";
@@ -249,7 +269,7 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
         <p><strong>Authorized lab use only.</strong> AdversaryFlow creates plans; it does not execute commands.</p>
       </aside>
 
-      <main id="main-content" tabIndex={-1}>{children}</main>
+      <main id="main-content" ref={mainRef} tabIndex={-1}>{children}</main>
 
       <Dialog description="Live service, cache, host, and ATT&CK source checks. The self-test never contacts a target system." onClose={() => setHealthOpen(false)} open={healthOpen} title="System health">
         <HealthDetails

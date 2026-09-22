@@ -1,6 +1,6 @@
 # Getting started
 
-A copy/paste-safe operator handbook for **AdversaryFlow 0.4.0**.
+A copy/paste-safe operator handbook for **AdversaryFlow 0.5.1**.
 Every `adversaryflow` / `adversaryflow-telemetry` invocation, launcher
 `--help` / `--version`, and HTTP check quoted below was executed against
 this tree. Installer success lines are the literal strings from
@@ -275,7 +275,7 @@ Windows PowerShell:
 `--version` must print exactly:
 
 ```text
-AdversaryFlow 0.4.0
+AdversaryFlow 0.5.1
 ```
 
 `doctor` must exit `0` and include:
@@ -284,7 +284,7 @@ AdversaryFlow 0.4.0
 "ok": true,
 "frontend_available": true,
 "cache_writable": true,
-"version": "0.4.0"
+"version": "0.5.1"
 ```
 
 plus `"Flask"` and `"waitress"` versions under `"dependencies"`. If `"ok"`
@@ -329,7 +329,7 @@ You should see, in order:
 
 ```text
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.4.0: http://127.0.0.1:5000
+AdversaryFlow 0.5.1: http://127.0.0.1:5000
 ```
 
 Leave this terminal running. On a **first** enterprise start the UI shows
@@ -361,7 +361,7 @@ curl.exe -sS http://127.0.0.1:5000/api/live
 You should get HTTP 200 and:
 
 ```json
-{"status":"live","version":"0.4.0"}
+{"status":"live","version":"0.5.1"}
 ```
 
 `/api/live` means the process can answer. It does **not** mean ATT&CK data
@@ -494,7 +494,7 @@ backup of the plan.
 
 ### PoC success checklist
 
-- [ ] `adversaryflow --version` prints `AdversaryFlow 0.4.0`
+- [ ] `adversaryflow --version` prints `AdversaryFlow 0.5.1`
 - [ ] `adversaryflow doctor` has `"ok": true`
 - [ ] `GET /api/live` returns `"status":"live"`
 - [ ] `GET /api/health` returns HTTP 200 `"ready": true`
@@ -555,6 +555,9 @@ throws).
 - On the plan screen, `j` / `k` move the focused card and `c` copies its
   lab command. Evidence edits do not rebuild the stage, so notes and an
   open proof panel stay put.
+- Moving forward, back, or through a reached step places keyboard and screen
+  reader focus on the new screen heading. Dialogs keep focus inside while open
+  and return it to the invoking control when closed.
 - High-risk copy opens an in-app dialog that shows the command. Cancel is
   always allowed.
 
@@ -654,7 +657,7 @@ strings are exact CLI or HTTP output.
 | `AdversaryFlow requires Python 3.10 or newer.` | Interpreter too old or missing | Install Python 3.10+, confirm with `python3 --version` / `py -3 --version`, rerun `./install.sh` |
 | `doctor` has `"ok": false` and `"frontend_available": false` | Frontend files not next to the package | Run install from a full git checkout; or set `ADVERSARYFLOW_FRONTEND_DIR` to the `frontend/` directory |
 | `doctor` has `"cache_writable": false` | Cache directory not writable | `adversaryflow --cache-dir /path/you/own doctor` then start with the same `--cache-dir` |
-| Browser never opens, nothing listens | Start failed, or you closed the terminal | Run `./run.sh` again; confirm `AdversaryFlow 0.4.0: http://127.0.0.1:5000` |
+| Browser never opens, nothing listens | Start failed, or you closed the terminal | Run `./run.sh` again; confirm `AdversaryFlow 0.5.1: http://127.0.0.1:5000` |
 | `OSError: [Errno 98] Address already in use` (Windows: WinError 10048) | Port 5000 taken | `./run.sh --port 5050` and open <http://127.0.0.1:5050> |
 | `/api/live` works, `/api/health` is HTTP 503 `"degraded"` | ATT&CK still loading, or load failed | If the UI still says **Preparing MITRE ATT&CK data…**, wait. If `"phase": "failed"`, read `"error"` and the next rows |
 | `"error": "ATT&CK data has not been loaded"` | Started with `--no-preload` and bootstrap never ran | Start **without** `--no-preload`, or click **Retry setup** in the UI |
@@ -750,7 +753,7 @@ exists. After a `git pull`, run `./install.sh` yourself.
 
 ## 7. Upgrades
 
-AdversaryFlow **0.4.0** is the current package version
+AdversaryFlow **0.5.1** is the current package version
 (`backend/__init__.py`, `adversaryflow --version`).
 
 ### From a git checkout (supported)
@@ -775,7 +778,7 @@ After you download a wheel from [GitHub Releases](https://github.com/rikterskale
 or build one locally:
 
 ```bash
-pipx install ./adversaryflow-0.4.0-py3-none-any.whl
+pipx install ./adversaryflow-0.5.1-py3-none-any.whl
 adversaryflow --version
 adversaryflow doctor
 adversaryflow --open
@@ -840,7 +843,7 @@ days.
 
 ## Command cheat sheet
 
-Verified against `adversaryflow --help` on 0.4.0. Default command is
+Verified against `adversaryflow --help` on 0.5.1. Default command is
 `serve`.
 
 ```text

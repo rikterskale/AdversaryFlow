@@ -9,6 +9,23 @@ or service creation, session locks, IMDS queries, or third-party HTTP fetches.
 
 ## Development setup
 
+Frontend development requires Node.js 22.22.2+ or 24.15.0+. Use Node 24.15+
+from the 24.x line when reproducing package builds; it matches the pinned
+container build environment. Install the reviewed dependency graph without
+lifecycle scripts, then run the complete frontend gate:
+
+```bash
+npm ci --ignore-scripts
+npm run check:frontend
+npm run check:frontend-assets
+```
+
+`check:frontend` type-checks the TypeScript source, builds the stable browser
+assets, and runs the Vitest suite. `check:frontend-assets` fails when those
+generated files differ from Git. Commit regenerated `frontend/index.html`,
+`frontend/styles.css`, `frontend/app.js`, and `frontend/favicon.svg` with the
+source change that produced them.
+
 ```bash
 ./install.sh
 .venv/bin/python -m unittest discover --verbose
@@ -19,7 +36,7 @@ bash -n install.sh run.sh
 Browser coverage uses Playwright:
 
 ```bash
-npm ci && npx playwright install --with-deps chromium
+npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 

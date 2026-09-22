@@ -607,11 +607,40 @@ test("J56 — the import contract holds at every documented limit", async ({ pag
   }
 });
 
-test("J55 — the entry screen has no serious accessibility violations", async ({ page }) => {
+test("J55 — wizard transitions focus every accessible screen", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact))).toEqual([]);
+  const expectAccessibleScreen = async () => {
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact))).toEqual([]);
+  };
+
+  await expectAccessibleScreen();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  const actorHeading = page.getByRole("heading", { name: "Choose a threat actor" });
+  await expect(actorHeading).toBeFocused();
+  await expectAccessibleScreen();
+
+  await page.getByRole("button", { name: /UAT Actor/ }).click();
+  await page.getByRole("button", { name: /^Continue/ }).click();
+  const scopeHeading = page.getByRole("heading", { name: "Scope the engagement" });
+  await expect(scopeHeading).toBeFocused();
+  await expectAccessibleScreen();
+
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const reviewHeading = page.getByRole("heading", { name: /UAT Actor · G0001/ });
+  await expect(reviewHeading).toBeFocused();
+  await expectAccessibleScreen();
+
+  await page.getByRole("button", { name: /Finish & export/ }).click();
+  const exportHeading = page.getByRole("heading", { name: "Your emulation plan is ready" });
+  await expect(exportHeading).toBeFocused();
+  await expectAccessibleScreen();
+
+  await page.getByRole("button", { name: /Back to review/ }).click();
+  await expect(reviewHeading).toBeFocused();
+  await page.getByRole("button", { name: /Scope engagement/ }).click();
+  await expect(scopeHeading).toBeFocused();
 });
 
 test("J60 — the operator execution kit downloads from the export screen", async ({ page }) => {

@@ -393,7 +393,7 @@ test("a browser session can be resumed after reload", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /Resume Test Actor plan/ }).click();
-  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeFocused();
   await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
 });
 
@@ -403,7 +403,7 @@ test("a saved plan can be resumed from the welcome screen", async ({ page }) => 
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
   await expect(page.getByRole("status").filter({ hasText: "Plan imported as high-risk" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeFocused();
   await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
   await expect(page.getByLabel("Outcome for T1033")).toHaveValue("passed");
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
@@ -807,7 +807,7 @@ test("restarting from the brand requires confirmation before clearing evidence",
 
   await page.getByRole("button", { name: "Start a new AdversaryFlow plan" }).click();
   await dialog.getByRole("button", { name: "Start new plan" }).click();
-  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeFocused();
 });
 
 test("changing an in-progress plan actor is confirmed and resets wizard reach", async ({ page }) => {
