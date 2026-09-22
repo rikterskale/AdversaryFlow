@@ -44,6 +44,7 @@ export function App(): React.JSX.Element {
   const [authAttempted, setAuthAttempted] = useState(false);
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [catalogRetryError, setCatalogRetryError] = useState("");
   const [pendingPlanReset, setPendingPlanReset] = useState<PendingPlanReset | null>(null);
 
   const start = useCallback(async (): Promise<void> => {
@@ -86,6 +87,16 @@ export function App(): React.JSX.Element {
     queryFn: () => getActors(domains),
     enabled: startupPhase === "ready",
   });
+
+  const retryCatalog = async (): Promise<void> => {
+    // Preserve recovery controls while refetch clears the query error.
+    setCatalogRetryError(actorsQuery.error?.message ?? "The actor catalog could not be loaded.");
+    try {
+      await actorsQuery.refetch();
+    } finally {
+      setCatalogRetryError("");
+    }
+  };
 
   const healthQuery = useQuery({
     queryKey: ["health"],
@@ -196,7 +207,7 @@ export function App(): React.JSX.Element {
       </section>
     );
   } else if (currentStep === 0) {
-    content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
+    content = <Welcome catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
   } else if (currentStep === 1 || !selectedActor) {
     focusKey = "actors";
     content = (

@@ -206,6 +206,84 @@ test("welcome screen has no serious accessibility violations", async ({ page }) 
   expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
 });
 
+test("welcome catalog failure supports repeated retries and keyboard recovery", async ({ page }) => {
+  await interceptApi(page);
+  let fail = true;
+  let releaseRequest;
+  let pendingRequest = null;
+  await page.route("**/api/actors?*", async route => {
+    if (pendingRequest) await pendingRequest;
+    if (fail) {
+      return route.fulfill({ status: 503, json: { error: "service_unavailable", message: "Actor catalog is unavailable", version: "0.5.2" } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/");
+  const alert = page.getByRole("alert");
+  const begin = page.getByRole("button", { name: /Begin emulation plan/ });
+  const retry = page.getByRole("button", { name: "Retry catalog" });
+  await expect(alert).toContainText("Actor catalog is unavailable");
+  await expect(begin).toBeDisabled();
+  await expect(page.getByText("Preparing the catalog…", { exact: true })).toHaveCount(0);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  pendingRequest = new Promise(resolve => { releaseRequest = resolve; });
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Retrying catalog…" })).toBeDisabled();
+  await expect(begin).toBeDisabled();
+  releaseRequest();
+  pendingRequest = null;
+  await expect(retry).toBeEnabled();
+  await expect(alert).toContainText("Actor catalog is unavailable");
+
+  fail = false;
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(begin).toBeEnabled();
+  await expect(alert).toHaveCount(0);
+  await expect(page.getByText("Live ATT&CK catalog ready", { exact: true })).toBeVisible();
+  await begin.click();
+  await expect(page.getByRole("button", { name: /Select Test Actor/ })).toBeVisible();
+});
+
+test("welcome catalog retry preserves the saved plan and evidence", async ({ page }) => {
+  await interceptApi(page);
+  await page.goto("/");
+  await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
+  let fail = true;
+  await page.route("**/api/actors?*", route => fail
+    ? route.fulfill({ status: 503, json: { error: "service_unavailable", message: "Actor catalog is unavailable", version: "0.5.2" } })
+    : route.fallback());
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("Actor catalog is unavailable");
+  const saved = await page.evaluate(() => localStorage.getItem("adversaryflow-wizard-v3"));
+  await expect(page.getByRole("button", { name: "Resume Test Actor plan" })).toBeEnabled();
+  fail = false;
+  await page.getByRole("button", { name: "Retry catalog" }).click();
+  await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeEnabled();
+  expect(await page.evaluate(() => localStorage.getItem("adversaryflow-wizard-v3"))).toBe(saved);
+  await page.getByRole("button", { name: "Resume Test Actor plan" }).click();
+  await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
+  await expect(page.getByLabel("Outcome for T1033")).toHaveValue("passed");
+});
+
+test("welcome catalog failure still allows importing a plan", async ({ page }) => {
+  await interceptApi(page);
+  await page.route("**/api/actors?*", route => route.fulfill({
+    status: 503, json: { error: "service_unavailable", message: "Actor catalog is unavailable", version: "0.5.2" },
+  }));
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toContainText("Actor catalog is unavailable");
+  await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
+  await expect(page.getByText("high risk")).toBeVisible();
+});
+
 test("system health exposes the guided doctor report and fixes", async ({ page }) => {
   let doctorRequests = 0;
   await interceptApi(page);

@@ -13,9 +13,12 @@ interface WelcomeProps {
   resumeActor: Actor | null;
   setupError?: string;
   onRetrySetup?: () => void;
+  catalogError?: string;
+  catalogRetrying?: boolean;
+  onRetryCatalog?: () => void;
 }
 
-export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setupError = "", onRetrySetup }: WelcomeProps): React.JSX.Element {
+export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setupError = "", onRetrySetup, catalogError = "", catalogRetrying = false, onRetryCatalog }: WelcomeProps): React.JSX.Element {
   const importPlan = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -31,9 +34,15 @@ export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setup
         <p className="welcome-lead">Build a guided, ATT&amp;CK-mapped workflow for detection validation—then export an operator-gated kit to use offline on a disposable lab host.</p>
         <div className="welcome-actions">
           <Button disabled={!ready && !setupError} onClick={onBegin} variant="primary">Begin emulation plan <Icon className="button-icon" name="arrow-right" /></Button>
-          <span>{setupError ? "Setup needs attention" : ready ? "Live ATT&CK catalog ready" : "Preparing the catalog…"}</span>
+          <span role="status">{setupError ? "Setup needs attention" : catalogError ? catalogRetrying ? "Retrying catalog…" : "Catalog needs attention" : ready ? "Live ATT&CK catalog ready" : "Preparing the catalog…"}</span>
         </div>
         {setupError ? <ErrorState message={setupError} onRetry={onRetrySetup} title="Could not prepare ATT&CK data" /> : null}
+        {catalogError ? (
+          <div className="error-state" role="alert">
+            <div><strong>The actor catalog could not be loaded</strong><p>{catalogError}</p></div>
+            <Button disabled={catalogRetrying} onClick={onRetryCatalog}>{catalogRetrying ? "Retrying catalog…" : "Retry catalog"}</Button>
+          </div>
+        ) : null}
         <div className="resume-panel">
           <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 plan. Imported commands are treated as untrusted high-risk content.</p></div>
           <div className="resume-panel__actions">
