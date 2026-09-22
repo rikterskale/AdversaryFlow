@@ -2,7 +2,7 @@ name: adversaryflow
 
 services:
   adversaryflow:
-    image: adversaryflow:0.5.1
+    image: adversaryflow:0.5.2
     build:
       context: .
       dockerfile: Dockerfile

@@ -51,7 +51,7 @@ LABEL org.opencontainers.image.title="AdversaryFlow" \
       org.opencontainers.image.description="Authorized adversary-emulation workflow planner" \
       org.opencontainers.image.source="https://github.com/rikterskale/AdversaryFlow" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.version="0.5.1"
+      org.opencontainers.image.version="0.5.2"
 
 ENV ADVERSARYFLOW_CACHE_DIR=/var/lib/adversaryflow/cache \
     ADVERSARYFLOW_HOST=0.0.0.0 \
