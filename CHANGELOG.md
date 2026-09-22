@@ -4,6 +4,19 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+## 0.5.2 — 2026-09-22
+
+- Made source distributions rebuildable by including the frontend source and
+  build configuration, excluding dependency caches, and verifying rebuild
+  inputs alongside compiled assets. Documented standalone rebuild checks.
+- Aligned browser CI with the Node 24.15.0 baseline used for packaging,
+  containers, and releases, with a regression check for version drift.
+- Updated React and React DOM to 19.3.0, their TypeScript definitions to
+  19.3.0, and Playwright to 1.63.0; adapted component typing and rebuilt the
+  browser bundle while retaining the existing Tailwind 3 configuration.
+- Updated both CodeQL actions together and preserved required CI check names
+  while continuing to run Linux jobs on pinned Ubuntu 24.04 runners.
+
 ## 0.5.1 — 2026-09-21
 
 - Moved keyboard focus to each wizard screen heading after forward, back,

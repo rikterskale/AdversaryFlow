@@ -49,7 +49,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 
 ## Frontend
 
-The frontend is a Vite-built React 18 and TypeScript SPA. Tailwind/PostCSS and
+The frontend is a Vite-built React 19 and TypeScript SPA. Tailwind/PostCSS and
 the CSS design-token layer produce the stable `frontend/styles.css`; Vite
 produces `frontend/app.js` and `frontend/index.html`, which Flask and the wheel
 serve without a Node runtime.

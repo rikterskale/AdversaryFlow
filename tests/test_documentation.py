@@ -80,7 +80,7 @@ class DocumentationContractTests(unittest.TestCase):
 
     def test_architecture_preserves_the_planner_boundary(self) -> None:
         self.assertIn("it has no\ncode path that executes a catalog command", self.architecture)
-        self.assertIn("React 18 and TypeScript SPA", self.architecture)
+        self.assertIn("React 19 and TypeScript SPA", self.architecture)
         self.assertIn("frontend/\n├── src/", self.architecture)
         self.assertIn("browser-supplied command bodies are discarded", self.architecture.lower())
         self.assertIn("loopback-only publication", self.architecture)
