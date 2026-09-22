@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from typing import ClassVar
 
+from backend import __version__
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -52,6 +54,12 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("download **PDF**", section)
         self.assertIn("**Schema-versioned JSON**", section)
         self.assertIn("`0` outcomes recorded", section)
+
+    def test_getting_started_command_cheat_sheet_matches_package_version(self) -> None:
+        self.assertIn(
+            f"Verified against `adversaryflow --help` on {__version__}.",
+            self.getting_started,
+        )
 
     def test_install_reference_documents_compose_configuration_and_recovery(self) -> None:
         for setting in (

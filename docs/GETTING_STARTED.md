@@ -843,7 +843,7 @@ days.
 
 ## Command cheat sheet
 
-Verified against `adversaryflow --help` on 0.5.1. Default command is
+Verified against `adversaryflow --help` on 0.5.3. Default command is
 `serve`.
 
 ```text
