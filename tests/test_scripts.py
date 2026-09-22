@@ -154,6 +154,21 @@ class VerifyDistributionAssetsTests(unittest.TestCase):
         }
         for asset, content in self.assets.items():
             (self.frontend / asset).write_bytes(content)
+        self.build_inputs = {
+            path: f"source {path}\n".encode()
+            for path in (
+                "package.json", "package-lock.json", "frontend/package.json",
+                "frontend/vite.config.ts", "frontend/vitest.config.ts",
+                "frontend/tsconfig.json", "frontend/postcss.config.cjs",
+                "frontend/tailwind.config.js", "frontend/src/index.html",
+                "frontend/src/main.tsx", "frontend/src/styles/index.css",
+                "frontend/src/features/example/new-component.tsx", "frontend/public/favicon.svg",
+            )
+        }
+        for path, content in self.build_inputs.items():
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
 
     def write_wheel(self, overrides=None, missing=(), duplicate=None):
         contents = {**self.assets, **(overrides or {})}
@@ -171,16 +186,26 @@ class VerifyDistributionAssetsTests(unittest.TestCase):
                     contents[duplicate],
                 )
 
-    def write_sdist(self, overrides=None, missing=()):
-        contents = {**self.assets, **(overrides or {})}
+    def write_sdist(self, overrides=None, missing=(), duplicate=None, symlink=None):
+        contents = {
+            **{f"frontend/{asset}": content for asset, content in self.assets.items()},
+            **self.build_inputs, **(overrides or {}),
+        }
         sdist = self.dist / "adversaryflow-0.4.0.tar.gz"
         with tarfile.open(sdist, mode="w:gz") as archive:
-            for asset, content in contents.items():
-                if asset in missing:
+            for path, content in contents.items():
+                if path in missing:
                     continue
-                info = tarfile.TarInfo(f"adversaryflow-0.4.0/frontend/{asset}")
+                info = tarfile.TarInfo(f"adversaryflow-0.4.0/{path}")
+                if path == symlink:
+                    info.type = tarfile.SYMTYPE
+                    info.linkname = "elsewhere"
+                    archive.addfile(info)
+                    continue
                 info.size = len(content)
                 archive.addfile(info, io.BytesIO(content))
+                if path == duplicate:
+                    archive.addfile(info, io.BytesIO(content))
 
     def write_valid_distributions(self):
         self.write_wheel()
@@ -198,7 +223,7 @@ class VerifyDistributionAssetsTests(unittest.TestCase):
 
     def test_a_mismatched_sdist_asset_is_rejected(self):
         self.write_wheel()
-        self.write_sdist(overrides={"styles.css": b"stale css\n"})
+        self.write_sdist(overrides={"frontend/styles.css": b"stale css\n"})
         with self.assertRaisesRegex(SystemExit, "styles.css does not match"):
             verify_distribution_assets.verify_distributions(self.dist, self.root)
 
@@ -210,6 +235,40 @@ class VerifyDistributionAssetsTests(unittest.TestCase):
 
     def test_exactly_one_wheel_and_sdist_are_required(self):
         with self.assertRaisesRegex(SystemExit, "exactly one wheel"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_each_missing_build_input_is_rejected(self):
+        self.write_wheel()
+        for path in self.build_inputs:
+            with self.subTest(path=path):
+                self.write_sdist(missing=(path,))
+                with self.assertRaises(SystemExit) as error:
+                    verify_distribution_assets.verify_distributions(self.dist, self.root)
+                self.assertIn(f"exactly one regular {path}", str(error.exception))
+
+    def test_stale_build_input_is_rejected(self):
+        self.write_wheel()
+        self.write_sdist(overrides={"frontend/src/main.tsx": b"stale source\n"})
+        with self.assertRaisesRegex(SystemExit, "main.tsx does not match"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_local_vitest_cache_is_not_a_build_input(self):
+        cache = self.frontend / "src" / "node_modules" / ".vite" / "vitest" / "results.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("{}", encoding="utf-8")
+        self.write_valid_distributions()
+        verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_duplicate_build_input_is_rejected(self):
+        self.write_wheel()
+        self.write_sdist(duplicate="package-lock.json")
+        with self.assertRaisesRegex(SystemExit, "exactly one regular package-lock.json"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_linked_build_input_is_rejected(self):
+        self.write_wheel()
+        self.write_sdist(symlink="frontend/src/main.tsx")
+        with self.assertRaisesRegex(SystemExit, "exactly one regular frontend/src/main.tsx"):
             verify_distribution_assets.verify_distributions(self.dist, self.root)
 
 

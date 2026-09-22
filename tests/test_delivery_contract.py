@@ -74,6 +74,11 @@ class DeliveryContractTests(unittest.TestCase):
         assert match is not None
         self.assertEqual(match.group(1), "24.15.0")
         self.assertIn("RUN npm run build:frontend", self.dockerfile)
+        for name, workflow in (("CI", self.workflow), ("release", self.release_workflow)):
+            with self.subTest(workflow=name):
+                versions = re.findall(r'node-version: "([^"]+)"', workflow)
+                self.assertTrue(versions)
+                self.assertEqual(set(versions), {match.group(1)})
 
     def test_release_revalidates_frontend_and_distribution_bytes(self):
         ordered = (

@@ -24,6 +24,8 @@ include .dockerignore
 recursive-include docs *.md *.yaml
 recursive-include docker *.py *.sh
 recursive-include schemas *.json
-recursive-include frontend *.html *.css *.js *.svg
+recursive-include frontend *.html *.css *.js *.svg *.ts *.tsx *.json *.cjs
+prune frontend/node_modules
+prune frontend/src/node_modules
 recursive-include tests *.py *.js
 recursive-include scripts *.py
