@@ -28,8 +28,10 @@ class DeliveryContractTests(unittest.TestCase):
     def test_linux_workflow_runners_are_pinned(self):
         for name, workflow in self.workflows.items():
             with self.subTest(workflow=name):
-                self.assertNotIn("ubuntu-latest", workflow)
-                self.assertIn("ubuntu-24.04", workflow)
+                # Display names may retain legacy labels required by branch protection.
+                runner_config = re.sub(r"(?m)^\s*name:.*$", "", workflow)
+                self.assertNotIn("ubuntu-latest", runner_config)
+                self.assertIn("ubuntu-24.04", runner_config)
 
     def test_frontend_asset_freshness_has_a_named_gate(self):
         command = self.package["scripts"]["check:frontend-assets"]

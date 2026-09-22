@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   test:
-    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    # Preserve required check names independently of the pinned runner image.
+    name: ${{ matrix.os == 'ubuntu-24.04' && 'ubuntu-latest' || matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -136,6 +137,7 @@ jobs:
         timeout-minutes: 15
 
   package-smoke:
+    name: package-smoke (${{ matrix.os == 'ubuntu-24.04' && 'ubuntu-latest' || matrix.os }})
     needs: build
     runs-on: ${{ matrix.os }}
     strategy:
