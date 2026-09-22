@@ -2,7 +2,7 @@ import type { Actor } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
 
-export function PlanPlaceholder({ actor, onBack }: { actor: Actor; onBack: () => void }): JSX.Element {
+export function PlanPlaceholder({ actor, onBack }: { actor: Actor; onBack: () => void }): React.JSX.Element {
   return (
     <section className="screen placeholder-screen" aria-labelledby="plan-title">
       <p className="eyebrow">Step 3 of 4</p>

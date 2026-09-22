@@ -41,7 +41,7 @@ function GuardrailToggle({
   description: string;
   tone?: "default" | "warning";
   onChange: (checked: boolean) => void;
-}): JSX.Element {
+}): React.JSX.Element {
   return (
     <label className={`toggle ${tone === "warning" ? "toggle--warning" : ""}`} htmlFor={id}>
       <input checked={checked} id={id} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
@@ -51,7 +51,7 @@ function GuardrailToggle({
   );
 }
 
-export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenProps): JSX.Element {
+export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
   const initializeScope = useWizardStore((state) => state.initializeScope);
   const updateScope = useWizardStore((state) => state.updateScope);

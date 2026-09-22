@@ -49,7 +49,7 @@ function fidelityLabel(technique: ScopedTechnique): { className: string; label: 
   return { className: "direct", label: "direct" };
 }
 
-export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice }: TechniqueCardProps): JSX.Element {
+export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice }: TechniqueCardProps): React.JSX.Element {
   const [receipt, setReceipt] = useState("");
   const command = technique.selectedCommand;
   const unsupported = Boolean(command.unsupported);

@@ -15,7 +15,7 @@ interface WelcomeProps {
   onRetrySetup?: () => void;
 }
 
-export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setupError = "", onRetrySetup }: WelcomeProps): JSX.Element {
+export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setupError = "", onRetrySetup }: WelcomeProps): React.JSX.Element {
   const importPlan = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
     event.target.value = "";

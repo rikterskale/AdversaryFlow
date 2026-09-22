@@ -59,7 +59,7 @@ interface HealthDetailsProps extends Pick<AppShellProps, "health" | "actors" | "
   onRetryDoctor: () => void;
 }
 
-function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doctorLoading, onRetryDoctor }: HealthDetailsProps): JSX.Element {
+function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doctorLoading, onRetryDoctor }: HealthDetailsProps): React.JSX.Element {
   const cacheVersion = health ? displayScalar(health.attack_data, "data_version") : null;
   const source = health ? displayScalar(health.attack_data, "source") : null;
   const serviceMode = health ? displayScalar(health.service, "bind_mode") : null;
@@ -133,7 +133,7 @@ function HealthDetails({ health, actors, healthFailed, doctor, doctorError, doct
   );
 }
 
-export function AppShell({ children, session, health, healthFailed, setupFailed, actors, domains, focusKey, onRefresh, refreshing }: AppShellProps): JSX.Element {
+export function AppShell({ children, session, health, healthFailed, setupFailed, actors, domains, focusKey, onRefresh, refreshing }: AppShellProps): React.JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const maxStep = useWizardStore((state) => state.maxStep);
   const setStep = useWizardStore((state) => state.setStep);

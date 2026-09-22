@@ -15,7 +15,7 @@ function cleanupText(command: Command): string {
   return "No cleanup action specified";
 }
 
-export function TouchPreview({ command, techniqueId }: TouchPreviewProps): JSX.Element {
+export function TouchPreview({ command, techniqueId }: TouchPreviewProps): React.JSX.Element {
   const headingId = `touch-preview-${techniqueId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return (
     <section aria-labelledby={headingId} className={`preaction ${command.unsupported ? "preaction--unsupported" : ""}`}>

@@ -21,7 +21,7 @@ function actorMonogram(name: string): string {
   return (initials || name.slice(0, 2)).toLocaleUpperCase();
 }
 
-export function ActorCard({ actor, selected, onSelect }: ActorCardProps): JSX.Element {
+export function ActorCard({ actor, selected, onSelect }: ActorCardProps): React.JSX.Element {
   const description = cleanDescription(actor.description);
 
   return (

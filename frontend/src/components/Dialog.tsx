@@ -11,7 +11,7 @@ interface DialogProps {
   closeLabel?: string;
 }
 
-export function Dialog({ title, description, open, onClose, children, closeLabel = "Close dialog" }: DialogProps): JSX.Element | null {
+export function Dialog({ title, description, open, onClose, children, closeLabel = "Close dialog" }: DialogProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
