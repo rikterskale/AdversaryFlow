@@ -92,7 +92,7 @@ returns a non-zero exit code. The success message is therefore never printed
 after a failed native command.
 
 The package declares an `adversaryflow` console script. In a verified source
-installation, `adversaryflow --version` prints `AdversaryFlow 0.5.2`.
+installation, `adversaryflow --version` prints `AdversaryFlow 0.5.3`.
 
 ### Step 2 — Launch
 
@@ -108,7 +108,7 @@ with `--open`.
 
 ```
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.5.2: http://127.0.0.1:5000
+AdversaryFlow 0.5.3: http://127.0.0.1:5000
 ```
 
 The HTTP service accepts requests immediately; ATT&CK data loads in a
@@ -399,7 +399,7 @@ one envelope: `{"error", "message", "version"}`.
 
 | Command | Purpose | Result |
 |---|---|---|
-| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.5.2` |
+| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.5.3` |
 | `adversaryflow doctor` | Check Python and Docker/Compose versions, service port, frontend/runtime dependencies, cache integrity and writability, disk capacity, and ATT&CK feed reachability | PASS/FAIL JSON with a human-readable fix for each check; exit 0 healthy, exit 1 otherwise |
 | `adversaryflow cache-status` | Inspect cache provenance per domain | JSON with path, age, freshness, ETag, SHA-256 |
 | `adversaryflow cache-refresh --domains enterprise` | Force a re-download | Prints refreshed cache status |
@@ -415,9 +415,9 @@ table directly.
 | ID | Step | User action | System response | Success criterion |
 |---|---|---|---|---|
 | J1 | Install | `./install.sh` | Verifies Python ≥ 3.10, builds `.venv`, installs pinned sets, runs `doctor` | stdout contains `AdversaryFlow installed and verified.` and exit code is 0 |
-| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.5.2` |
+| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.5.3` |
 | J3 | Diagnose | `adversaryflow doctor` | Emits the host self-test used by the GUI health panel | Exit code 0 and `"ok": true`; every Python, Docker/Compose, port, dependency, cache, disk, and ATT&CK reachability check has PASS/FAIL state plus a human-readable fix |
-| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.5.2: http://127.0.0.1:5000` |
+| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.5.3: http://127.0.0.1:5000` |
 | J5 | Serve UI | `GET /` | Returns the wizard page | HTTP 200 and body contains `AdversaryFlow — Adversary Emulation Planner` |
 | J6 | Harden responses | Any HTTP request | Security headers applied | Response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-origin`, a non-empty `X-Request-ID`, and a CSP containing `frame-ancestors 'none'` |
 | J7 | Get a session token | `GET /api/session` | Issues a CSRF token | HTTP 200 and body has non-empty `csrf_token` and `version` |

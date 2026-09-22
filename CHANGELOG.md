@@ -4,6 +4,12 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+## 0.5.3 — 2026-09-22
+
+- Recover from actor-catalog failures on the welcome screen with an actionable
+  error, keyboard-accessible retry, and pending status. Preserve saved plans,
+  recorded evidence, and JSON import during a catalog outage.
+
 ## 0.5.2 — 2026-09-22
 
 - Made source distributions rebuildable by including the frontend source and
