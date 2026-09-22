@@ -1,12 +1,15 @@
 """Cover for the release-gating scripts in scripts/."""
 import importlib.util
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -59,6 +62,7 @@ def load(name: str):
 
 build_sbom = load("build_sbom")
 validate_release = load("validate_release")
+verify_distribution_assets = load("verify_distribution_assets")
 
 LOCK = """\
 # comment line
@@ -133,6 +137,80 @@ class ProjectVersionTests(unittest.TestCase):
             '"""doc."""\n\n__version__ = "4.5.6"\n', encoding="utf-8")
         with patch.object(build_sbom, "ROOT", root):
             self.assertEqual(build_sbom._project_version(), "4.5.6")
+
+
+class VerifyDistributionAssetsTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.frontend = self.root / "frontend"
+        self.dist = self.root / "dist"
+        self.frontend.mkdir()
+        self.dist.mkdir()
+        self.assets = {
+            asset: f"fresh {asset}\n".encode()
+            for asset in verify_distribution_assets.FRONTEND_ASSETS
+        }
+        for asset, content in self.assets.items():
+            (self.frontend / asset).write_bytes(content)
+
+    def write_wheel(self, overrides=None, missing=(), duplicate=None):
+        contents = {**self.assets, **(overrides or {})}
+        wheel = self.dist / "adversaryflow-0.4.0-py3-none-any.whl"
+        with zipfile.ZipFile(wheel, mode="w") as archive:
+            for asset, content in contents.items():
+                if asset not in missing:
+                    archive.writestr(
+                        f"adversaryflow-0.4.0.data/data/share/adversaryflow/frontend/{asset}",
+                        content,
+                    )
+            if duplicate:
+                archive.writestr(
+                    f"duplicate/share/adversaryflow/frontend/{duplicate}",
+                    contents[duplicate],
+                )
+
+    def write_sdist(self, overrides=None, missing=()):
+        contents = {**self.assets, **(overrides or {})}
+        sdist = self.dist / "adversaryflow-0.4.0.tar.gz"
+        with tarfile.open(sdist, mode="w:gz") as archive:
+            for asset, content in contents.items():
+                if asset in missing:
+                    continue
+                info = tarfile.TarInfo(f"adversaryflow-0.4.0/frontend/{asset}")
+                info.size = len(content)
+                archive.addfile(info, io.BytesIO(content))
+
+    def write_valid_distributions(self):
+        self.write_wheel()
+        self.write_sdist()
+
+    def test_matching_frontend_assets_pass(self):
+        self.write_valid_distributions()
+        verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_a_missing_wheel_asset_is_rejected(self):
+        self.write_wheel(missing=("app.js",))
+        self.write_sdist()
+        with self.assertRaisesRegex(SystemExit, "exactly one.*app.js"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_a_mismatched_sdist_asset_is_rejected(self):
+        self.write_wheel()
+        self.write_sdist(overrides={"styles.css": b"stale css\n"})
+        with self.assertRaisesRegex(SystemExit, "styles.css does not match"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_a_duplicate_wheel_asset_is_rejected(self):
+        self.write_wheel(duplicate="index.html")
+        self.write_sdist()
+        with self.assertRaisesRegex(SystemExit, "exactly one.*index.html"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
+
+    def test_exactly_one_wheel_and_sdist_are_required(self):
+        with self.assertRaisesRegex(SystemExit, "exactly one wheel"):
+            verify_distribution_assets.verify_distributions(self.dist, self.root)
 
 
 class ValidateReleaseTests(unittest.TestCase):

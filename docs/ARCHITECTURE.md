@@ -202,10 +202,13 @@ it does not make the host listener public.
 
 ## Packaging and deployment
 
-Vite compiles stable frontend assets before package builds. `pyproject.toml`
-installs those assets with the Flask package. Native launchers create an
-isolated virtual environment from hash-locked requirements; pipx installs the
-same wheel contract.
+Vite compiles stable frontend assets before package builds. The generated
+files are checked in so source archives and editable installs have a browser
+bundle, and CI rejects any source/generated drift. `pyproject.toml` installs
+those assets with the Flask package; a post-build verifier compares their
+bytes in both the wheel and source distribution with the fresh Vite output.
+Native launchers create an isolated virtual environment from hash-locked
+requirements; pipx installs the same wheel contract.
 
 The multi-stage Docker build uses a digest-pinned Python base. The runtime is
 non-root, read-only, capability-free, and uses tmpfs only for temporary files
@@ -218,11 +221,13 @@ loopback-only publication, and an authenticated readiness healthcheck.
   tests run on Python 3.10 and 3.14 across Linux, Windows, and macOS, with an
   additional Python 3.12 Linux job.
 - TypeScript type checking, Vite production builds, Vitest component/model
-  tests, and Playwright browser journeys cover the frontend.
+  tests, generated-asset freshness, and Playwright browser journeys cover the
+  frontend.
 - Compose smoke builds the real image and waits for authenticated
   `/api/health` readiness.
-- Ruff, mypy, CodeQL, release validation, wheel smoke tests, CycloneDX SBOM,
-  and release checksums guard the shipped artifacts.
+- Ruff, mypy, CodeQL, release validation, wheel and source-distribution asset
+  verification, wheel smoke tests, CycloneDX SBOM, and release checksums guard
+  the shipped artifacts.
 
 See [OpenAPI 3.1](openapi.yaml), [export formats](EXPORTS.md),
 [operations](OPERATIONS.md), and [telemetry](TELEMETRY.md) for the detailed

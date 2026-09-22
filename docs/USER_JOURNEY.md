@@ -92,7 +92,7 @@ returns a non-zero exit code. The success message is therefore never printed
 after a failed native command.
 
 The package declares an `adversaryflow` console script. In a verified source
-installation, `adversaryflow --version` prints `AdversaryFlow 0.4.0`.
+installation, `adversaryflow --version` prints `AdversaryFlow 0.5.1`.
 
 ### Step 2 — Launch
 
@@ -108,7 +108,7 @@ with `--open`.
 
 ```
 [AdversaryFlow] starting; the browser will open when ATT&CK data is ready
-AdversaryFlow 0.4.0: http://127.0.0.1:5000
+AdversaryFlow 0.5.1: http://127.0.0.1:5000
 ```
 
 The HTTP service accepts requests immediately; ATT&CK data loads in a
@@ -399,7 +399,7 @@ one envelope: `{"error", "message", "version"}`.
 
 | Command | Purpose | Result |
 |---|---|---|
-| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.4.0` |
+| `adversaryflow --version` | Identify the build | `AdversaryFlow 0.5.1` |
 | `adversaryflow doctor` | Check Python and Docker/Compose versions, service port, frontend/runtime dependencies, cache integrity and writability, disk capacity, and ATT&CK feed reachability | PASS/FAIL JSON with a human-readable fix for each check; exit 0 healthy, exit 1 otherwise |
 | `adversaryflow cache-status` | Inspect cache provenance per domain | JSON with path, age, freshness, ETag, SHA-256 |
 | `adversaryflow cache-refresh --domains enterprise` | Force a re-download | Prints refreshed cache status |
@@ -415,9 +415,9 @@ table directly.
 | ID | Step | User action | System response | Success criterion |
 |---|---|---|---|---|
 | J1 | Install | `./install.sh` | Verifies Python ≥ 3.10, builds `.venv`, installs pinned sets, runs `doctor` | stdout contains `AdversaryFlow installed and verified.` and exit code is 0 |
-| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.4.0` |
+| J2 | Verify install | `adversaryflow --version` | Prints the packaged version | stdout is exactly `AdversaryFlow 0.5.1` |
 | J3 | Diagnose | `adversaryflow doctor` | Emits the host self-test used by the GUI health panel | Exit code 0 and `"ok": true`; every Python, Docker/Compose, port, dependency, cache, disk, and ATT&CK reachability check has PASS/FAIL state plus a human-readable fix |
-| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.4.0: http://127.0.0.1:5000` |
+| J4 | Launch | `./run.sh` | Starts waitress on loopback and opens a browser when ready | stdout contains `AdversaryFlow 0.5.1: http://127.0.0.1:5000` |
 | J5 | Serve UI | `GET /` | Returns the wizard page | HTTP 200 and body contains `AdversaryFlow — Adversary Emulation Planner` |
 | J6 | Harden responses | Any HTTP request | Security headers applied | Response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-origin`, a non-empty `X-Request-ID`, and a CSP containing `frame-ancestors 'none'` |
 | J7 | Get a session token | `GET /api/session` | Issues a CSRF token | HTTP 200 and body has non-empty `csrf_token` and `version` |
@@ -468,7 +468,7 @@ table directly.
 | J52 | Operate offline | `adversaryflow --offline` with a seeded cache | Serves without network access | Actors load and no upstream request is made |
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
 | J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 856 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
-| J55 | Accessibility | Load the welcome screen | No serious accessibility violations | axe-core reports zero `serious` or `critical` violations |
+| J55 | Accessibility | Walk forward and backward through the welcome, actor, scope, review, and export screens with the keyboard | Focus moves to each new screen heading and every step has no serious accessibility violations | The active element is the destination `h1` after forward, back, reached-step, resume/import, and restart transitions; axe-core reports zero `serious` or `critical` violations on every wizard screen |
 | J56 | Bound imported plans | Resume documents at and beyond each stage, per-stage technique, aggregate technique, command-length, and ATT&CK-ID boundary | Accepts valid boundary values and rejects values beyond them without changing screens | 1 and 32 non-empty stages, 2,000 techniques in a stage, 4,000 aggregate techniques, and a 10,000-character command are accepted; zero or 33 stages, an empty stage, 2,001 techniques in one stage, 4,001 in aggregate, a 10,001-character command, or a malformed technique ID produces the documented toast and leaves the welcome screen usable |
 | J57 | Enforce exact origins | Send a mutating request with a valid CSRF token and vary only `Origin` | Compares scheme, host, and effective port rather than hostname text alone | Foreign host, `null`, wrong scheme, and wrong port return HTTP 403 with `error = forbidden`; a matching `http://[::1]:5000` origin is accepted when the request host is `[::1]:5000` |
 | J58 | Propagate Windows install failures | Run `.\install.ps1` with each native child command forced to return non-zero | Stops at the failed step | PowerShell exits non-zero with the matching step-specific error and never prints `AdversaryFlow installed and verified.` |

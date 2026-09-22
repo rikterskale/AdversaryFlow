@@ -35,7 +35,7 @@ jobs:
     # Only the maintainer's own pull requests. Without this gate an outside
     # contributor's branch would be queued to merge itself.
     if: github.event.pull_request.user.login == 'rikterskale'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # pull_request_target runs with write permissions against the base repo,
       # so this job deliberately checks out nothing and only calls the API.

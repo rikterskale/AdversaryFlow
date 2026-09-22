@@ -4,6 +4,16 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+## 0.5.1 — 2026-09-21
+
+- Moved keyboard focus to each wizard screen heading after forward, back,
+  resume, and import transitions, with automated accessibility coverage for
+  every wizard screen and focus restoration path.
+- Pinned GitHub Actions Linux jobs to Ubuntu 24.04 so the announced
+  `ubuntu-latest` migration does not silently change the build environment.
+
+## 0.5.0 — 2026-09-21
+
 - Added deterministic purple-team engagement reports over the schema 2.0 plan:
   a sandboxed HTML preview, HTML-derived PDF, canonical JSON download, complete
   telemetry/evidence detail, honest Sigma and instrumentation gaps, and no
@@ -23,6 +33,10 @@ All notable changes to AdversaryFlow are documented here.
   path. Distribution is a source checkout or a GitHub Release wheel.
 - Removed the optional PyPI trusted-publishing steps from the release
   workflow.
+- Made frontend validation and distributions deterministic: CI and releases
+  restore the locked browser dependency graph, run TypeScript and Vitest,
+  reject stale generated assets, rebuild the frontend before packaging, and
+  verify the exact frontend bytes in both the wheel and source distribution.
 
 ## 0.4.0 — 2026-09-05
 

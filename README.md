@@ -178,7 +178,7 @@ To install an isolated copy from a [GitHub Release](https://github.com/rikterska
 wheel (or a wheel you built):
 
 ```bash
-pipx install ./adversaryflow-0.4.0-py3-none-any.whl
+pipx install ./adversaryflow-0.5.1-py3-none-any.whl
 adversaryflow --open
 ```
 
@@ -279,7 +279,9 @@ Run the local verification suite with:
 ```bash
 .venv/bin/python -m unittest discover --verbose
 bash -n install.sh run.sh
+npm ci --ignore-scripts
 npm run check:frontend
+npm run check:frontend-assets
 npm run test:e2e
 ```
 
@@ -292,9 +294,12 @@ Lint and type checks (configured in `pyproject.toml`, tooling pinned in
 .venv/bin/mypy
 ```
 
-CI tests Python 3.10–3.14 across Linux, Windows, and macOS, runs Playwright
-browser tests, enforces `ruff` and `mypy`, smoke-tests the built wheel on all
-three platforms, scans with CodeQL, and produces checksums and a CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
+CI tests Python 3.10–3.14 across Linux, Windows, and macOS, runs TypeScript,
+Vitest, and Playwright checks, rejects stale generated browser assets, and
+builds wheel and source distributions from the verified SPA. It also enforces
+`ruff` and `mypy`, verifies packaged frontend bytes, smoke-tests the built wheel
+on all three platforms, scans with CodeQL, and produces checksums and a
+CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md), and
 [the release guide](docs/RELEASING.md).
 
