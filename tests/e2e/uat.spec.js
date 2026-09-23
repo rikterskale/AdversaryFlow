@@ -700,16 +700,20 @@ test("E4 — a rejected bootstrap start stops with an actionable setup error", a
 });
 
 test("E5 — bootstrap polling reports its fifteen-minute deadline", async ({ page }) => {
-  await page.addInitScript(() => {
-    const readings = [0, 900001];
-    Date.now = () => readings.length ? readings.shift() : 900001;
-  });
+  const started = new Date("2026-09-23T12:00:00Z");
+  await page.clock.setFixedTime(started);
+  let bootstrapCalls = 0;
   await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "uat-token", version: "0.4.0" } }));
-  await page.route("**/api/bootstrap", route => route.fulfill({
-    status: 202,
-    json: { status: "loading", runtime: { ready: false, phase: "loading" }, cache: { domains: {} } },
-  }));
+  await page.route("**/api/bootstrap", route => {
+    bootstrapCalls += 1;
+    return route.fulfill({
+      status: 202,
+      json: { status: "loading", runtime: { ready: false, phase: "loading" }, cache: { domains: {} } },
+    });
+  });
   await page.goto("/");
+  await expect.poll(() => bootstrapCalls).toBeGreaterThan(0);
+  await page.clock.setFixedTime(new Date(started.getTime() + 900001));
   await expect(page.getByText("Preparing ATT&CK data timed out. Check the service log, then retry setup.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
 });

@@ -7,6 +7,9 @@ All notable changes to AdversaryFlow are documented here.
 - Validate Chromium, Firefox, and WebKit in CI, with a separate native macOS
   Safari workflow. Exercise the macOS kit under the system Bash and run clean
   Docker builds with isolated empty cache volumes.
+- Run Linux browser CI under a virtual display, retain failed-attempt traces,
+  and reject flaky results. Make the bootstrap deadline test use a controlled
+  clock instead of depending on unrelated `Date.now()` calls.
 - Prevent deferred screen/dialog focus from interrupting initial input, and
   keep temporary download URLs alive long enough for WebKit to start downloads.
 - Keep focused controls below the header and stop automatic scrolling animations

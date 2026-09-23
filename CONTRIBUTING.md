@@ -50,6 +50,12 @@ is separate from native Safari. The macOS CI job runs the real Safari browser
 through Apple's driver; locally, enable it with `safaridriver --enable`, then
 run `python scripts/safari_smoke.py`. See [Apple's WebDriver setup](https://developer.apple.com/documentation/safari-developer-tools/macos-enabling-webdriver).
 
+Linux CI uses `xvfb-run --auto-servernum npm run test:e2e -- --headed` to avoid
+an [upstream headless WebKit click hang](https://github.com/microsoft/playwright/issues/33057).
+Use the same command on Linux when reproducing CI. Retries collect diagnostics,
+but flaky tests still fail CI. Browser reports are always uploaded, including
+traces of failed attempts that later passed.
+
 For a clean Docker build and first-start check, run
 `python scripts/compose_smoke.py --fresh`. Each run creates and removes its own
 Compose project and empty cache volume, preserving the regular application cache.

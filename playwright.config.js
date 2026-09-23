@@ -5,6 +5,7 @@ module.exports = defineConfig({
   testDir: "tests/e2e",
   timeout: 30000,
   retries: process.env.CI ? 2 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["html", { open: "never" }], ["list"]] : "list",
   projects: [
     { name: "chromium", use: { browserName: "chromium", permissions: ["clipboard-read", "clipboard-write"] } },
