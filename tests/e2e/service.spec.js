@@ -38,7 +38,9 @@ test.beforeEach(async ({ request }) => {
 });
 
 async function connect(page) {
-  await page.goto(baseURL);
+  // The token dialog is the readiness boundary; Firefox can delay the window
+  // load notification even after this client-rendered form is interactive.
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
   await page.getByLabel("API token").fill("browser-fixture-token");
   await page.getByRole("button", { name: "Connect securely" }).click();
 }
