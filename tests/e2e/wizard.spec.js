@@ -228,7 +228,7 @@ test("welcome catalog failure supports repeated retries and keyboard recovery", 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.filter(item => ["serious", "critical"].includes(item.impact))).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 
   pendingRequest = new Promise(resolve => { releaseRequest = resolve; });
   await retry.focus();
@@ -312,17 +312,17 @@ test("mobile screens never create page-level horizontal scrolling", async ({ pag
   await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Select Test Actor/ }).click();
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Build plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Finish & export/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
 
 test("actor cards present clean copy and concise accessible names", async ({ page }) => {
