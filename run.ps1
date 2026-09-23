@@ -9,3 +9,4 @@ if (-not (Test-Path ".venv\Scripts\adversaryflow.exe")) {
 
 Write-Host "[AdversaryFlow] starting; the browser will open when ATT&CK data is ready"
 & .\.venv\Scripts\adversaryflow.exe --open @args
+exit $LASTEXITCODE

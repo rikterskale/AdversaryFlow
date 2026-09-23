@@ -346,6 +346,11 @@ class LauncherScriptTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
 
+    def test_posix_scripts_use_lf_line_endings(self):
+        for name in ("install.sh", "run.sh", "docker/entrypoint.sh"):
+            with self.subTest(name=name):
+                self.assertNotIn(b"\r", (ROOT / name).read_bytes())
+
     def test_posix_scripts_are_valid_bash(self):
         for name in ("install.sh", "run.sh", "docker/entrypoint.sh"):
             result = subprocess.run(
@@ -354,22 +359,79 @@ class LauncherScriptTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_run_script_starts_the_installed_command_and_forwards_arguments(self):
+    def test_run_script_preserves_arguments_and_exit_status(self):
         shutil.copy2(ROOT / "run.sh", self.root / "run.sh")
         command = self.root / ".venv" / "bin" / "adversaryflow"
         command.parent.mkdir(parents=True)
-        command.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n', encoding="utf-8")
-        command.chmod(0o755)
-        result = subprocess.run(
-            [BASH, str(self.root / "run.sh"), "--port", "6000"],
-            env=_bash_env(),
-            capture_output=True,
-            text=True,
-            check=False,
+        command.write_text(
+            '#!/bin/sh\nprintf "<%s>\\n" "$@"\nexit "$AF_LAUNCHER_EXIT_CODE"\n',
+            encoding="utf-8", newline="\n",
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("[AdversaryFlow] starting", result.stdout)
-        self.assertIn("--open --port 6000", result.stdout)
+        command.chmod(0o755)
+        for exit_code in (0, 23):
+            with self.subTest(exit_code=exit_code):
+                result = subprocess.run(
+                    [BASH, str(self.root / "run.sh"), "--port", "6000", "--cache-dir", "cache with spaces"],
+                    env=_bash_env({"AF_LAUNCHER_EXIT_CODE": str(exit_code)}),
+                    capture_output=True, text=True, check=False, timeout=20,
+                )
+                self.assertEqual(result.returncode, exit_code, result.stderr)
+                self.assertIn("[AdversaryFlow] starting", result.stdout)
+                self.assertEqual(
+                    result.stdout.splitlines()[1:],
+                    ["<--open>", "<--port>", "<6000>", "<--cache-dir>", "<cache with spaces>"],
+                )
+
+    def test_powershell_run_script_preserves_arguments_and_exit_status(self):
+        shells = [shell for name in ("powershell", "pwsh") if (shell := shutil.which(name))]
+        if not shells:
+            self.skipTest("PowerShell is not installed")
+        launcher = self.root / "launcher with spaces"
+        scripts = launcher / ".venv" / "Scripts"
+        scripts.mkdir(parents=True)
+        shutil.copy2(ROOT / "run.ps1", launcher / "run.ps1")
+        command = scripts / "adversaryflow.exe"
+        if os.name == "nt":
+            # Windows PowerShell compiles a tiny native child without extra dependencies.
+            compiler = shutil.which("powershell")
+            self.assertIsNotNone(compiler, "Windows PowerShell is required to build the test child")
+            source = self.root / "child.cs"
+            source.write_text(
+                'class LauncherChild { static int Main(string[] args) { '
+                'foreach (string arg in args) System.Console.WriteLine("<" + arg + ">"); '
+                'return int.Parse(System.Environment.GetEnvironmentVariable("AF_LAUNCHER_EXIT_CODE")); '
+                '} }', encoding="utf-8",
+            )
+            compiled = subprocess.run(
+                [str(compiler), "-NoProfile", "-NonInteractive", "-Command",
+                 "$ErrorActionPreference = 'Stop'; Add-Type -Path $env:AF_LAUNCHER_SOURCE "
+                 "-OutputAssembly $env:AF_LAUNCHER_EXE -OutputType ConsoleApplication"],
+                env={**os.environ, "AF_LAUNCHER_SOURCE": str(source), "AF_LAUNCHER_EXE": str(command)},
+                capture_output=True, text=True, check=False, timeout=30,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+        else:
+            command.write_text(
+                '#!/bin/sh\nprintf "<%s>\\n" "$@"\nexit "$AF_LAUNCHER_EXIT_CODE"\n',
+                encoding="utf-8", newline="\n",
+            )
+            command.chmod(0o755)
+        for shell in shells:
+            for exit_code in (0, 23):
+                with self.subTest(shell=shell, exit_code=exit_code):
+                    result = subprocess.run(
+                        [shell, "-NoProfile", "-NonInteractive", "-File", str(launcher / "run.ps1"),
+                         "--port", "6000", "--cache-dir", "cache with spaces"],
+                        cwd=self.root,
+                        env={**os.environ, "AF_LAUNCHER_EXIT_CODE": str(exit_code)},
+                        capture_output=True, text=True, check=False, timeout=20,
+                    )
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    self.assertIn("[AdversaryFlow] starting", result.stdout)
+                    self.assertEqual(
+                        result.stdout.splitlines()[1:],
+                        ["<--open>", "<--port>", "<6000>", "<--cache-dir>", "<cache with spaces>"],
+                    )
 
     def test_install_script_runs_every_locked_install_and_doctor(self):
         shutil.copy2(ROOT / "install.sh", self.root / "install.sh")
@@ -380,7 +442,7 @@ class LauncherScriptTests(unittest.TestCase):
         log = self.root / "calls.log"
         fake = '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AF_LAUNCHER_TEST_LOG"\n'
         for path in (fake_bin / "python3", venv_bin / "python", venv_bin / "adversaryflow"):
-            path.write_text(fake, encoding="utf-8")
+            path.write_text(fake, encoding="utf-8", newline="\n")
             path.chmod(0o755)
         env = _bash_env({
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
@@ -410,7 +472,7 @@ class LauncherScriptTests(unittest.TestCase):
         python = fake_bin / "python3"
         python.write_text(
             '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "Python 3.9.18"; fi\nexit 1\n',
-            encoding="utf-8",
+            encoding="utf-8", newline="\n",
         )
         python.chmod(0o755)
         old = subprocess.run(
