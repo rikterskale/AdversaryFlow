@@ -1,5 +1,16 @@
 # Operations
 
+An explicit feed refresh that cannot download current data returns HTTP 503
+with `error: refresh_failed`. Existing cached workflows remain usable and the
+browser preserves scope and evidence. Automatic startup loading can still use
+a validated stale cache when the upstream feed is unavailable.
+
+After a service restart, the browser renews an expired CSRF token and retries
+the rejected mutation once. If the bearer token changed, it opens the API token
+dialog again while preserving the plan. Enter the current token and retry the
+operation. Saved workflows can be resumed, reviewed, and exported as JSON even
+when ATT&CK bootstrap fails.
+
 New operators should start with [Getting started](GETTING_STARTED.md).
 This page is the compact service, cache, and diagnostics reference for a
 **single-operator loopback lab appliance**. It is not a multi-user production
@@ -78,8 +89,9 @@ uses **Generate report** to produce a sandboxed HTML preview, then enables
 command-free HTML/PDF downloads plus the canonical JSON record. Human reports
 include telemetry, ATT&CK detection mappings, evidence status, and coverage
 gaps; the current catalog has no Sigma-reference field, so missing Sigma
-mappings are reported as gaps instead of inferred. Imported commands are always
-elevated to high risk and require acknowledgment before copying.
+mappings are reported as gaps instead of inferred. Imported commands are marked
+unverified and require acknowledgment before copying; saved guardrails remain
+unchanged. **Save JSON plan** is also available independently of the service.
 
 Do not put secrets in execution notes or exports.
 

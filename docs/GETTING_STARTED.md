@@ -538,8 +538,13 @@ pass **both** `--allow-remote` and `--api-token` (or
   browser's local storage, keyed by actor, ATT&CK data version, domains, and
   command platform.
 - **Another machine or browser:** **Resume JSON plan** and choose a schema
-  2.0 export. Imported commands are re-classified as high risk and need
-  acknowledgement before copy.
+  2.0 export. Imported commands are marked unverified and need acknowledgement
+  before copy. The plan's saved guardrails remain unchanged.
+
+Switching platforms or receiving a newer ATT&CK data version preserves earlier
+results in **Saved evidence from other platforms or data versions**. Restore or
+download a snapshot there. **Save JSON plan** works without generating a report
+and remains available when setup cannot load the feed.
 
 Export JSON when a session matters. The save chip on the plan screen reads
 **Saved in this browser** (or **Not saved in this browser** if storage

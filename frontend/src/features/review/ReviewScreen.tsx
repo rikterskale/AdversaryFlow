@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { consumeStorageWriteFailure, useWizardStore } from "../../state/wizardStore";
+import { useWorkspaceEvidence } from "../../state/useWorkspaceEvidence";
 import { buildPlanPreview, tacticDescriptions, titlePlatform, type PlanPreview, type ScopedTechnique } from "../scope/scopeModel";
 import { CoverageHeatmap } from "./CoverageHeatmap";
 import { isMarkedRun, type ExecutionEvidence } from "./evidence";
@@ -56,8 +57,7 @@ function cardForTechnique(techniqueId: string): HTMLElement | null {
 
 export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: ReviewScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
-  const records = useWizardStore((state) => state.records);
-  const ensureEvidenceKey = useWizardStore((state) => state.ensureEvidenceKey);
+  const records = useWorkspaceEvidence(actor, workflow);
   const updateEvidence = useWizardStore((state) => state.updateEvidence);
   const plan = useMemo(() => buildPlanPreview(workflow, scope), [scope, workflow]);
   const firstLab = useMemo(() => firstLabCommand(plan, scope.commandPlatform), [plan, scope.commandPlatform]);
@@ -67,11 +67,6 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
-
-  useEffect(() => {
-    const identity = [actor.stix_id, workflow.metadata.domains.join("+"), workflow.metadata.data_version, scope.commandPlatform].join("|");
-    ensureEvidenceKey(identity);
-  }, [actor.stix_id, ensureEvidenceKey, scope.commandPlatform, workflow.metadata.data_version, workflow.metadata.domains]);
 
   useEffect(() => {
     if (activeStage >= plan.stages.length) setActiveStage(0);
@@ -132,8 +127,8 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   }, [onNotice]);
 
   const requestCopy = useCallback((technique: ScopedTechnique, value: string, kind: "command" | "cleanup"): void => {
-    if (kind === "command" && technique.selectedCommand.acknowledgment_required) {
-      setPendingCopy({ value, risk: technique.selectedCommand.risk });
+    if (technique.selectedCommand.untrusted || (kind === "command" && technique.selectedCommand.acknowledgment_required)) {
+      setPendingCopy({ value, risk: technique.selectedCommand.untrusted ? "unverified imported" : technique.selectedCommand.risk });
       return;
     }
     void writeClipboard(value);

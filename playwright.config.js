@@ -6,6 +6,11 @@ module.exports = defineConfig({
   timeout: 30000,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["html", { open: "never" }], ["list"]] : "list",
+  projects: [
+    { name: "chromium", use: { browserName: "chromium", permissions: ["clipboard-read", "clipboard-write"] } },
+    { name: "firefox", use: { browserName: "firefox" } },
+    { name: "webkit", use: { browserName: "webkit" } },
+  ],
   use: {
     baseURL: "http://127.0.0.1:4173",
     // Pin a Windows UA so command-platform auto-detect is deterministic in CI

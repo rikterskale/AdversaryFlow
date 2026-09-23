@@ -226,6 +226,8 @@ def refresh():
                 _mark_ready()
             else:
                 _mark_error(exc)
+            if isinstance(exc, attack_data.RefreshError):
+                return jsonify({"error": "refresh_failed", "message": str(exc), "version": __version__}), 503
             raise
         _mark_ready()
         _last_refresh = time.monotonic()
@@ -490,7 +492,8 @@ def api_error(exc: Exception):
         return "Internal Server Error", 500
     if isinstance(exc, HTTPException):
         return jsonify({
-            "error": exc.name.lower().replace(" ", "_"),
+            "error": ("csrf_expired" if exc.code == 403 and exc.description == "Missing or invalid same-origin request token"
+                      else exc.name.lower().replace(" ", "_")),
             "message": exc.description,
             "version": __version__,
         }), exc.code

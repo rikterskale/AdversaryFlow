@@ -44,7 +44,7 @@ export function Welcome({ onBegin, onImport, onResume, ready, resumeActor, setup
           </div>
         ) : null}
         <div className="resume-panel">
-          <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 plan. Imported commands are treated as untrusted high-risk content.</p></div>
+          <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 plan. Imported commands require review; your saved guardrails stay in place.</p></div>
           <div className="resume-panel__actions">
             {resumeActor ? <Button onClick={onResume} variant="secondary">Resume {resumeActor.name} plan</Button> : null}
             <label className="button button--ghost import-button" htmlFor="importPlan"><Icon className="button-icon" name="file" /> Resume JSON plan</label>

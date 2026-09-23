@@ -185,7 +185,7 @@ class ServiceUatTests(unittest.TestCase):
     def test_j42_a_mutation_without_the_token_is_refused(self):
         response = self.client.post("/api/refresh")
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["error"], "forbidden")
+        self.assertEqual(response.get_json()["error"], "csrf_expired")
 
     # -- J43 / J44 --------------------------------------------------------
     def test_j43_a_rejected_refresh_does_not_wedge_the_endpoint(self):

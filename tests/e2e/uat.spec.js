@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+const { observeClipboard, copiedText } = require("./clipboard");
 
 const lowRisk = {
   platform: "windows", command: "whoami", note: "Read-only identity check.",
@@ -269,7 +269,8 @@ test("J24 — the operator can walk stages forwards and backwards", async ({ pag
   await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
 });
 
-test("J25 — copying a risky command requires acknowledgement", async ({ page }) => {
+test("J25 — copying a risky command requires acknowledgement", async ({ page, browserName }) => {
+  await observeClipboard(page);
   await toScope(page, { commands: [highRisk] });
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
   await page.getByRole("button", { name: /Build plan/ }).click();
@@ -279,7 +280,7 @@ test("J25 — copying a risky command requires acknowledgement", async ({ page }
   await expect(dialog).toContainText("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
   await dialog.getByRole("button", { name: "Copy command" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText()))
+  expect(await copiedText(page, browserName))
     .toBe("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
 });
 
@@ -302,7 +303,7 @@ test("J26 — recording an outcome advances the progress indicator", async ({ pa
 
 test("J27 — unavailable local storage is reported, not swallowed", async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(window.localStorage, "setItem", {
+    Object.defineProperty(Storage.prototype, "setItem", {
       configurable: true,
       value: () => { throw new Error("storage unavailable"); },
     });
@@ -420,7 +421,7 @@ test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan()));
-  await expect(page.getByRole("status").filter({ hasText: "Plan imported as high-risk" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
   await expect(page.getByLabel("Outcome for T1059.001")).toHaveValue("passed");
   await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Script block logging fired");

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, getActors, getHealth, getSession, getWorkflow, prepareService, refreshAttackData, setApiToken } from "../api/client";
+import { ApiError, AUTH_REQUIRED_EVENT, getActors, getHealth, getSession, getWorkflow, prepareService, refreshAttackData, setApiToken } from "../api/client";
 import type { Actor, AttackDomain, SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { Dialog } from "../components/Dialog";
+import { EvidenceSnapshots } from "../components/EvidenceSnapshots";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
 import { ExportScreen } from "../features/export/ExportScreen";
@@ -12,7 +13,7 @@ import { validateImportedPlan } from "../features/export/planContract";
 import { ReviewScreen } from "../features/review/ReviewScreen";
 import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
-import { useWizardStore, type WizardStep } from "../state/wizardStore";
+import { evidenceIdentity, useWizardStore, type WizardStep } from "../state/wizardStore";
 import { AppShell } from "./AppShell";
 import { AuthDialog } from "./AuthDialog";
 
@@ -27,6 +28,8 @@ export function App(): React.JSX.Element {
   const selectedActor = useWizardStore((state) => state.selectedActor);
   const maxStep = useWizardStore((state) => state.maxStep);
   const importedWorkflow = useWizardStore((state) => state.importedWorkflow);
+  const savedWorkflow = useWizardStore((state) => state.savedWorkflow);
+  const commandPlatform = useWizardStore((state) => state.scope.commandPlatform);
   const setStep = useWizardStore((state) => state.setStep);
   const setDomains = useWizardStore((state) => state.setDomains);
   const selectActor = useWizardStore((state) => state.selectActor);
@@ -57,6 +60,7 @@ export function App(): React.JSX.Element {
       setStartupPhase("preparing");
       await prepareService(nextSession.csrf_token);
       setStartupPhase("ready");
+      void queryClient.invalidateQueries();
     } catch (error: unknown) {
       if (error instanceof ApiError && error.status === 401) {
         setAuthOpen(true);
@@ -66,6 +70,12 @@ export function App(): React.JSX.Element {
       setStartupError(error instanceof Error ? error.message : "The service could not be prepared.");
       setStartupPhase("failed");
     }
+  }, [queryClient]);
+
+  useEffect(() => {
+    const reconnect = (): void => { setAuthOpen(true); };
+    window.addEventListener(AUTH_REQUIRED_EVENT, reconnect);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, reconnect);
   }, []);
 
   useEffect(() => {
@@ -115,7 +125,13 @@ export function App(): React.JSX.Element {
     enabled: startupPhase === "ready" && Boolean(selectedActor) && currentStep >= 2 && !importedWorkflow,
   });
 
-  const workflow = importedWorkflow ?? workflowQuery.data ?? null;
+  const workflow = importedWorkflow ?? workflowQuery.data ?? savedWorkflow;
+  const canUseSavedPlan = Boolean(workflow && selectedActor && currentStep >= 2);
+  useEffect(() => {
+    if (workflow && selectedActor && currentStep >= 2) {
+      useWizardStore.getState().ensureEvidenceKey(evidenceIdentity(selectedActor.stix_id, workflow, commandPlatform), workflow);
+    }
+  }, [workflow, selectedActor, currentStep, commandPlatform]);
 
   const connect = (token: string): void => {
     setApiToken(token);
@@ -171,7 +187,7 @@ export function App(): React.JSX.Element {
       const value = JSON.parse(await file.text()) as unknown;
       validateImportedPlan(value);
       importPlan(value);
-      setNotice("Plan imported as high-risk; verify its data version before execution");
+      setNotice("Plan imported with its saved guardrails; verify commands and data version before use");
     } catch (error: unknown) {
       setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 JSON export.");
     }
@@ -195,9 +211,9 @@ export function App(): React.JSX.Element {
 
   let content: React.JSX.Element;
   let focusKey = "welcome";
-  if (startupPhase === "failed") {
+  if (startupPhase === "failed" && !canUseSavedPlan) {
     content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
-  } else if (startupPhase !== "ready") {
+  } else if (startupPhase !== "ready" && !canUseSavedPlan) {
     content = (
       <section className="screen setup-screen">
         <LoadingState
@@ -227,7 +243,7 @@ export function App(): React.JSX.Element {
   } else if (!workflow && (workflowQuery.isPending || workflowQuery.isFetching)) {
     focusKey = `scope-loading-${selectedActor.stix_id}`;
     content = <section className="screen setup-screen"><LoadingState detail="Resolving mapped techniques and bounded catalog exercises." label={`Building ${selectedActor.name}'s lab plan…`} /></section>;
-  } else if (workflowQuery.error || !workflow) {
+  } else if (!workflow) {
     focusKey = `scope-error-${selectedActor.stix_id}`;
     content = <section className="screen setup-screen"><ErrorState message={workflowQuery.error?.message ?? "The workflow response was empty."} onRetry={() => { void workflowQuery.refetch(); }} title="Could not build the actor workflow" /><Button onClick={() => setStep(1)} variant="ghost"><span aria-hidden="true">←</span> Back to threat actors</Button></section>;
   } else if (currentStep === 2) {
@@ -253,6 +269,8 @@ export function App(): React.JSX.Element {
       session={session}
       setupFailed={startupPhase === "failed" || actorsQuery.isError}
     >
+      {canUseSavedPlan && startupPhase === "failed" ? <div className="callout workspace-notice" role="status"><p>Working from your saved plan. You can review evidence and save JSON while ATT&amp;CK setup is unavailable.</p><Button onClick={() => setStartupAttempt((value) => value + 1)}>Retry connection</Button></div> : null}
+      {currentStep >= 2 ? <EvidenceSnapshots /> : null}
       {content}
       <AuthDialog
         message={authAttempted ? "That token was not accepted. Check it and try again." : ""}

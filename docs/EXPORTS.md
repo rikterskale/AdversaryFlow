@@ -33,6 +33,24 @@ kits require Windows PowerShell 5.1 or newer. Linux and macOS kits require Bash
 and standard utilities (`base64`, `sha256sum` or `shasum`, `awk`, `date`, and
 `mktemp`).
 
+The optional `command.interpreter` field identifies `cmd`, `powershell`, or
+`bash`. Existing records without this field default to CMD on Windows and Bash
+on Linux/macOS. Windows catalog command lines use CMD; embedded PowerShell
+invocations remain explicit. The PowerShell kit supervises the declared shell
+and preserves its exit code. Command and cleanup logs are separate, and the
+recorded command hashes always describe the final command log files.
+
+Import preserves the saved guardrails and withheld steps. Imported command text
+requires explicit review before copying; this does not enable high-risk scope.
+Kit rebinding cannot enable a step that the submitted plan withheld.
+
+**Save JSON plan** downloads the current schema 2.0 plan directly in the browser,
+including its evidence, without report generation or a working ATT&CK feed.
+Changing the command platform or data version saves earlier evidence separately.
+Use **Saved evidence from other platforms or data versions** to restore or
+download those snapshots. Evidence from an older browser session without a saved
+workflow can still be downloaded as an evidence-only backup.
+
 Before every supported step, the runner displays the technique, risk,
 prerequisites, expected output, expected telemetry, and exact command. The
 operator must choose run, edit, skip, or abort. Edited commands require a reason
@@ -151,7 +169,8 @@ integrity, not independent execution; use endpoint or SIEM references to record
 that stronger corroboration.
 
 The welcome screen can resume a schema 2.0 export. Imported commands are
-treated as untrusted high-risk content and require acknowledgment before copy.
+treated as untrusted content and require acknowledgment before copy, while the
+saved high-risk, administrator, and network guardrails remain unchanged.
 The format is AdversaryFlow-native; VECTR and Caldera conversion is not included.
 
 ## Markdown

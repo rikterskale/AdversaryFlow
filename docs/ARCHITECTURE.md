@@ -79,6 +79,13 @@ workflow. Only the resumable planner state is written to browser local
 storage. Storage failure is surfaced in the UI so the operator can export JSON
 instead of silently losing work.
 
+Evidence is selected by actor, domains, ATT&CK data version, and command
+platform before rendering review or export. Changing that identity archives
+the previous workflow, scope, and evidence as a restorable snapshot. The active
+workflow is also saved so a feed outage does not prevent reviewing existing
+work or downloading JSON. Imported command trust is tracked separately from
+the operator's guardrails.
+
 ## Core request and data flows
 
 ### Startup and ATT&CK preparation

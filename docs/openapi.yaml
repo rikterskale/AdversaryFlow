@@ -199,6 +199,7 @@ paths:
   /api/refresh:
     post:
       summary: Refresh selected ATT&CK domains and rebuild their index
+      description: Failed upstream updates return 503 with error refresh_failed. Valid cached plans remain available; clients must preserve their current evidence on failure.
       parameters:
         - $ref: "#/components/parameters/Domains"
         - $ref: "#/components/parameters/CsrfToken"
@@ -220,6 +221,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
@@ -232,7 +234,7 @@ components:
       name: X-AdversaryFlow-CSRF
       in: header
       required: true
-      description: Same-origin token returned by GET /api/session.
+      description: Same-origin token returned by GET /api/session. A rejected expired token returns 403 with error csrf_expired; obtain a new session token and retry once. Other 403 responses must not be retried automatically.
       schema: { type: string }
     Domains:
       name: domains
@@ -328,6 +330,7 @@ components:
         rollback: { type: string }
         cleanup_required: { type: boolean }
         acknowledgment_required: { type: boolean }
+        interpreter: { enum: [cmd, powershell, bash] }
         exercise_kind: { enum: [technique_relevant_bounded] }
         fidelity: { enum: [direct, bounded_synthetic, lab_proxy] }
         evidence_source: { enum: [self_reported_receipt] }

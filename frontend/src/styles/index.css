@@ -5,7 +5,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { min-width: 320px; background: var(--canvas); scroll-behavior: smooth; }
+html { min-width: 320px; background: var(--canvas); scroll-padding-top: 120px; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--canvas); color: var(--text); font-family: var(--font-sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; }
 button { color: inherit; }
@@ -190,6 +190,10 @@ main { width: 100%; }
 .callout { margin-top: 15px; border-left: 2px solid var(--warning); padding: 9px 13px; background: color-mix(in srgb, var(--warning) 5%, transparent); }
 .callout strong { color: var(--warning); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
 .callout p { margin: 2px 0 0; color: var(--text-muted); font-size: 11px; }
+.workspace-notice { width: min(1400px, calc(100% - 40px)); margin-inline: auto; font-size: 12px; }
+.workspace-notice summary { cursor: pointer; }
+.evidence-snapshot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.evidence-snapshot > span { flex: 1 1 20rem; min-width: 0; overflow-wrap: anywhere; }
 .health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .health-grid > div { border: 1px solid var(--border); border-radius: 8px; padding: 11px; background: var(--surface); }
 .health-grid span { display: block; color: var(--text-subtle); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
@@ -440,7 +444,7 @@ main { width: 100%; }
 .srcbadge--proxy, .srcbadge--fallback { color: var(--fallback); border-color: color-mix(in srgb, var(--fallback) 30%, var(--border)); }
 .srcbadge--unsupported { color: var(--text-subtle); }
 .preaction { margin: 13px 15px 0; border: 1px solid color-mix(in srgb, var(--warning) 20%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--warning) 3%, var(--canvas)); }
-.preaction--unsupported { opacity: .7; border-color: var(--border); }
+.preaction--unsupported { border-color: var(--border); }
 .preaction__head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 7px 10px; }
 .preaction__head h4 { margin: 0; color: var(--warning); font-size: 8px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
 .preaction__head strong { color: var(--text-subtle); font-size: 8px; font-weight: 650; }
@@ -462,7 +466,7 @@ main { width: 100%; }
 .riskvalue--medium { color: var(--warning); }
 .riskvalue--high { color: var(--danger); }
 .command { margin: 10px 15px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--canvas); }
-.cmd--unsupported { opacity: .72; }
+.cmd--unsupported { border-style: dashed; }
 .cmd__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; border-bottom: 1px solid var(--border); padding: 6px 7px 6px 11px; }
 .cmd__plat { color: var(--text-subtle); font-family: ui-monospace, monospace; font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .copybtn { min-height: 28px; padding: 4px 8px; font-size: 9px; }
@@ -651,6 +655,7 @@ main { width: 100%; }
   .app-header .health-chip { max-width: 155px; }
   .safety-banner { text-align: center; }
   .screen { width: min(100% - 28px, 700px); padding-top: 40px; }
+  .workspace-notice { width: min(100% - 28px, 700px); }
   .screen-heading { grid-template-columns: 1fr; gap: 20px; }
   .touch-preview { max-width: 600px; }
   .welcome-screen { min-height: auto; grid-template-columns: 1fr; padding-top: 55px; }

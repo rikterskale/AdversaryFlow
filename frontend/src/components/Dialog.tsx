@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useId, useRef, type ReactNode } from "react";
 
 import { Icon } from "./Icon";
 
@@ -16,10 +16,10 @@ export function Dialog({ title, description, open, onClose, children, closeLabel
   const titleId = useId();
   const descriptionId = useId();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return undefined;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.focus();
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     const handleDialogKeys = (event: KeyboardEvent): void => {
       if (event.key === "Escape" && onClose) onClose();
       if (event.key !== "Tab" || !panelRef.current) return;

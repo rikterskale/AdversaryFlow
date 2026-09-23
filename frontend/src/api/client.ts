@@ -12,6 +12,9 @@ function storedApiToken(): string {
 }
 
 let apiToken = storedApiToken();
+let csrfToken = "";
+let renewingSession: Promise<SessionResponse> | null = null;
+export const AUTH_REQUIRED_EVENT = "adversaryflow-auth-required";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -29,6 +32,7 @@ export class ApiError extends Error {
 
 export function setApiToken(token: string): void {
   apiToken = token.trim();
+  csrfToken = "";
   try {
     if (apiToken) sessionStorage.setItem(TOKEN_KEY, apiToken);
     else sessionStorage.removeItem(TOKEN_KEY);
@@ -45,7 +49,27 @@ function authorizationHeaders(headers?: HeadersInit): Headers {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(path, { ...init, headers: authorizationHeaders(init.headers) });
+  const headers = authorizationHeaders(init.headers);
+  if (csrfToken && headers.has("X-AdversaryFlow-CSRF")) headers.set("X-AdversaryFlow-CSRF", csrfToken);
+  let response = await fetch(path, { ...init, headers });
+  if (response.status === 403 && headers.has("X-AdversaryFlow-CSRF")) {
+    const body: unknown = await response.clone().json().catch(() => null);
+    if (isRecord(body) && body.error === "csrf_expired") {
+      renewingSession ??= getSession().finally(() => { renewingSession = null; });
+      const renewed = await renewingSession;
+      headers.set("X-AdversaryFlow-CSRF", renewed.csrf_token);
+      response = await fetch(path, { ...init, headers });
+    }
+  }
+  if (response.status === 401 && headers.get("Authorization") !== authorizationHeaders().get("Authorization")) {
+    // Another request may have prompted a successful reconnect while this
+    // request was in flight. Do not reopen the dialog for its obsolete token.
+    const current = authorizationHeaders(init.headers);
+    if (csrfToken && current.has("X-AdversaryFlow-CSRF")) current.set("X-AdversaryFlow-CSRF", csrfToken);
+    response = await fetch(path, { ...init, headers: current });
+  }
+  if (response.status === 401) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  return response;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -72,7 +96,9 @@ export async function responseJson(response: Response): Promise<unknown> {
 }
 
 export async function getSession(): Promise<SessionResponse> {
-  return parseSession(await responseJson(await apiFetch("/api/session")));
+  const session = parseSession(await responseJson(await apiFetch("/api/session")));
+  csrfToken = session.csrf_token;
+  return session;
 }
 
 export async function getActors(domains: AttackDomain[]): Promise<ActorsResponse> {

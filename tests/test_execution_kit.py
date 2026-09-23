@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -23,7 +24,7 @@ from backend.execution_kit import (
 
 
 def _usable_bash() -> str:
-    candidates = [shutil.which("bash")]
+    candidates = (["/bin/bash"] if sys.platform == "darwin" else []) + [shutil.which("bash")]
     if os.name == "nt":
         candidates.extend([
             r"C:\Program Files\Git\bin\bash.exe",
@@ -55,9 +56,10 @@ def _bash_env(overrides=None):
     return env
 
 
-def plan_fixture(platform="linux", *, duplicate=False, command="printf 'hello from AdversaryFlow\\n'", cleanup=""):
+def plan_fixture(platform="linux", *, duplicate=False, command="printf 'hello from AdversaryFlow\\n'", cleanup="", interpreter=None):
     command_record = {
         "platform": platform,
+        "interpreter": interpreter or ("powershell" if platform == "windows" else "bash"),
         "command": command,
         "note": "Fixture command",
         "cleanup": cleanup,
@@ -257,8 +259,44 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         self.assertEqual(summary["status"], "completed")
         self.assertEqual(summary["completed_steps"], 1)
 
+    @unittest.skipUnless(os.name == "nt", "Windows interpreters require a Windows host")
+    def test_native_windows_shells_preserve_encoding_exit_codes_and_cleanup(self):
+        for shell in ("powershell.exe", "pwsh.exe"):
+            for interpreter, command, expected_exit in (
+                ("cmd", 'set "AF_FIXTURE=hello"\nif exist "%COMSPEC%" echo %AF_FIXTURE%\ncmd.exe /c exit 7', 7),
+                ("powershell", "cmd.exe /c exit 7", 7),
+                ("powershell", "Write-Error 'fixture failure'", 1),
+                ("powershell", "Write-Output 'café fixture'", 0),
+            ):
+                with self.subTest(shell=shell, interpreter=interpreter, command=command):
+                    data, _ = archive_execution_kit(normalize_plan(plan_fixture(
+                        "windows", command=command, cleanup="cmd.exe /c exit 9", interpreter=interpreter)))
+                    with tempfile.TemporaryDirectory(prefix="af runner space ") as directory:
+                        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                            archive.extractall(directory)
+                        script = next(Path(directory).rglob("*-execute.ps1"))
+                        self.assertTrue(script.read_bytes().startswith(b"\xef\xbb\xbf"))
+                        result = subprocess.run([shell, "-NoProfile", "-File", str(script)],
+                                                input=b"\n\nY\nR\nN\nY\nN\n", capture_output=True, timeout=30, check=False,
+                                                env={key: value for key, value in os.environ.items() if key.lower() != "psmodulepath"})
+                        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+                        evidence = next(script.parent.glob("AdversaryFlow-results-*"))
+                        with (evidence / "execution-results.csv").open(encoding="utf-8-sig") as stream:
+                            row = next(csv.DictReader(stream))
+                        self.assertEqual(int(row["exit_code"]), expected_exit)
+                        self.assertEqual(row["cleanup_status"], "failed")
+                        summary = json.loads((evidence / "execution-summary.json").read_text(encoding="utf-8-sig"))
+                        self.assertEqual(summary["failed_steps"], int(expected_exit != 0))
+                        stdout = evidence / "stdout" / f"{row['step_id']}.log"
+                        self.assertEqual(row["stdout_sha256"], hashlib.sha256(stdout.read_bytes()).hexdigest())
+                        if interpreter == "cmd":
+                            self.assertIn("hello", stdout.read_text(encoding="utf-8-sig"))
+                        if "café" in command:
+                            self.assertIn("café", stdout.read_text(encoding="utf-8-sig"))
+
     def test_linux_runner_executes_offline_and_writes_complete_evidence(self):
-        archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture("linux")))
+        target = "macos" if sys.platform == "darwin" else "linux"
+        archive_bytes, _filename = archive_execution_kit(normalize_plan(plan_fixture(target)))
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
@@ -387,9 +425,24 @@ class ExecutionKitArchiveTests(unittest.TestCase):
         original = next((evidence / "commands").glob("*.original.sh")).read_text(encoding="utf-8")
         effective = next((evidence / "commands").glob("*.executed.sh")).read_text(encoding="utf-8")
         self.assertNotEqual(original, effective)
+        for stream_name in ("stdout", "stderr"):
+            output = evidence / stream_name / f"{rows[0]['step_id']}.log"
+            self.assertEqual(rows[0][f"{stream_name}_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
+        cleanup_log = evidence / "stdout" / f"{rows[0]['step_id']}.cleanup.log"
+        self.assertIn("cleanup complete", cleanup_log.read_text(encoding="utf-8"))
 
 
 class CatalogRebindTests(unittest.TestCase):
+    def test_rebinding_never_enables_a_withheld_step(self):
+        document = plan_fixture("windows")
+        document["scope"]["allow_high_risk"] = True
+        technique = document["stages"][0]["techniques"][0]
+        technique.update(id="T1053.005", supported=False)
+        rebound = rebind_to_catalog(document)
+        self.assertFalse(rebound["stages"][0]["techniques"][0]["supported"])
+        with self.assertRaisesRegex(ExecutionKitError, "no executable"):
+            build_execution_kit(document)
+
     def test_hostile_fallback_identifier_is_rejected_before_catalog_substitution(self):
         document = plan_fixture("windows")
         document["stages"][0]["techniques"][0]["id"] = 'T9999" & whoami & echo "'

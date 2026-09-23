@@ -22,7 +22,7 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_platform_selection_has_no_cross_os_fallback(self):
         self.assertIn("command.platform === scope.commandPlatform", self.source)
-        self.assertNotIn('command.platform === "windows"', self.source)
+        self.assertNotIn('technique.commands.find((command) => command.platform === "windows")', self.source)
         self.assertIn("unsupported: true", self.source)
 
     def test_run_state_is_versioned(self):

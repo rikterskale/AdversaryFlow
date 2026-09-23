@@ -27,6 +27,8 @@ export type CommandRisk = "none" | "low" | "medium" | "high";
 
 export interface Command {
   platform: string;
+  interpreter?: "cmd" | "powershell" | "bash";
+  untrusted?: boolean;
   command: string;
   note: string;
   cleanup: string;

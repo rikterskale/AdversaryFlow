@@ -40,6 +40,7 @@ class PlanStep:
     technique_id: str
     technique_name: str
     platform: str
+    interpreter: str
     supported: bool
     command_source: str
     fidelity: str
@@ -221,6 +222,9 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
                 if exact is None
                 else _apply_scope(dict(exact), scope, platform)
             )
+            if technique.get("supported") is False and not bound.get("unsupported"):
+                bound = _unsupported_command(platform, "Withheld in the reviewed plan.",
+                                             "Rebuild and review the plan before enabling this step.")
             technique["command"] = bound
             technique["command_source"] = "fallback" if source == "fallback" else "curated"
             technique["supported"] = not bool(bound.get("unsupported"))
@@ -283,6 +287,10 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
             command_platform = _string(command.get("platform"), "command.platform", maximum=20, required=True).lower()
             if command_platform != platform:
                 raise ExecutionKitError(f"{technique_id} does not contain an exact {platform} command")
+            interpreter = command.get("interpreter", "cmd" if platform == "windows" else "bash")
+            allowed_interpreters = {"cmd", "powershell"} if platform == "windows" else {"bash"}
+            if not isinstance(interpreter, str) or interpreter not in allowed_interpreters:
+                raise ExecutionKitError(f"{technique_id} has an invalid interpreter for {platform}")
             planned_command = _string(command.get("command"), "command.command", maximum=MAX_COMMAND_LENGTH)
             supported = _boolean(technique.get("supported"), "technique.supported")
             if "unsupported" in command:
@@ -311,6 +319,7 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 technique_id=technique_id,
                 technique_name=technique_name,
                 platform=platform,
+                interpreter=interpreter,
                 supported=supported,
                 command_source=command_source,
                 fidelity=fidelity,
@@ -353,7 +362,7 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
     output = io.StringIO(newline="")
     columns = (
         "sequence", "step_id", "tactic", "tactic_title", "technique_id", "technique_name",
-        "platform", "supported", "command_source", "fidelity", "risk", "requires_admin", "requires_network",
+        "platform", "interpreter", "supported", "command_source", "fidelity", "risk", "requires_admin", "requires_network",
         "prerequisites", "side_effects", "planned_command", "planned_command_sha256", "cleanup_command",
         "expected_output", "expected_telemetry", "timeout_seconds", "plan_sha256",
     )
@@ -368,6 +377,7 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
             "technique_id": step.technique_id,
             "technique_name": step.technique_name,
             "platform": step.platform,
+            "interpreter": step.interpreter,
             "supported": str(step.supported).lower(),
             "command_source": step.command_source,
             "fidelity": step.fidelity,
@@ -673,9 +683,11 @@ for index in "${!STEP_IDS[@]}"; do
     if [ "$cleanup_choice" = Y ]; then
       cleanup_file="$RESULTS_DIR/commands/$step_id.cleanup.sh"
       printf '%s\n' "$cleanup_text" > "$cleanup_file"
-      set +e; ( cd "$SCRIPT_DIR" && bash "$cleanup_file" ) >>"$stdout_file" 2>>"$stderr_file"; cleanup_exit=$?
+      cleanup_stdout="$RESULTS_DIR/stdout/$step_id.cleanup.log"
+      cleanup_stderr="$RESULTS_DIR/stderr/$step_id.cleanup.log"
+      set +e; ( cd "$SCRIPT_DIR" && bash "$cleanup_file" ) >"$cleanup_stdout" 2>"$cleanup_stderr"; cleanup_exit=$?
       [ "$cleanup_exit" -eq 0 ] && cleanup_status=completed || cleanup_status=failed
-      event "cleanup_completed" "$step_id" "status=$cleanup_status; exit_code=$cleanup_exit"
+      event "cleanup_completed" "$step_id" "status=$cleanup_status; exit_code=$cleanup_exit; stdout_sha256=$(sha_file "$cleanup_stdout"); stderr_sha256=$(sha_file "$cleanup_stderr")"
     else cleanup_status=declined; event "cleanup_declined" "$step_id" "operator declined cleanup"; fi
   fi
   event "step_completed" "$step_id" "execution_status=$execution_status; assessment=$assessment; exit_code=$exit_code; stdout_sha256=$stdout_sha; stderr_sha256=$stderr_sha"
@@ -739,6 +751,7 @@ def render_powershell(plan: ExecutionPlan, csv_name: str, csv_sha256: str) -> st
             "Command": step.planned_command, "Cleanup": step.cleanup_command, "Fidelity": step.fidelity,
             "ExpectedOutput": step.expected_output, "ExpectedTelemetry": step.expected_telemetry,
             "Timeout": str(step.timeout_seconds),
+            "Interpreter": step.interpreter,
         }
         fields = "; ".join(f"{key}B64={_ps_quote(_b64(value))}" for key, value in values.items())
         records.append(f"    [pscustomobject]@{{ {fields} }}")
@@ -790,6 +803,33 @@ function Add-AfHtmlCode([string]$Path) {
     Add-Content -LiteralPath $script:HtmlReportPath -Value "<pre>$encoded</pre>" -Encoding UTF8
 }
 function Save-AfResults { $script:Results | Export-Csv -LiteralPath $script:ResultsCsv -NoTypeInformation -Encoding UTF8 }
+function Write-AfCommand([string]$Path, [string]$Command, [string]$Interpreter) {
+    if ($Interpreter -eq 'cmd') {
+        # Set UTF-8 before CMD reads any non-ASCII catalog text. No BOM in CMD.
+        $content = "@echo off`r`n@chcp 65001 >nul`r`n" + $Command + "`r`n"
+        [IO.File]::WriteAllText($Path, $content, [Text.UTF8Encoding]::new($false))
+    } else {
+        [IO.File]::WriteAllText($Path, $Command + [Environment]::NewLine, [Text.UTF8Encoding]::new($true))
+    }
+}
+function Start-AfCommand([string]$Path, [string]$Interpreter, [string]$Stdout, [string]$Stderr) {
+    if ($Interpreter -eq 'cmd') {
+        $executable = $env:ComSpec
+        $arguments = @('/d', '/s', '/c', "`"`"$Path`"`"")
+    } else {
+        $executable = (Get-Process -Id $PID).Path
+        $quotedPath = $Path.Replace("'", "''")
+        $wrapper = '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $ErrorActionPreference = ''Stop''; $global:LASTEXITCODE = 0; try { & ' + [char]39 + $quotedPath + [char]39 + '; $succeeded = $?; if ($global:LASTEXITCODE -ne 0) { exit $global:LASTEXITCODE }; if (-not $succeeded) { exit 1 }; exit 0 } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrapper))
+        $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
+    }
+    $options = @{ FilePath=$executable; ArgumentList=$arguments; WorkingDirectory=$ScriptDir; RedirectStandardOutput=$Stdout; RedirectStandardError=$Stderr; PassThru=$true }
+    if ([Environment]::OSVersion.Platform -eq 'Win32NT') { $options.WindowStyle = 'Hidden' }
+    $child = Start-Process @options
+    # Windows PowerShell 5.1 otherwise loses ExitCode after a fast child exits.
+    $null = $child.Handle
+    return $child
+}
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $CsvPath = Join-Path $ScriptDir $CsvName
@@ -862,15 +902,17 @@ try {
         foreach ($property in $raw.PSObject.Properties) { $step[$property.Name.Substring(0, $property.Name.Length - 3)] = ConvertFrom-AfBase64 $property.Value }
         $sequence = $index + 1
         $stepId = $step.StepId
-        $originalFile = Join-Path $ResultsDir "commands\$stepId.original.ps1"
-        $effectiveFile = Join-Path $ResultsDir "commands\$stepId.executed.ps1"
-        [IO.File]::WriteAllText($originalFile, $step.Command + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+        $extension = if ($step.Interpreter -eq 'cmd') { 'cmd' } else { 'ps1' }
+        $originalFile = Join-Path $ResultsDir "commands\$stepId.original.$extension"
+        $effectiveFile = Join-Path $ResultsDir "commands\$stepId.executed.$extension"
+        Write-AfCommand $originalFile $step.Command $step.Interpreter
         Copy-Item -LiteralPath $originalFile -Destination $effectiveFile
         $originalSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $originalFile).Hash.ToLowerInvariant()
 
         Write-Host "`nStep $sequence of $($Steps.Count) — $($step.TechniqueId) $($step.TechniqueName)" -ForegroundColor Cyan
         Write-Host "Stage: $($step.Tactic)"
         Write-Host "Risk: $($step.Risk) | Admin: $($step.RequiresAdmin) | Network: $($step.RequiresNetwork)"
+        Write-Host "Interpreter: $($step.Interpreter)"
         Write-Host "Effects: $($step.Effects)"
         Write-Host "Prerequisites: $($step.Prerequisites)"
         Write-Host "Expected output: $($step.ExpectedOutput)"
@@ -898,7 +940,7 @@ try {
         }
         if ($decision -eq 'E') {
             $editor = if ($env:EDITOR) { $env:EDITOR } else { 'notepad.exe' }
-            Start-Process -FilePath $editor -ArgumentList $effectiveFile -Wait
+            Start-Process -FilePath $editor -ArgumentList "`"$effectiveFile`"" -Wait
             while ([string]::IsNullOrWhiteSpace($reason)) { $reason = Read-Host 'Modification reason (required)' }
             $modified = $true
             Write-Host "`nEffective command after editing:"
@@ -920,8 +962,7 @@ try {
         Write-AfEvent 'step_approved' $stepId "modified=$modified; reason=$reason; effective_sha256=$effectiveSha"
         Write-Host "`nExecuting exactly:"
         Get-Content -LiteralPath $effectiveFile | ForEach-Object { Write-Host "    $_" }
-        $shellPath = (Get-Process -Id $PID).Path
-        $process = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$effectiveFile`"") -WorkingDirectory $ScriptDir -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -PassThru
+        $process = Start-AfCommand $effectiveFile $step.Interpreter $stdoutFile $stderrFile
         $timeoutSeconds = [int]$step.Timeout
         $timedOut = $false
         if ($timeoutSeconds -gt 0 -and -not $process.WaitForExit($timeoutSeconds * 1000)) { $timedOut = $true; Stop-Process -Id $process.Id -Force; $process.WaitForExit() }
@@ -938,11 +979,16 @@ try {
         if ($step.Cleanup) {
             Write-Host "`nCleanup command:`n    $($step.Cleanup)"
             if ((Read-AfChoice 'Run cleanup now? Y=yes / N=no' @('Y','N')) -eq 'Y') {
-                $cleanupFile = Join-Path $ResultsDir "commands\$stepId.cleanup.ps1"
-                [IO.File]::WriteAllText($cleanupFile, $step.Cleanup + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-                $cleanupProcess = Start-Process -FilePath $shellPath -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',"`"$cleanupFile`"") -WorkingDirectory $ScriptDir -Wait -PassThru
+                $cleanupFile = Join-Path $ResultsDir "commands\$stepId.cleanup.$extension"
+                Write-AfCommand $cleanupFile $step.Cleanup $step.Interpreter
+                $cleanupStdout = Join-Path $ResultsDir "stdout\$stepId.cleanup.log"
+                $cleanupStderr = Join-Path $ResultsDir "stderr\$stepId.cleanup.log"
+                $cleanupProcess = Start-AfCommand $cleanupFile $step.Interpreter $cleanupStdout $cleanupStderr
+                $cleanupProcess.WaitForExit()
                 $cleanupStatus = if ($cleanupProcess.ExitCode -eq 0) { 'completed' } else { 'failed' }
-                Write-AfEvent 'cleanup_completed' $stepId "status=$cleanupStatus; exit_code=$($cleanupProcess.ExitCode)"
+                $cleanupStdoutSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $cleanupStdout).Hash.ToLowerInvariant()
+                $cleanupStderrSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $cleanupStderr).Hash.ToLowerInvariant()
+                Write-AfEvent 'cleanup_completed' $stepId "status=$cleanupStatus; exit_code=$($cleanupProcess.ExitCode); stdout_sha256=$cleanupStdoutSha; stderr_sha256=$cleanupStderrSha"
             } else { $cleanupStatus = 'declined'; Write-AfEvent 'cleanup_declined' $stepId 'operator declined cleanup' }
         }
         Write-AfEvent 'step_completed' $stepId "execution_status=$executionStatus; assessment=$assessment; exit_code=$exitCode; stdout_sha256=$stdoutSha; stderr_sha256=$stderrSha"
@@ -1011,7 +1057,7 @@ def archive_execution_kit(plan: ExecutionPlan) -> tuple[bytes, str]:
         archive.writestr(csv_info, csv_bytes)
         script_info = zipfile.ZipInfo(f"{root}/{script_name}")
         script_info.external_attr = (0o755 if plan.platform != "windows" else 0o644) << 16
-        archive.writestr(script_info, script.encode("utf-8"))
+        archive.writestr(script_info, script.encode("utf-8-sig" if plan.platform == "windows" else "utf-8"))
         if _plan_needs_exercise_runner(plan):
             runner_info = zipfile.ZipInfo(f"{root}/{EXERCISE_RUNNER_NAME}")
             runner_info.external_attr = 0o644 << 16

@@ -65,6 +65,7 @@ function commandForExport(command: Command): Command {
     acknowledgment_required: command.acknowledgment_required,
   };
   if (command.exercise_kind) copy.exercise_kind = command.exercise_kind;
+  if (command.interpreter) copy.interpreter = command.interpreter;
   if (command.fidelity) copy.fidelity = command.fidelity;
   if (command.evidence_source) copy.evidence_source = command.evidence_source;
   if (command.telemetry_acceptance) copy.telemetry_acceptance = command.telemetry_acceptance;

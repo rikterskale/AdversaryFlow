@@ -68,6 +68,7 @@ function isCommand(value: unknown): value is Command {
   if (!isRecord(value)) return false;
   return (
     typeof value.platform === "string" &&
+    (value.interpreter === undefined || ["cmd", "powershell", "bash"].includes(String(value.interpreter))) &&
     typeof value.command === "string" &&
     typeof value.note === "string" &&
     typeof value.cleanup === "string" &&

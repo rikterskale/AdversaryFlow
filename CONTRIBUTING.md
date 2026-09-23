@@ -36,9 +36,23 @@ bash -n install.sh run.sh
 Browser coverage uses Playwright:
 
 ```bash
-npx playwright install --with-deps chromium
+npx playwright install --with-deps chromium firefox webkit
 npm run test:e2e
 ```
+
+The browser suite includes a local Flask service with isolated fixture data, so
+install the Python dependencies first. It uses the repository's `.venv` when
+available, or `python` on PATH; set `ADVERSARYFLOW_TEST_PYTHON` to override it.
+
+Playwright runs all three browser engines. To run one, use
+`npm run test:e2e -- --project=firefox` (or `chromium` / `webkit`). WebKit coverage
+is separate from native Safari. The macOS CI job runs the real Safari browser
+through Apple's driver; locally, enable it with `safaridriver --enable`, then
+run `python scripts/safari_smoke.py`. See [Apple's WebDriver setup](https://developer.apple.com/documentation/safari-developer-tools/macos-enabling-webdriver).
+
+For a clean Docker build and first-start check, run
+`python scripts/compose_smoke.py --fresh`. Each run creates and removes its own
+Compose project and empty cache volume, preserving the regular application cache.
 
 Lint and type checks are configured in `pyproject.toml` and run as their own
 CI job. Install the pinned tooling, then run both locally:
@@ -73,4 +87,3 @@ All changes require a passing CI matrix and owner review before merge.
 ## Versioning
 
 AdversaryFlow uses semantic versioning. Breaking API/export changes require a major version; compatible features require a minor version; compatible fixes require a patch version.
-

@@ -107,6 +107,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --require-hashes --requirement requirements.lock
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24.15.0"
@@ -114,7 +119,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check:frontend
       - run: npm run check:frontend-assets
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:e2e
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -123,6 +128,24 @@ jobs:
           path: |
             playwright-report/
             test-results/
+
+  safari:
+    name: Native macOS Safari
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --require-hashes --requirement requirements.lock
+      - run: sudo /usr/bin/safaridriver --enable
+      - run: python scripts/safari_smoke.py
+        timeout-minutes: 10
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: safari-native
+          path: test-results/safari-native/
 
   compose-smoke:
     name: Docker Compose smoke
@@ -133,7 +156,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: docker compose config --quiet
-      - run: python scripts/compose_smoke.py
+      - run: python scripts/compose_smoke.py --fresh
         timeout-minutes: 15
 
   package-smoke:

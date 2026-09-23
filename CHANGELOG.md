@@ -4,6 +4,27 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Validate Chromium, Firefox, and WebKit in CI, with a separate native macOS
+  Safari workflow. Exercise the macOS kit under the system Bash and run clean
+  Docker builds with isolated empty cache volumes.
+- Prevent deferred screen/dialog focus from interrupting initial input, and
+  keep temporary download URLs alive long enough for WebKit to start downloads.
+- Keep focused controls below the header and stop automatic scrolling animations
+  from moving evidence-recovery controls during a click.
+- Make Windows kits compatible with PowerShell 5.1 encoding and run catalog
+  commands through their declared interpreter. Preserve native exit codes,
+  capture cleanup failures, and keep command output immutable after hashing.
+- Preserve imported guardrails and withheld steps. Require review of untrusted
+  imported commands without silently enabling high-risk scope.
+- Save evidence separately by platform and ATT&CK data version, with restorable
+  snapshots. Allow saved/imported plans and local JSON exports during setup
+  failures, recover expired API/CSRF sessions, and preserve plans when feed
+  refresh fails.
+- Add browser tests against Flask and Windows runner regressions under both
+  Windows PowerShell 5.1 and PowerShell 7.
+- Keep withheld command descriptions readable and evidence recovery controls
+  accessible at desktop and mobile widths.
+
 ## 0.5.3 — 2026-09-22
 
 - Recover from actor-catalog failures on the welcome screen with an actionable

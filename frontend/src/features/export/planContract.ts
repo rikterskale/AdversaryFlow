@@ -109,7 +109,7 @@ function validateActor(value: unknown): void {
 
 function validateCommand(value: unknown, techniqueId: string): void {
   const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
-  if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance"])
+  if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance", "interpreter"])
     || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every((key) => typeof value[key] === "string")
     || (value.command as string).length > 10_000
     || !["none", "low", "medium", "high"].includes(String(value.risk))
@@ -117,6 +117,7 @@ function validateCommand(value: unknown, techniqueId: string): void {
     || !["requires_admin", "requires_network", "cleanup_required", "acknowledgment_required"].every((key) => typeof value[key] === "boolean")
     || (value.unsupported !== undefined && typeof value.unsupported !== "boolean")
     || (value.restricted !== undefined && typeof value.restricted !== "boolean")
+    || (value.interpreter !== undefined && !(value.platform === "windows" ? ["cmd", "powershell"] : ["bash"]).includes(String(value.interpreter)))
     || (value.exercise_kind !== undefined && value.exercise_kind !== "technique_relevant_bounded")
     || (value.fidelity !== undefined && (typeof value.fidelity !== "string" || !fidelityValues.has(value.fidelity)))
     || (value.evidence_source !== undefined && value.evidence_source !== "self_reported_receipt")
@@ -209,7 +210,7 @@ function normalizeImportedCommand(command: Command): Command {
   return {
     ...command,
     note: `Imported plan — verify before use. ${command.note}`,
-    risk: "high",
+    untrusted: true,
     acknowledgment_required: true,
   };
 }
@@ -222,7 +223,7 @@ export function scopeFromImportedPlan(plan: PlanExport): ScopeSettings {
     curatedOnly: plan.scope.curated_only,
     allowNetwork: plan.scope.allow_network,
     allowAdmin: plan.scope.allow_admin,
-    allowHighRisk: true,
+    allowHighRisk: plan.scope.allow_high_risk,
     operator: plan.execution_context.operator,
     target: plan.execution_context.target,
   };
@@ -246,7 +247,7 @@ export function workflowFromImportedPlan(plan: PlanExport): WorkflowResponse {
         data_sources: [...(technique.data_sources ?? [])],
         detection: technique.detection ?? "",
         command_source: technique.command_source,
-        commands: [normalizeImportedCommand(technique.command)],
+        commands: [normalizeImportedCommand({ ...technique.command, ...(!technique.supported ? { unsupported: true } : {}) })],
         tactics: [stage.tactic],
       })),
     })),

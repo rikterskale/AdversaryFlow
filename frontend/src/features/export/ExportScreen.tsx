@@ -6,6 +6,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
 import { useWizardStore } from "../../state/wizardStore";
+import { useWorkspaceEvidence } from "../../state/useWorkspaceEvidence";
 import { buildExportBundle, executiveSummary, platformLabel, summarizeExportReadiness, toMarkdown, toRunbook } from "./exportModel";
 import { validateImportedPlan } from "./planContract";
 
@@ -35,7 +36,8 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  // WebKit starts some downloads asynchronously after the click task.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function contentDispositionFilename(value: string | null, fallback: string): string {
@@ -50,7 +52,7 @@ function contentDispositionFilename(value: string | null, fallback: string): str
 
 export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNotice, onRestart }: ExportScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
-  const records = useWizardStore((state) => state.records);
+  const records = useWorkspaceEvidence(actor, workflow);
   const [kitLoading, setKitLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
   const [reportPreview, setReportPreview] = useState<ReportPreviewState>({ status: "empty" });
@@ -284,6 +286,10 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
           <div className="secondary-exports">
             <span>Additional planning artifacts</span>
+            <button disabled={!exportReady} onClick={() => {
+              downloadBlob(new Blob([JSON.stringify(bundle.plan, null, 2)], { type: "application/json" }), `AdversaryFlow_${bundle.slug}.json`);
+              onNotice("JSON plan saved with your evidence");
+            }} type="button">Save JSON plan <Icon name="download" /></button>
             <button disabled={!exportReady} onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
             <button disabled={!exportReady} onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>
           </div>

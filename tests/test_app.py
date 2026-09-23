@@ -362,6 +362,18 @@ class RefreshLockTests(unittest.TestCase):
         self.assertTrue(app_module._runtime["ready"])
         self.assertEqual(app_module._runtime["phase"], "ready")
 
+    def test_download_refresh_failure_is_actionable_and_preserves_readiness(self):
+        app_module._last_refresh = 0
+        app_module._runtime.update(ready=True, loading=False, phase="ready", error=None)
+        with patch("backend.app.attack_data.refresh_index", side_effect=attack_data.RefreshError("Could not refresh enterprise; previous cache is available")), \
+                patch("backend.app.attack_data.loaded_index_status", return_value={"ready": True}):
+            response = self.client.post("/api/refresh", headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["error"], "refresh_failed")
+        self.assertIn("previous cache", response.get_json()["message"])
+        self.assertTrue(app_module._runtime["ready"])
+        self.assertFalse(app_module._refresh_lock.locked())
+
     def test_mutating_requests_reject_a_foreign_origin(self):
         app_module._last_refresh = 0
         headers = {**self.headers, "Origin": "https://evil.example"}
@@ -451,7 +463,7 @@ class BootstrapEndpointTests(unittest.TestCase):
     def test_post_requires_the_same_origin_token(self):
         response = self.client.post("/api/bootstrap")
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["error"], "forbidden")
+        self.assertEqual(response.get_json()["error"], "csrf_expired")
 
     @patch("backend.app.attack_data.cache_status", return_value={"domains": {}})
     @patch("backend.app.threading.Thread")

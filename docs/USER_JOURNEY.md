@@ -280,10 +280,10 @@ exported JSON file.
 
 **Observable result:** the plan reopens directly on the *Emulation plan*
 screen with its stages, outcomes, evidence notes, and operator/target context
-restored, and a toast reads *"Plan imported as high-risk; verify its data
-version before execution"*. Every imported command is re-classified as high
-risk and requires acknowledgement before it can be copied, because its contents
-came from a file rather than from the ATT&CK catalog.
+restored, and a toast reads *"Plan imported with its saved guardrails; verify
+commands and data version before use"*. Every imported command is marked
+unverified and requires acknowledgement before it can be copied. The plan's
+saved high-risk, administrator, and network permissions remain unchanged.
 
 The importer accepts only a bounded schema 2.0 document: 1–32 non-empty
 stages, at most 2,000 techniques in any one stage, at most 4,000 technique
@@ -445,7 +445,7 @@ table directly.
 | J29 | Export JSON | Click **Generate report**, then **JSON** | Downloads the canonical schema 2.0 plan | File named `AdversaryFlow_<ID>_<Name>.json` validates against `schemas/adversaryflow-plan.schema.json` |
 | J30 | Export Markdown | Click **Markdown report** | Downloads a report | File named `AdversaryFlow_<ID>_<Name>.md` containing `# AdversaryFlow — <name> (<id>)`, a `### <technique>` section, and `**Outcome:**` |
 | J31 | Export runbook | Click **Commented runbook**, including after importing fields containing line breaks | Downloads a non-executable review artifact | File named `AdversaryFlow_<ID>_<Name>_runbook.cmd.txt` containing `REM AdversaryFlow runbook`, `REM ===== 1. <STAGE> =====`, `REM Outcome:`, and `REM COMMAND:`; every physical metadata, command, and cleanup line retains `REM` on Windows or `#` on Linux/macOS |
-| J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with the actor heading, outcomes, and evidence notes restored; toast reads `Plan imported as high-risk; verify its data version before execution` |
+| J32 | Resume a plan | **Resume JSON plan** → a valid export | Restores the plan | Lands on step 3 with actor, outcomes, evidence, and saved guardrails restored; toast reads `Plan imported with its saved guardrails; verify commands and data version before use` |
 | J33 | Round-trip | Export with default scope, then resume that file | The plan is usable, not blocked by its own risk elevation | Command text is the real command (not `Restricted by scope`) and the runnable count is greater than 0 |
 | J34 | Reject a bad plan | Resume a file with an incomplete actor | Refuses and stays put | Toast reads `Plan actor record is invalid` and the welcome screen is still displayed |
 | J35 | Reject a foreign plan | Resume a file with `schema_version` ≠ `2.0` | Refuses | Toast reads `This is not an AdversaryFlow 2.0 plan export` |

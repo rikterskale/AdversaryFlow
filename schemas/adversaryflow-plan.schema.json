@@ -117,6 +117,7 @@
         "rollback": { "type": "string" },
         "cleanup_required": { "type": "boolean" },
         "acknowledgment_required": { "type": "boolean" },
+        "interpreter": { "enum": ["cmd", "powershell", "bash"] },
         "exercise_kind": { "enum": ["technique_relevant_bounded"] },
         "fidelity": { "enum": ["direct", "bounded_synthetic", "lab_proxy"] },
         "evidence_source": { "enum": ["self_reported_receipt"] },

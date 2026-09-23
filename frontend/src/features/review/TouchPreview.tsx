@@ -21,6 +21,8 @@ export function TouchPreview({ command, techniqueId }: TouchPreviewProps): React
     <section aria-labelledby={headingId} className={`preaction ${command.unsupported ? "preaction--unsupported" : ""}`}>
       <div className="preaction__head"><h4 id={headingId}>What this will touch</h4><strong>Review before copy</strong></div>
       <dl className="preaction__grid">
+        <div><dt>Interpreter</dt><dd>{command.interpreter ?? (command.platform === "windows" ? "cmd" : "bash")}</dd></div>
+        {command.untrusted ? <div><dt>Source</dt><dd>Unverified import — review every command before copying</dd></div> : null}
         <div><dt>Risk</dt><dd><span className={`riskvalue riskvalue--${command.risk}`}>{titleMetadataValue(command.risk)}</span></dd></div>
         <div><dt>Privilege</dt><dd>{command.requires_admin ? "Administrator / root" : "Standard user"}</dd></div>
         <div><dt>Network</dt><dd>{command.requires_network ? command.network_targets.join(", ") || "Network active" : "No network required"}</dd></div>

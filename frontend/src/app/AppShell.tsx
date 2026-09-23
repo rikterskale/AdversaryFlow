@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getDoctor } from "../api/client";
@@ -159,21 +159,21 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previousFocusKey.current === focusKey) return undefined;
     previousFocusKey.current = focusKey;
-    const frame = window.requestAnimationFrame(() => {
-      const main = mainRef.current;
-      if (!main) return;
-      const heading = main.querySelector<HTMLElement>("h1");
-      if (heading) {
-        heading.tabIndex = -1;
-        heading.focus();
-      } else {
-        main.focus();
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
+    const main = mainRef.current;
+    if (!main) return undefined;
+    const heading = main.querySelector<HTMLElement>("h1");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    } else {
+      main.focus();
+    }
+    // Complete focus before paint: a deferred frame can interrupt the user's
+    // first keystroke or a WebKit fill as the new screen becomes interactive.
+    return undefined;
   }, [focusKey]);
 
   const dataStatus = useMemo(() => {

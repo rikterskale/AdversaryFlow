@@ -23,7 +23,7 @@ class CommandRecordTests(unittest.TestCase):
             "platform", "command", "note", "cleanup", "risk", "side_effects",
             "requires_admin", "requires_network", "network_targets", "prerequisites",
             "expected_telemetry", "expected_output", "timeout_seconds", "rollback",
-            "cleanup_required", "acknowledgment_required", "fidelity",
+            "cleanup_required", "acknowledgment_required", "fidelity", "interpreter",
         })
         self.assertEqual(record["fidelity"], "direct")
 

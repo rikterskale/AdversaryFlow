@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 
-test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+const { observeClipboard, copiedText } = require("./clipboard");
 const Ajv2020 = require("ajv/dist/2020");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -281,7 +281,7 @@ test("welcome catalog failure still allows importing a plan", async ({ page }) =
   await expect(page.getByRole("alert")).toContainText("Actor catalog is unavailable");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
-  await expect(page.getByText("high risk")).toBeVisible();
+  await expect(page.getByText("Unverified import — review every command before copying")).toBeVisible();
 });
 
 test("system health exposes the guided doctor report and fixes", async ({ page }) => {
@@ -480,13 +480,13 @@ test("a saved plan can be resumed from the welcome screen", async ({ page }) => 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
-  await expect(page.getByRole("status").filter({ hasText: "Plan imported as high-risk" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeFocused();
   await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
   await expect(page.getByLabel("Outcome for T1033")).toHaveValue("passed");
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
-  // Imported commands are re-classified as untrusted high-risk content.
-  await expect(page.getByText("high risk")).toBeVisible();
+  // Import trust is distinct from the operator's high-risk permission.
+  await expect(page.getByText("Unverified import — review every command before copying")).toBeVisible();
 });
 
 test("a resumed plan re-exports against the published schema", async ({ page }) => {
@@ -649,7 +649,7 @@ test("a new actor starts with an empty execution context", async ({ page }) => {
 
 test("unavailable local storage is reported instead of silently losing evidence", async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(window.localStorage, "setItem", {
+    Object.defineProperty(Storage.prototype, "setItem", {
       configurable: true,
       value: () => { throw new Error("storage is unavailable"); },
     });
@@ -711,8 +711,8 @@ test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
   await expect(page.locator("#progressPct")).toHaveText("33%");
 });
 
-test("plan keyboard shortcuts move focus and copy the command", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("plan keyboard shortcuts move focus and copy the command", async ({ page, browserName }) => {
+  await observeClipboard(page);
   const second = {
     stix_id: "attack-pattern--t1059", attack_id: "T1059", name: "Command and Scripting Interpreter",
     description: "Fixture technique", tactics: ["execution"], platforms: ["Windows"],
@@ -738,7 +738,7 @@ test("plan keyboard shortcuts move focus and copy the command", async ({ page, c
   expect(await cards.nth(0).evaluate(element => document.activeElement === element)).toBe(true);
   await page.keyboard.press("c");
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("whoami");
+  expect(await copiedText(page, browserName)).toBe("whoami");
 });
 
 test("the plan opens on the first stage that has a runnable command", async ({ page }) => {
@@ -927,7 +927,7 @@ test("changing ATT&CK domains is confirmed before rebuilding an in-progress plan
 test("theme switching remains usable when browser storage is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
     for (const method of ["getItem", "setItem"]) {
-      Object.defineProperty(window.localStorage, method, {
+      Object.defineProperty(Storage.prototype, method, {
         configurable: true,
         value: () => { throw new Error("storage is unavailable"); },
       });

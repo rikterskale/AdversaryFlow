@@ -110,6 +110,9 @@ def command_record(
 
     record: Dict[str, Any] = {
         "platform": platform,
+        # Windows catalog strings are CMD command lines; embedded PowerShell
+        # explicitly invokes powershell.exe. Do not reinterpret them as PS1.
+        "interpreter": "cmd" if platform == "windows" else "bash",
         "command": command,
         "note": note,
         "cleanup": cleanup,

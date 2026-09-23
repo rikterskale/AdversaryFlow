@@ -4,7 +4,7 @@ import type { Actor, Command, WorkflowResponse } from "../../api/contract";
 import type { ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
 import { buildExportBundle, summarizeExportReadiness } from "./exportModel";
-import { validateImportedPlan } from "./planContract";
+import { scopeFromImportedPlan, validateImportedPlan, workflowFromImportedPlan } from "./planContract";
 
 const actor: Actor = { stix_id: "intrusion-set--test", attack_id: "G0001", name: "Test Actor", type: "group", aliases: [], description: "Fixture", technique_count: 2 };
 const command: Command = { platform: "windows", command: "whoami", note: "Identity check", cleanup: "", risk: "low", side_effects: [], requires_admin: false, requires_network: false, network_targets: [], prerequisites: ["Authorized lab"], expected_telemetry: "Process telemetry", expected_output: "Identity", timeout_seconds: 60, rollback: "", cleanup_required: false, acknowledgment_required: false };
@@ -21,6 +21,18 @@ const workflow: WorkflowResponse = {
 const scope: ScopeSettings = { commandPlatform: "windows", tactics: ["reconnaissance", "execution"], includePre: false, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false, operator: "Purple Team", target: "lab-01" };
 
 describe("exportModel", () => {
+  it("preserves imported guardrails while requiring review of untrusted command text", () => {
+    const original = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
+    const importedScope = scopeFromImportedPlan(original);
+    expect(importedScope.allowHighRisk).toBe(false);
+    const importedWorkflow = workflowFromImportedPlan(original);
+    const imported = importedWorkflow.stages[0]?.techniques[0]?.commands[0];
+    expect(imported).toMatchObject({ risk: "low", acknowledgment_required: true, untrusted: true });
+    const roundTrip = buildExportBundle(actor, importedWorkflow, importedScope, {}, ["enterprise"]);
+    expect(roundTrip.plan.scope.allow_high_risk).toBe(false);
+    expect(roundTrip.preview.runnable).toBe(1);
+    expect(() => validateImportedPlan(roundTrip.plan)).not.toThrow();
+  });
   it("exports only effective stages and validates the generated schema 2.0 plan", () => {
     const records: Record<string, ExecutionEvidence> = {
       T1033: { outcome: "passed", detection_result: "alerted", telemetry_refs: ["x".repeat(501), ...Array.from({ length: 25 }, (_, index) => `event-${index}`)] },

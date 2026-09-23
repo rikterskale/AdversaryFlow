@@ -486,6 +486,15 @@ class CacheLifecycleTests(unittest.TestCase):
         with patch("backend.attack_data._download", side_effect=OSError("network down")), self.assertRaises(OSError):
             attack_data.load_bundle("enterprise")
 
+    def test_forced_refresh_reports_failure_without_losing_the_loaded_index(self):
+        self.seed_cache()
+        previous = attack_data.get_index(["enterprise"])
+        with patch("backend.attack_data._download", side_effect=OSError("network down")), \
+                self.assertRaisesRegex(RuntimeError, "Could not refresh enterprise"):
+            attack_data.refresh_index(["enterprise"])
+        self.assertIs(attack_data.get_index(["enterprise"]), previous)
+        self.assertTrue(attack_data.cache_status()["domains"]["enterprise"]["metadata"]["stale"])
+
     def test_a_corrupt_cache_triggers_an_unconditional_redownload(self):
         with open(self.path, "wb") as handle:
             handle.write(b"not json at all")

@@ -29,6 +29,10 @@ from typing import Any, Dict, List, Optional, Tuple
 # Configuration
 # ---------------------------------------------------------------------------
 
+class RefreshError(RuntimeError):
+    """A requested feed update failed; cached plans must not be reset."""
+
+
 def _default_cache_dir() -> str:
     configured = os.environ.get("ADVERSARYFLOW_CACHE_DIR")
     if configured:
@@ -267,10 +271,14 @@ def load_bundle(domain: str = "enterprise", force_refresh: bool = False) -> Dict
                 _CACHE_EVENTS[domain] = {"status": "fresh", **metadata}
             except Exception as exc:
                 if not os.path.exists(path):
+                    if force_refresh:
+                        raise RefreshError(f"Could not refresh {domain} ATT&CK data. Check your connection and retry.") from exc
                     raise
                 metadata = _read_metadata(domain)
                 metadata.update({"stale": True, "refresh_error": str(exc)})
                 _CACHE_EVENTS[domain] = {"status": "stale", **metadata}
+                if force_refresh:
+                    raise RefreshError(f"Could not refresh {domain} ATT&CK data; the previous cache is still available.") from exc
 
         try:
             bundle = _load_validated(path, domain)
