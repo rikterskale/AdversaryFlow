@@ -16,7 +16,7 @@ module.exports = defineConfig({
     // Pin a Windows UA so command-platform auto-detect is deterministic in CI
     // (Linux/macOS runners would otherwise select linux/macos and empty Windows-only fixtures).
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   webServer: useExternalServer ? undefined : {
