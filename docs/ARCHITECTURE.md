@@ -41,6 +41,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/attack_data.py` | Downloads, validates, hashes, caches, and indexes the official STIX bundles; derives live tactic order | Only the configured MITRE source is accepted |
 | `backend/intelligence_import.py` | Parses bounded CSV, ATT&CK Navigator layer, and STIX 2.1 input into provenance-hashed review candidates and computes technique diffs | Imports remain unaccepted; source URLs are recorded but never fetched |
 | `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
+| `backend/content_pack.py` | Verifies Ed25519-signed versioned ability and detection-binding packs against installation trust roots; the Atomic adapter and reports consume verified records | Optional `cryptography` extra; invalid signatures, payload digests, or conflicting records fail closed |
 | `backend/atomic_adapter.py` | Converts reviewed internal abilities into Atomic Red Team YAML and writes structured gap rows for the rest | Only `review_status: reviewed` abilities become Atomic tests; the service never runs them |
 | `backend/engagement_store.py` | Stores engagements, immutable plan revisions, run groups, receipts, telemetry references, and ability backlog in SQLite | Local single-install store; digests detect changes but are not digital signatures |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
@@ -192,6 +193,11 @@ entries stay in the accompanying manifest as `no_ability`, `wrong_shape`,
 `out_of_scope`, or `not_accepted` backlog items with owner and status fields.
 Current code-backed catalog entries are `unassessed`, so they are not promoted
 to Atomic tests by this adapter yet.
+
+Reviewed ability content can be shipped separately as an Ed25519-signed
+content pack. Pack trust roots and the installed pack directory are deployment
+configuration; the service verifies signatures and content digests before it
+uses abilities or detection bindings. See [Signed content packs](CONTENT_PACKS.md).
 
 Generating the pack upserts its gaps into a persistent SQLite backlog. The
 export screen can list these items and assign an owner and status. Those

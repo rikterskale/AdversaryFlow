@@ -22,7 +22,8 @@
     "timeout_seconds": { "type": "integer", "minimum": 0, "maximum": 3600 },
     "content_source": { "type": "string", "minLength": 1 },
     "review_status": { "enum": ["unassessed", "draft", "reviewed", "retired"] },
-    "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "procedure_candidate_ids": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 128 }, "uniqueItems": true }
   },
   "additionalProperties": false
 }

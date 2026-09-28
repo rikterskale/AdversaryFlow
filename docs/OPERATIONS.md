@@ -88,8 +88,9 @@ Export a schema 2.0 JSON plan for backup, handoff, or resume. The export screen
 uses **Generate report** to produce a sandboxed HTML preview, then enables
 command-free HTML/PDF downloads plus the canonical JSON record. Human reports
 include telemetry, ATT&CK detection mappings, evidence status, and coverage
-gaps; the current catalog has no Sigma-reference field, so reports make no
-per-technique Sigma coverage claim or invent rule links. Imported commands are marked
+gaps; the command catalog has no Sigma-reference field, so reports include
+reviewed links only from verified signed content packs and make no per-technique
+claim when those packs provide none. Imported commands are marked
 unverified and require acknowledgment before copying; saved guardrails remain
 unchanged. **Save JSON plan** is also available independently of the service.
 

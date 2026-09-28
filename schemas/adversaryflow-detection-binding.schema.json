@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-detection-binding.schema.json",
+  "title": "AdversaryFlow reviewed detection binding",
+  "type": "object",
+  "required": ["technique_id", "provider", "rule_id", "title", "url", "content_sha256", "reviewed_by", "reviewed_at"],
+  "properties": {
+    "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+    "provider": { "enum": ["sigma", "elastic", "splunk", "kql"] },
+    "rule_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "url": { "type": ["string", "null"], "format": "uri", "pattern": "^https://[^\\s]+$" },
+    "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "reviewed_by": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "reviewed_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

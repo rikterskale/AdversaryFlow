@@ -31,6 +31,9 @@ dependencies = [
   "Werkzeug==3.1.8",
 ]
 
+[project.optional-dependencies]
+content-packs = ["cryptography==50.0.0"]
+
 [project.urls]
 Homepage = "https://github.com/rikterskale/AdversaryFlow"
 Issues = "https://github.com/rikterskale/AdversaryFlow/issues"
@@ -57,7 +60,16 @@ version = { attr = "backend.__version__" }
 ]
 "share/adversaryflow/schemas" = [
   "schemas/adversaryflow-plan.schema.json",
+  "schemas/adversaryflow-plan-v3.schema.json",
   "schemas/adversaryflow-execution.schema.json",
+  "schemas/adversaryflow-engagement.schema.json",
+  "schemas/adversaryflow-intelligence.schema.json",
+  "schemas/adversaryflow-ability.schema.json",
+  "schemas/adversaryflow-atomic-manifest.schema.json",
+  "schemas/adversaryflow-receipt.schema.json",
+  "schemas/adversaryflow-run.schema.json",
+  "schemas/adversaryflow-content-pack.schema.json",
+  "schemas/adversaryflow-detection-binding.schema.json",
 ]
 
 [tool.ruff]

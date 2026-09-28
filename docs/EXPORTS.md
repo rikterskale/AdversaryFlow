@@ -108,17 +108,17 @@ or `json`. HTML and PDF contain:
 | --- | --- |
 | ATT&CK ID, tactic, actor, domains, platform, scope, operator, target | Existing schema 2.0 plan export |
 | Expected telemetry, fidelity, keyed-catalog/fallback status, telemetry acceptance | Server-side command catalog after catalog rebinding |
+| Reviewed Sigma, Elastic, Splunk, or KQL bindings | Verified Ed25519-signed content packs configured by the installation |
 | ATT&CK data sources and detection guidance | `data_sources` and `detection` already exported from the loaded STIX technique (`x_mitre_data_sources` and `x_mitre_detection`) |
-| Sigma/detection-rule references | Only an explicit catalog reference; none is inferred from a technique ID or detection paragraph |
+| Sigma/detection-rule references | Only a verified explicit binding; none is inferred from a technique ID or detection paragraph |
 | Outcomes and evidence | The technique's schema 2.0 `execution` record |
 | Coverage gaps | Deterministic counts and findings computed from the fields above |
 
-The current catalog does not declare a Sigma-reference field. Reports emit no
-Sigma links and make no per-technique Sigma coverage claim; the missing field
-is an active-catalog limitation, not a generated gap for every technique. This
-is not a claim that a community rule does not exist. Adding a link requires an
-explicit reviewed catalog field; report generation never searches for rules or
-contacts the network.
+The current command catalog does not declare a Sigma-reference field. Reports
+emit no Sigma links unless an active signed content pack supplies an explicit
+reviewed binding, and make no per-technique Sigma coverage claim when the
+installation has no bindings. This is not a claim that a community rule does
+not exist. Report generation never searches for rules or contacts the network.
 
 Reports omit command bodies, cleanup commands, and any executable content.
 The self-contained HTML report escapes all plan text and carries a restrictive

@@ -244,6 +244,25 @@ paths:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+  /api/content-packs:
+    get:
+      summary: List configured signed content packs
+      description: Verifies installed Ed25519 signatures and payload digests before returning pack metadata. Trust keys and the pack directory are configured by the installation; packs are never extracted or executed by this service.
+      responses:
+        "200":
+          description: Verified content pack and detection-binding counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [packs, ability_count, detection_binding_count, verified_detection_binding_count]
+                properties:
+                  packs: { type: array, items: { type: object } }
+                  ability_count: { type: integer, minimum: 0 }
+                  detection_binding_count: { type: integer, minimum: 0 }
+                  verified_detection_binding_count: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /api/ability-backlog/{item_id}:
     patch:
       summary: Assign an owner and update backlog status

@@ -605,7 +605,8 @@ before serialization. JSON preserves the submitted schema 2.0 source record.
 The service never runs kit commands. The destination runner asks run / edit /
 skip / abort per step. Reports deliberately omit runnable command bodies;
 Sigma links appear only when the catalog explicitly supplies one. The current
-catalog supplies none, so reports make no per-technique Sigma coverage claim.
+catalog supplies none; only verified signed content packs can add a reviewed
+Sigma link. With no such pack, reports make no per-technique coverage claim.
 See [Export formats](EXPORTS.md) for report provenance
 and coverage semantics.
 

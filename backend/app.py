@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
+from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, content_pack, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
 
 
 def _frontend_dir() -> str:
@@ -587,6 +587,21 @@ def ability_backlog_list():
         return jsonify({"items": engagement_store.list_ability_gaps(limit, status)})
     except (ValueError, engagement_store.EngagementStoreError) as exc:
         abort(400, description=str(exc))
+
+
+@app.route("/api/content-packs", methods=["GET"])
+def content_pack_list():
+    """Return installed pack metadata after signature verification."""
+    try:
+        packs, _, bindings = content_pack.installed_packs()
+    except content_pack.ContentPackError as exc:
+        abort(503, description=str(exc))
+    return jsonify({
+        "packs": packs,
+        "ability_count": sum(item["ability_count"] for item in packs),
+        "detection_binding_count": sum(item["detection_binding_count"] for item in packs),
+        "verified_detection_binding_count": sum(len(items) for items in bindings.values()),
+    })
 
 
 @app.route("/api/ability-backlog/<item_id>", methods=["PATCH"])

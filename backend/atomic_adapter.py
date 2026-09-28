@@ -12,7 +12,7 @@ import uuid
 import zipfile
 from typing import Any, Dict, List, Mapping, Tuple
 
-from . import ability_model, command_catalog, execution_kit
+from . import ability_model, command_catalog, content_pack, execution_kit
 
 
 class AtomicAdapterError(ValueError):
@@ -63,6 +63,10 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
     platform = normalized.platform
     scope = plan.get("scope", {})
     procedures = plan.get("procedures", []) if isinstance(plan.get("procedures", []), list) else []
+    try:
+        installed_packs, signed_abilities, signed_bindings = content_pack.installed_packs()
+    except content_pack.ContentPackError as exc:
+        raise AtomicAdapterError(str(exc)) from exc
     procedures_by_technique: Dict[str, List[str]] = {}
     for item in procedures:
         if isinstance(item, dict) and isinstance(item.get("technique_id"), str):
@@ -77,7 +81,8 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
         catalog = command_catalog.get_commands(step.technique_id, step.technique_name, [step.tactic])
         candidates = [item for item in catalog["commands"]
                       if isinstance(item, dict) and item.get("platform") == platform]
-        if not candidates:
+        signed = signed_abilities.get((step.technique_id, platform))
+        if not candidates and signed is None:
             gaps.append({
                 "technique_id": step.technique_id, "platform": platform,
                 "gap": "no_ability", "reason": "The selected catalog pack has no ability for this platform.",
@@ -86,14 +91,26 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
             })
             continue
 
-        command = candidates[0]
-        ability = ability_model.catalog_ability(step.technique_id, command)
-        procedure_ids = procedures_by_technique.get(step.technique_id, [])
+        if signed is not None:
+            ability_fields = {key: signed.ability[key] for key in ability_model.Ability.__dataclass_fields__}
+            for field in ("requirements", "network_targets", "side_effects"):
+                ability_fields[field] = tuple(ability_fields[field])
+            ability = ability_model.Ability(**ability_fields)
+            command = None
+            ability_source = {"pack_id": signed.pack_id, "pack_version": signed.pack_version,
+                              "signer_key_id": signed.signer_key_id}
+        else:
+            command = candidates[0]
+            ability = ability_model.catalog_ability(step.technique_id, command)
+            ability_source = None
+        accepted_procedure_ids = procedures_by_technique.get(step.technique_id, [])
+        signed_procedure_ids = signed.ability.get("procedure_candidate_ids", []) if signed is not None else []
+        procedure_ids = accepted_procedure_ids
         out_of_scope = (
             (ability.requires_admin and not scope.get("allow_admin", False))
             or (ability.requires_network and not scope.get("allow_network", False))
             or (ability.safety_class == "high" and not scope.get("allow_high_risk", False))
-            or (scope.get("curated_only", False) and catalog["source"] == "fallback")
+            or (scope.get("curated_only", False) and catalog["source"] == "fallback" and signed is None)
         )
         if out_of_scope:
             gaps.append({
@@ -102,11 +119,18 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
                 "ability_id": ability.ability_id, "procedure_candidate_ids": procedure_ids,
                 "owner": None, "status": "open",
             })
-        elif procedure_ids and (catalog["source"] == "fallback" or ability.fidelity == "lab_proxy"):
+        elif procedure_ids and signed is None and (catalog["source"] == "fallback" or ability.fidelity == "lab_proxy"):
             gaps.append({
                 "technique_id": step.technique_id, "platform": platform,
                 "gap": "wrong_shape", "reason": "An ability exists, but it is a generic lab test rather than the accepted report procedure.",
                 "ability_id": ability.ability_id, "procedure_candidate_ids": procedure_ids,
+                "owner": None, "status": "open",
+            })
+        elif accepted_procedure_ids and signed is not None and not set(accepted_procedure_ids).intersection(signed_procedure_ids):
+            gaps.append({
+                "technique_id": step.technique_id, "platform": platform,
+                "gap": "wrong_shape", "reason": "The signed ability is not linked to the accepted report procedure evidence.",
+                "ability_id": ability.ability_id, "procedure_candidate_ids": accepted_procedure_ids,
                 "owner": None, "status": "open",
             })
         elif ability.review_status != "reviewed":
@@ -127,7 +151,12 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
                 "requires_network": ability.requires_network, "network_targets": list(ability.network_targets),
                 "requirements": list(ability.requirements), "cleanup": ability.cleanup,
                 "rollback": ability.rollback, "procedure_candidate_ids": procedure_ids,
+                "content_pack": ability_source,
             })
+
+    planned_ids = {step.technique_id for step in normalized.steps}
+    pack_bindings = [binding for (technique_id, _), values in signed_bindings.items()
+                     if technique_id in planned_ids for binding in values]
 
     manifest = {
         "schema_version": "1.0",
@@ -138,6 +167,8 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
         "actor_id": normalized.actor_id,
         "platform": platform,
         "procedure_evidence": procedures,
+        "content_packs": installed_packs,
+        "detection_bindings": pack_bindings,
         "included": included,
         "gaps": gaps,
         "summary": {"included": len(included), "gaps": len(gaps)},

@@ -18,6 +18,7 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar, Dict, Iterable, List, Mapping, Sequence, Tuple
 from urllib.parse import urlparse
 
+from . import content_pack
 from .execution_kit import ExecutionKitError, normalize_plan, rebind_to_catalog
 
 OUTCOMES = {"not_run", "passed", "failed", "skipped"}
@@ -32,6 +33,20 @@ class ReportError(ExecutionKitError):
 class SigmaReference:
     label: str
     url: str
+
+
+@dataclass(frozen=True)
+class DetectionBinding:
+    provider: str
+    rule_id: str
+    title: str
+    url: str
+    content_sha256: str
+    reviewed_by: str
+    reviewed_at: str
+    pack_id: str
+    pack_version: str
+    signer_key_id: str
 
 
 @dataclass(frozen=True)
@@ -83,6 +98,7 @@ class ReportTechnique:
     data_sources: Tuple[str, ...]
     detection_guidance: str
     sigma_references: Tuple[SigmaReference, ...]
+    detection_bindings: Tuple[DetectionBinding, ...]
     execution: ReportExecution
 
     @property
@@ -148,6 +164,7 @@ class CoverageSummary:
     expected_telemetry_mapped: int
     attack_detection_mapped: int
     sigma_mapped: int
+    detection_bindings_mapped: int
 
     @property
     def detected(self) -> int:
@@ -302,7 +319,30 @@ def _telemetry_acceptance(command: Mapping[str, Any]) -> TelemetryAcceptance | N
     )
 
 
-def _coverage_gaps(techniques: Iterable[ReportTechnique]) -> Tuple[CoverageGap, ...]:
+def _detection_bindings(raw: Sequence[Mapping[str, Any]]) -> Tuple[DetectionBinding, ...]:
+    bindings: List[DetectionBinding] = []
+    for item in raw:
+        provider = _text(item.get("provider"), maximum=20).lower()
+        rule_id = _text(item.get("rule_id"), maximum=200)
+        title = _text(item.get("title"), maximum=500)
+        content_sha256 = _digest(item.get("content_sha256"))
+        reviewed_by = _text(item.get("reviewed_by"), maximum=120)
+        reviewed_at = _date_time(item.get("reviewed_at"))
+        pack_id = _text(item.get("pack_id"), maximum=128)
+        pack_version = _text(item.get("pack_version"), maximum=100)
+        signer_key_id = _text(item.get("signer_key_id"), maximum=128)
+        if (provider not in {"sigma", "elastic", "splunk", "kql"} or not rule_id or not title
+                or not content_sha256 or not reviewed_by or not reviewed_at or not pack_id or not pack_version or not signer_key_id):
+            continue
+        bindings.append(DetectionBinding(
+            provider=provider, rule_id=rule_id, title=title, url=_safe_https_url(item.get("url")),
+            content_sha256=content_sha256, reviewed_by=reviewed_by, reviewed_at=reviewed_at,
+            pack_id=pack_id, pack_version=pack_version, signer_key_id=signer_key_id,
+        ))
+    return tuple(bindings)
+
+
+def _coverage_gaps(techniques: Iterable[ReportTechnique], *, reviewed_bindings_available: bool) -> Tuple[CoverageGap, ...]:
     gaps: List[CoverageGap] = []
     for item in techniques:
         if not item.supported:
@@ -329,6 +369,9 @@ def _coverage_gaps(techniques: Iterable[ReportTechnique]) -> Tuple[CoverageGap, 
         if not item.detection_guidance:
             gaps.append(CoverageGap("ATT&CK detection mapping", item.technique_id, item.technique_name,
                                     "The exported ATT&CK record does not contain detection guidance."))
+        if reviewed_bindings_available and not item.detection_bindings:
+            gaps.append(CoverageGap("Detection rule binding", item.technique_id, item.technique_name,
+                                    "No reviewed provider rule binding is present in the active signed content packs."))
         # An absent field in the active catalog is a product capability limit,
         # not a technique-specific detection gap. Report explicit references
         # when present, but do not manufacture one gap row per technique.
@@ -358,6 +401,7 @@ def _coverage_summary(techniques: Sequence[ReportTechnique]) -> CoverageSummary:
         expected_telemetry_mapped=sum(bool(item.expected_telemetry) for item in techniques),
         attack_detection_mapped=sum(bool(item.detection_guidance) for item in techniques),
         sigma_mapped=sum(bool(item.sigma_references) for item in techniques),
+        detection_bindings_mapped=sum(bool(item.detection_bindings) for item in techniques),
     )
 
 
@@ -391,6 +435,15 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
     except ExecutionKitError as exc:
         raise ReportError(str(exc)) from exc
 
+    try:
+        _, _, active_bindings = content_pack.installed_packs()
+    except content_pack.ContentPackError as exc:
+        raise ReportError(str(exc)) from exc
+    bindings_by_technique: Dict[str, List[Mapping[str, Any]]] = {}
+    for (technique_id, _provider), bindings in active_bindings.items():
+        bindings_by_technique.setdefault(technique_id, []).extend(bindings)
+    reviewed_bindings_available = any(bindings_by_technique.values())
+
     actor = rebound.get("actor")
     if not isinstance(actor, dict):
         raise ReportError("Plan actor metadata is incomplete")
@@ -406,6 +459,7 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
             step_index += 1
             command = technique.get("command")
             command = command if isinstance(command, dict) else {}
+            bindings = _detection_bindings(bindings_by_technique.get(step.technique_id, []))
             report_rows.append(ReportTechnique(
                 sequence=step.sequence,
                 tactic=step.tactic,
@@ -422,10 +476,11 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
                 telemetry_acceptance=_telemetry_acceptance(command),
                 data_sources=_text_list(technique.get("data_sources")),
                 detection_guidance=_text(technique.get("detection")),
-                # The current catalog declares no Sigma-reference field. Keep
-                # this empty until such metadata is added to the catalog and
-                # the versioned export contract explicitly.
-                sigma_references=(),
+                sigma_references=tuple(
+                    SigmaReference(label=f"{item.title} ({item.rule_id})", url=item.url)
+                    for item in bindings if item.provider == "sigma" and item.url
+                ),
+                detection_bindings=bindings,
                 execution=_evidence(technique),
             ))
     techniques = tuple(report_rows)
@@ -465,7 +520,7 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
         plan_sha256=_source_plan_sha256(document),
         techniques=techniques,
         coverage=coverage,
-        gaps=_coverage_gaps(techniques),
+        gaps=_coverage_gaps(techniques, reviewed_bindings_available=reviewed_bindings_available),
     )
 
 
@@ -585,6 +640,13 @@ def render_html(report: EngagementReport) -> bytes:
             f'<a href="{_h(reference.url)}" rel="noopener noreferrer">{_h(reference.label)}</a>'
             for reference in item.sigma_references
         ) or "No catalog Sigma reference"
+        binding_html = "<br>".join(
+            f'<strong>{_h(binding.provider.upper())}:</strong> '
+            + (f'<a href="{_h(binding.url)}" rel="noopener noreferrer">{_h(binding.title)}</a>' if binding.url else _h(binding.title))
+            + f' <small>({_h(binding.rule_id)} · reviewed by {_h(binding.reviewed_by)} · '
+              f'pack {_h(binding.pack_id)} {_h(binding.pack_version)} · signer {_h(binding.signer_key_id)})</small>'
+            for binding in item.detection_bindings
+        ) or "No reviewed provider binding in the active signed packs"
         attack_id = f'<a href="{_h(item.attack_url)}" rel="noopener noreferrer">{_h(item.technique_id)}</a>' if item.attack_url else _h(item.technique_id)
         rows.append(f"""
           <article class="technique">
@@ -595,7 +657,8 @@ def render_html(report: EngagementReport) -> bytes:
             <div class="technique-grid">
               <section><h4>Expected telemetry</h4><p>{_h(telemetry)}</p><small>ATT&amp;CK data sources: {_h(sources)}</small></section>
               <section><h4>Telemetry acceptance</h4>{_acceptance_html(item.telemetry_acceptance)}</section>
-              <section><h4>Detection mapping</h4><p>{_h(guidance)}</p><small>Sigma: {sigma}</small></section>
+              <section><h4>ATT&amp;CK detection guidance</h4><p>{_h(guidance)}</p><small>Sigma links: {sigma}</small></section>
+              <section><h4>Reviewed detection bindings</h4><p>{binding_html}</p></section>
               <section><h4>Recorded evidence</h4>{_execution_html(item.execution)}</section>
             </div>
           </article>""")
@@ -643,6 +706,7 @@ def render_html(report: EngagementReport) -> bytes:
                                f"{report.coverage.detection_not_assessed} not assessed"),
         ("Mappings", f"{report.coverage.expected_telemetry_mapped} expected telemetry · "
                      f"{report.coverage.attack_detection_mapped} ATT&CK detection · "
+                     f"{report.coverage.detection_bindings_mapped} reviewed rule bindings · "
                      f"{report.coverage.sigma_mapped} Sigma"),
     )
     coverage_table = "".join(
@@ -817,6 +881,11 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
         sigma = "; ".join(
             f"{reference.label} ({reference.url})" for reference in item.sigma_references
         ) or "No catalog Sigma reference"
+        binding_summary = "; ".join(
+            f"{binding.provider.upper()}: {binding.title} [{binding.rule_id}], reviewed by {binding.reviewed_by}, "
+            f"pack {binding.pack_id} {binding.pack_version}, signer {binding.signer_key_id}"
+            for binding in item.detection_bindings
+        ) or "No reviewed provider binding in the active signed packs"
         sources = ", ".join(item.data_sources) or "Not mapped"
         expected = _truncate(item.expected_telemetry, 340) or "Not mapped"
         evidence = _truncate(item.evidence_notes, 220) or "No operator evidence note recorded."
@@ -833,6 +902,7 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
             + _wrap_pdf(f"Expected telemetry: {expected}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"ATT&CK data sources: {sources}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Detection mapping: {guidance}", 8.5, layout.right - layout.left - 12)
+            + _wrap_pdf(f"Reviewed detection bindings: {binding_summary}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Sigma: {sigma}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Evidence: {evidence}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Evidence source: {evidence_source}", 8.5, layout.right - layout.left - 12)
@@ -849,7 +919,8 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
         layout.y -= 3
         for label, value in (
             ("Expected telemetry", expected), ("ATT&CK data sources", sources),
-            ("Detection mapping", guidance), ("Sigma", sigma), ("Evidence", evidence),
+            ("Detection mapping", guidance), ("Reviewed bindings", binding_summary),
+            ("Sigma", sigma), ("Evidence", evidence),
             ("Evidence source", evidence_source), ("Telemetry references", telemetry_references),
         ):
             layout.paragraph(f"{label}: {value}", size=8.5, indent=8, space_after=2)
