@@ -1,17 +1,40 @@
-# AdversaryFlow — User Acceptance Test Plan
+# AdversaryFlow — User Acceptance Test Plan and Historical Execution Record
 
-Covers every row of the journey map in [USER_JOURNEY.md](USER_JOURNEY.md),
-plus the boundary inputs the accepted behaviour depends on.
+This document contains UAT case references and a preserved execution record.
+The recorded run is for AdversaryFlow 0.4.0; it is not evidence that the current
+0.5.3 source has passed UAT. The source revision and run date for that record
+were not recorded here. Preserve the recorded outputs and results as historical
+evidence.
 
-**Case IDs** — `J1`–`J62` are the journey-map rows. `B1`–`B38` are plan-import
+**Case IDs** — the current [journey map](USER_JOURNEY.md) contains `J1`–`J63`.
+This record's tables include a `J63` row, but its execution summary below
+explicitly accounts for `J1`–`J62` only. The saved record does not establish
+whether `J63` was included in the reported totals. `B1`–`B38` are plan-import
 boundaries. `B39`–`B47` are service and catalog boundaries. `E1`–`E16` cover
-the additional alternate and recovery paths documented outside the journey
-map.
+additional alternate and recovery paths.
 
 **How to read the Steps column** — cases marked *(auto)* are executed by the
-named test in the repository's own suites and are re-run by CI. Cases marked
-*(manual)* were executed from a terminal against a live service and the real
-ATT&CK enterprise bundle; their captured output is the Actual result.
+named test in the repository's own suites and are re-run by CI. In the
+historical record below, cases marked *(manual)* were recorded as executed from
+a terminal against a live service and the real ATT&CK enterprise bundle; their
+captured output is the Actual result.
+
+## Current UAT cycle (guidance; not an execution record)
+
+At base source revision `e4c31f7509599164a68f21fff8540baa1f620a41`,
+`backend.__version__` is `0.5.3`. Confirm the installed build with
+`adversaryflow --version` and record the source commit before a new run. Use
+the current case definitions in [USER_JOURNEY.md](USER_JOURNEY.md) and the
+verification commands declared in [README.md](../README.md) and
+[CI](../.github/workflows/ci.yml). Those commands are instructions for a new
+cycle; they were not run to produce this document.
+
+For each new cycle, record its run date, source commit, reported application
+version, operating system and tool versions, ATT&CK data version, exact commands
+or manual steps, and observed results. Reconcile the case list against the
+current journey map, then report totals only for cases actually executed. Add a
+separate dated record for new results; do not replace the 0.4.0 outputs below
+with current-version expectations or results that have not been observed.
 
 ## Environment of record
 
@@ -208,7 +231,8 @@ with a lab and a detection platform.
 
 ## F. Execution summary
 
-Executed on the environment of record above.
+The results below are the recorded 0.4.0 execution summary for the environment
+above. They are historical results, not a current 0.5.3 verification.
 
 | Group | Cases | Pass | Fail |
 |---|---|---|---|
@@ -220,9 +244,12 @@ Executed on the environment of record above.
 | D. Additional alternate and error paths | 16 | 16 | 0 |
 | **Total** | **125** | **125** | **0** |
 
-Every journey-map row `J1`–`J62` is covered exactly once across groups A, B,
-and the J56 row in C.1. Every alternate/error row in `USER_JOURNEY.md` maps to
-one of those journey cases or E1–E16.
+The historical summary asserts that journey-map rows `J1`–`J62` are covered
+exactly once across groups A, B, and the J56 row in C.1, and that every
+alternate/error row maps to one of those journey cases or E1–E16. The case
+tables also contain J63, but the summary does not say whether it is included in
+the 125-case total. That historical coverage and total have not been
+recalculated against the current journey map.
 
 ### Suites executed
 
