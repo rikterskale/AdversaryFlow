@@ -351,6 +351,28 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/engagements/{engagement_id}/runs:
+    get:
+      summary: Retrieve run, receipt, and telemetry reference records for an engagement
+      parameters:
+        - { name: engagement_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 4000, default: 200 }
+        - name: revision
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Persisted run groups and their immutable receipt/evidence payloads
+          content:
+            application/json:
+              schema: { type: object, required: [runs], properties: { runs: { type: array, items: { $ref: "../schemas/adversaryflow-run.schema.json" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/report/{report_format}:
     post:
       summary: Generate a purple-team engagement report artifact

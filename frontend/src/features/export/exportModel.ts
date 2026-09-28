@@ -1,4 +1,4 @@
-import type { Actor, AttackDomain, Command, ProcedureEvidence, WorkflowResponse } from "../../api/contract";
+import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
 import { isMarkedRun, type ExecutionEvidence } from "../review/evidence";
 import { buildPlanPreview, tacticDescriptions, type PlanPreview, type ScopeSettings } from "../scope/scopeModel";
 import type { PlanExport } from "./planContract";
@@ -142,9 +142,15 @@ export function buildExportBundle(
     })),
   };
   const acceptedProcedures = procedureEvidence.filter((item) => item.actor_stix_id === actor.stix_id && item.review_status === "accepted");
-  if (acceptedProcedures.length) {
+  const receipts: ReceiptEvidence[] = Object.entries(records).flatMap(([techniqueId, record]) => {
+    const receipt = record.receipt_payload;
+    if (!receipt || typeof receipt.run_id !== "string" || typeof receipt.receipt_sha256 !== "string") return [];
+    return [{ technique_id: techniqueId, run_id: receipt.run_id, receipt_sha256: receipt.receipt_sha256, receipt }];
+  });
+  if (acceptedProcedures.length || receipts.length) {
     plan.schema_version = "3.0";
     plan.procedures = acceptedProcedures.map((item) => ({ ...item, tactics: [...item.tactics], platforms: [...item.platforms] }));
+    plan.receipts = receipts;
   }
   return { preview, plan, slug: `${actor.attack_id}_${actor.name.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}` };
 }

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-from . import command_catalog
+from . import command_catalog, telemetry
 
 MAX_PLAN_STEPS = 4000
 MAX_COMMAND_LENGTH = 10_000
@@ -257,6 +257,9 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
         procedures = document.get("procedures")
         if not isinstance(procedures, list) or len(procedures) > 4_000:
             raise ExecutionKitError("Schema 3.0 plan procedure evidence is invalid")
+        receipts = document.get("receipts", [])
+        if not isinstance(receipts, list) or len(receipts) > 4_000:
+            raise ExecutionKitError("Schema 3.0 plan receipt evidence is invalid")
         candidate_ids = set()
         procedure_keys = {
             "candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms",
@@ -295,6 +298,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
             candidate_ids.add(item["candidate_id"])
     elif "procedures" in document:
         raise ExecutionKitError("Schema 2.0 plans cannot contain schema 3.0 procedure evidence")
+    elif "receipts" in document:
+        raise ExecutionKitError("Schema 2.0 plans cannot contain schema 3.0 receipt evidence")
     if not isinstance(stages, list) or not stages or len(stages) > 32:
         raise ExecutionKitError("Plan must contain between 1 and 32 stages")
 
@@ -311,6 +316,7 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     generated = _string(document.get("generated"), "generated", maximum=100, required=True)
 
     rows: List[PlanStep] = []
+    planned_runs: Dict[Tuple[str, str], Mapping[str, Any]] = {}
     for stage in stages:
         if (not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list)
                 or not stage["techniques"]):
@@ -322,6 +328,9 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 raise ExecutionKitError(f"Plan exceeds the {MAX_PLAN_STEPS}-step execution-kit limit")
             if not isinstance(technique, dict) or not isinstance(technique.get("command"), dict):
                 raise ExecutionKitError("Plan contains an invalid technique")
+            execution = technique.get("execution")
+            if isinstance(execution, dict) and isinstance(execution.get("run_id"), str):
+                planned_runs[(str(technique.get("id", "")), execution["run_id"])] = execution
             command = technique["command"]
             technique_id = _string(technique.get("id"), "technique.id", maximum=64, required=True)
             if not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id):
@@ -377,6 +386,44 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 expected_telemetry=_string(command.get("expected_telemetry", ""), "command.expected_telemetry"),
                 timeout_seconds=timeout,
             ))
+
+    if schema_version == "3.0":
+        receipt_keys = {"technique_id", "run_id", "receipt_sha256", "receipt"}
+        seen_receipts = set()
+        for entry in document.get("receipts", []):
+            if not isinstance(entry, dict) or set(entry) != receipt_keys or not isinstance(entry.get("receipt"), dict):
+                raise ExecutionKitError("Schema 3.0 plan contains an invalid receipt record")
+            receipt = entry["receipt"]
+            technique_id = entry.get("technique_id")
+            run_id = entry.get("run_id")
+            digest = entry.get("receipt_sha256")
+            if (not isinstance(technique_id, str) or not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id)
+                    or not isinstance(run_id, str) or not run_id or len(run_id) > 128
+                    or not isinstance(digest, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", digest)
+                    or receipt.get("schema_version") != "1.0"
+                    or receipt.get("technique_id") != technique_id or receipt.get("run_id") != run_id
+                    or receipt.get("receipt_sha256") != digest
+                    or not isinstance(receipt.get("status"), str) or receipt["status"] not in {"passed", "failed"}
+                    or not isinstance(receipt.get("started_at"), str) or not isinstance(receipt.get("completed_at"), str)
+                    or not isinstance(receipt.get("exit_code"), int) or isinstance(receipt.get("exit_code"), bool)
+                    or not -255 <= receipt["exit_code"] <= 65_535
+                    or not isinstance(receipt.get("cleanup_verified"), bool)
+                    or not isinstance(receipt.get("events"), list) or len(receipt["events"]) > 10_000
+                    or not all(isinstance(event, dict) for event in receipt["events"])
+                    or not telemetry.verify_receipt(receipt)):
+                raise ExecutionKitError("Schema 3.0 plan contains a receipt with an invalid digest or identity")
+            try:
+                telemetry._time(receipt["started_at"])
+                telemetry._time(receipt["completed_at"])
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ExecutionKitError("Schema 3.0 plan receipt timestamps are invalid") from exc
+            planned = planned_runs.get((technique_id, run_id))
+            if not planned or planned.get("receipt_sha256") != digest or planned.get("receipt_verified") is not True:
+                raise ExecutionKitError("Receipt evidence must match a digest-verified plan execution record")
+            key = (technique_id, run_id)
+            if key in seen_receipts:
+                raise ExecutionKitError("Schema 3.0 plan contains duplicate run receipts")
+            seen_receipts.add(key)
 
     if require_executable and not any(step.supported for step in rows):
         raise ExecutionKitError("Plan has no executable Windows, Linux, or macOS steps")

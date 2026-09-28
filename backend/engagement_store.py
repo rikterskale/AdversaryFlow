@@ -90,6 +90,23 @@ def initialize() -> None:
         );
         CREATE INDEX IF NOT EXISTS ability_backlog_status_idx
             ON ability_backlog(status, updated_at DESC);
+        CREATE TABLE IF NOT EXISTS run_records (
+            engagement_id TEXT NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL,
+            run_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            result TEXT NOT NULL,
+            receipt_count INTEGER NOT NULL,
+            receipt_set_sha256 TEXT NOT NULL,
+            telemetry_refs_json TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (engagement_id, revision, run_id),
+            FOREIGN KEY (engagement_id, revision) REFERENCES plan_revisions(engagement_id, revision) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS run_records_run_idx ON run_records(run_id);
         """)
 
 
@@ -153,6 +170,7 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
             "INSERT INTO plan_revisions (engagement_id, revision, schema_version, plan_sha256, plan_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (key, revision, schema_version, digest, plan_json, now),
         )
+        _persist_run_records(connection, key, revision, plan, now)
         connection.execute("COMMIT")
     except Exception:
         if connection.in_transaction:
@@ -194,10 +212,29 @@ def get_engagement(engagement_id: str) -> Optional[Dict[str, Any]]:
             "SELECT plan_json FROM plan_revisions WHERE engagement_id = ? ORDER BY revision DESC LIMIT 1",
             (engagement_id,),
         ).fetchone()
+        latest_revision = revisions[0]["revision"] if revisions else None
+        runs = connection.execute(
+            "SELECT * FROM run_records WHERE engagement_id = ? AND revision = ? ORDER BY started_at, run_id",
+            (engagement_id, latest_revision),
+        ).fetchall() if latest_revision else []
     result = dict(row)
     result["revisions"] = [dict(item) for item in revisions]
     result["latest_plan"] = json.loads(latest["plan_json"]) if latest else None
+    result["latest_runs"] = [_run_record(item) for item in runs]
     return result
+
+
+def engagement_exists(engagement_id: str) -> bool:
+    _ensure_initialized()
+    with _connect() as connection:
+        return connection.execute("SELECT 1 FROM engagements WHERE id = ?", (engagement_id,)).fetchone() is not None
+
+
+def revision_exists(engagement_id: str, revision: int) -> bool:
+    _ensure_initialized()
+    with _connect() as connection:
+        return connection.execute("SELECT 1 FROM plan_revisions WHERE engagement_id = ? AND revision = ?",
+                                  (engagement_id, revision)).fetchone() is not None
 
 
 def get_revision(engagement_id: str, revision: int) -> Optional[Dict[str, Any]]:
@@ -211,7 +248,85 @@ def get_revision(engagement_id: str, revision: int) -> Optional[Dict[str, Any]]:
         return None
     result = dict(row)
     result["plan"] = json.loads(result.pop("plan_json"))
+    result["runs"] = list_run_records(engagement_id, revision, limit=4_000)
     return result
+
+
+def _persist_run_records(connection: sqlite3.Connection, engagement_id: str, revision: int,
+                         plan: Mapping[str, Any], created_at: str) -> None:
+    receipt_index: Dict[Tuple[str, str], Mapping[str, Any]] = {}
+    for entry in plan.get("receipts", []) if isinstance(plan.get("receipts", []), list) else []:
+        if isinstance(entry, Mapping) and isinstance(entry.get("technique_id"), str) and isinstance(entry.get("run_id"), str):
+            receipt = entry.get("receipt")
+            if isinstance(receipt, Mapping):
+                receipt_index[(entry["technique_id"], entry["run_id"])] = receipt
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for stage in plan.get("stages", []) if isinstance(plan.get("stages", []), list) else []:
+        if not isinstance(stage, Mapping) or not isinstance(stage.get("techniques"), list):
+            continue
+        for technique in stage["techniques"]:
+            if not isinstance(technique, Mapping):
+                continue
+            execution = technique.get("execution")
+            if not isinstance(execution, Mapping) or not isinstance(execution.get("run_id"), str):
+                continue
+            run_id = execution["run_id"]
+            technique_id = str(technique.get("id", ""))
+            receipt = receipt_index.get((technique_id, run_id))
+            groups.setdefault(run_id, []).append({
+                "technique_id": technique_id,
+                "tactic": str(stage.get("tactic", "")),
+                "outcome": execution.get("outcome", "not_run"),
+                "detection_result": execution.get("detection_result", "not_assessed"),
+                "evidence_source": execution.get("evidence_source"),
+                "started_at": execution.get("started_at"),
+                "completed_at": execution.get("completed_at"),
+                "exit_code": execution.get("exit_code"),
+                "receipt_sha256": execution.get("receipt_sha256"),
+                "receipt_verified": execution.get("receipt_verified", False),
+                "telemetry_refs": execution.get("telemetry_refs", []),
+                "receipt": dict(receipt) if receipt else None,
+            })
+
+    platform = str(plan.get("scope", {}).get("command_platform", "unknown")) if isinstance(plan.get("scope"), Mapping) else "unknown"
+    for run_id, evidence in groups.items():
+        starts = sorted(item["started_at"] for item in evidence if isinstance(item.get("started_at"), str))
+        completions = sorted(item["completed_at"] for item in evidence if isinstance(item.get("completed_at"), str))
+        outcomes = {item["outcome"] for item in evidence}
+        result = "failed" if "failed" in outcomes else "passed" if "passed" in outcomes else "skipped" if outcomes == {"skipped"} else "recorded"
+        receipts = [item["receipt"] for item in evidence if isinstance(item.get("receipt"), Mapping)]
+        receipt_digests = sorted(item["receipt_sha256"] for item in evidence if isinstance(item.get("receipt_sha256"), str))
+        telemetry_refs = sorted({ref for item in evidence for ref in item.get("telemetry_refs", []) if isinstance(ref, str)})
+        canonical_evidence = json.dumps(evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        receipt_hash = hashlib.sha256(json.dumps(receipts, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
+        connection.execute("""
+            INSERT INTO run_records
+            (engagement_id, revision, run_id, platform, started_at, completed_at, result,
+             receipt_count, receipt_set_sha256, telemetry_refs_json, evidence_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (engagement_id, revision, run_id, platform, starts[0] if starts else None,
+              completions[-1] if completions else None, result, len(receipts), receipt_hash,
+              json.dumps(telemetry_refs, separators=(",", ":")), canonical_evidence, created_at))
+
+
+def _run_record(row: sqlite3.Row) -> Dict[str, Any]:
+    result = dict(row)
+    result["telemetry_refs"] = json.loads(result.pop("telemetry_refs_json"))
+    result["evidence"] = json.loads(result.pop("evidence_json"))
+    return result
+
+
+def list_run_records(engagement_id: str, revision: Optional[int] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    _ensure_initialized()
+    if not 1 <= limit <= 4_000:
+        raise EngagementStoreError("Run list limit must be between 1 and 4000")
+    with _connect() as connection:
+        if revision is None:
+            rows = connection.execute("SELECT * FROM run_records WHERE engagement_id = ? ORDER BY revision DESC, started_at, run_id LIMIT ?", (engagement_id, limit)).fetchall()
+        else:
+            rows = connection.execute("SELECT * FROM run_records WHERE engagement_id = ? AND revision = ? ORDER BY started_at, run_id LIMIT ?", (engagement_id, revision, limit)).fetchall()
+    return [_run_record(row) for row in rows]
 
 
 def upsert_ability_gaps(gaps: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:

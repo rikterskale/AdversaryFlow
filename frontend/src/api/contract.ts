@@ -29,6 +29,13 @@ export interface AbilityBacklogItem {
   updated_at: string;
 }
 
+export interface ReceiptEvidence {
+  technique_id: string;
+  run_id: string;
+  receipt_sha256: string;
+  receipt: Record<string, unknown>;
+}
+
 export interface Actor {
   stix_id: string;
   attack_id: string;

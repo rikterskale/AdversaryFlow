@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-run.schema.json",
+  "title": "AdversaryFlow run evidence record",
+  "type": "object",
+  "required": ["engagement_id", "revision", "run_id", "platform", "result", "receipt_count", "receipt_set_sha256", "telemetry_refs", "evidence", "created_at"],
+  "properties": {
+    "engagement_id": { "type": "string", "format": "uuid" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "platform": { "enum": ["windows", "linux", "macos"] },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "result": { "enum": ["passed", "failed", "skipped", "recorded"] },
+    "receipt_count": { "type": "integer", "minimum": 0 },
+    "receipt_set_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "telemetry_refs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["technique_id", "outcome", "detection_result", "receipt_verified", "telemetry_refs", "receipt"],
+        "properties": {
+          "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+          "tactic": { "type": "string" },
+          "outcome": { "enum": ["not_run", "passed", "failed", "skipped"] },
+          "detection_result": { "enum": ["not_assessed", "alerted", "silent", "blocked", "not_instrumented"] },
+          "evidence_source": { "type": ["string", "null"] },
+          "started_at": { "type": ["string", "null"], "format": "date-time" },
+          "completed_at": { "type": ["string", "null"], "format": "date-time" },
+          "exit_code": { "type": ["integer", "null"] },
+          "receipt_sha256": { "type": ["string", "null"], "pattern": "^[a-fA-F0-9]{64}$" },
+          "receipt_verified": { "type": "boolean" },
+          "telemetry_refs": { "type": "array", "items": { "type": "string" } },
+          "receipt": { "oneOf": [{ "$ref": "adversaryflow-receipt.schema.json" }, { "type": "null" }] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

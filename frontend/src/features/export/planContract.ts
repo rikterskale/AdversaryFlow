@@ -1,4 +1,4 @@
-import type { Actor, AttackDomain, Command, ProcedureEvidence, WorkflowResponse } from "../../api/contract";
+import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
 import type { ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
 
@@ -55,6 +55,7 @@ export interface PlanExport {
   summary: PlanSummary;
   stages: PlanStage[];
   procedures?: ProcedureEvidence[];
+  receipts?: ReceiptEvidence[];
 }
 
 const MAX_PLAN_STEPS = 4_000;
@@ -162,7 +163,7 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
   const baseKeys = ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages"];
   if (!isRecord(data) || (data.schema_version !== "2.0" && data.schema_version !== "3.0") || data.tool !== "AdversaryFlow") throw new Error("This is not an AdversaryFlow 2.0 plan export");
   const rootKeys = data.schema_version === "3.0" ? [...baseKeys, "procedures"] : baseKeys;
-  if (!onlyKeys(data, rootKeys)) throw new Error("Plan contains unknown or missing top-level fields");
+  if (!onlyKeys(data, rootKeys, data.schema_version === "3.0" ? ["receipts"] : [])) throw new Error("Plan contains unknown or missing top-level fields");
   if (!nonEmptyString(data.tool_version) || !nonEmptyString(data.data_version)) throw new Error("Plan is missing its tool or ATT&CK data version");
   if (!dateTime(data.generated)) throw new Error("Plan generated timestamp is invalid");
   validateActor(data.actor);
@@ -228,6 +229,28 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
       validateExecution(technique.execution);
     });
   });
+  if (data.schema_version === "3.0") {
+    const receiptEvidence = data.receipts ?? [];
+    if (!Array.isArray(receiptEvidence) || receiptEvidence.length > 4_000) throw new Error("Plan receipt evidence is invalid");
+    const receipts = new Set<string>();
+    receiptEvidence.forEach((entry) => {
+      const keys = ["technique_id", "run_id", "receipt_sha256", "receipt"];
+      if (!onlyKeys(entry, keys) || typeof entry.technique_id !== "string" || !/^T[0-9]{4}(?:\.[0-9]{3})?$/.test(entry.technique_id)
+        || !nonEmptyString(entry.run_id) || entry.run_id.length > 128 || typeof entry.receipt_sha256 !== "string"
+        || !/^[a-fA-F0-9]{64}$/.test(entry.receipt_sha256) || !isRecord(entry.receipt)
+        || entry.receipt.technique_id !== entry.technique_id || entry.receipt.run_id !== entry.run_id
+        || entry.receipt.receipt_sha256 !== entry.receipt_sha256 || entry.receipt.schema_version !== "1.0"
+        || (entry.receipt.status !== "passed" && entry.receipt.status !== "failed")
+        || !dateTime(entry.receipt.started_at) || !dateTime(entry.receipt.completed_at)
+        || !Number.isInteger(entry.receipt.exit_code) || typeof entry.receipt.cleanup_verified !== "boolean"
+        || !Array.isArray(entry.receipt.events) || entry.receipt.events.length > 10_000 || !entry.receipt.events.every(isRecord)) {
+        throw new Error("Plan contains invalid receipt evidence");
+      }
+      const key = `${entry.run_id}|${entry.technique_id}`;
+      if (receipts.has(key)) throw new Error("Plan contains duplicate run receipts");
+      receipts.add(key);
+    });
+  }
 }
 
 function normalizeImportedCommand(command: Command): Command {
@@ -284,6 +307,10 @@ export function evidenceFromImportedPlan(plan: PlanExport): Record<string, Execu
   plan.stages.forEach((stage) => stage.techniques.forEach((technique) => {
     records[technique.id] = { ...technique.execution };
   }));
+  (plan.receipts ?? []).forEach((entry) => {
+    const record = records[entry.technique_id];
+    if (record && record.run_id === entry.run_id) record.receipt_payload = entry.receipt;
+  });
   return records;
 }
 

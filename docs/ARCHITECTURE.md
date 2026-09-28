@@ -42,7 +42,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/intelligence_import.py` | Parses bounded CSV, ATT&CK Navigator layer, and STIX 2.1 input into provenance-hashed review candidates and computes technique diffs | Imports remain unaccepted; source URLs are recorded but never fetched |
 | `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
 | `backend/atomic_adapter.py` | Converts reviewed internal abilities into Atomic Red Team YAML and writes structured gap rows for the rest | Only `review_status: reviewed` abilities become Atomic tests; the service never runs them |
-| `backend/engagement_store.py` | Stores engagements and immutable plan revisions in SQLite with pinned ATT&CK data version and canonical plan digest | Local single-install store; digest detects changes but is not a digital signature |
+| `backend/engagement_store.py` | Stores engagements, immutable plan revisions, run groups, receipts, telemetry references, and ability backlog in SQLite | Local single-install store; digests detect changes but are not digital signatures |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
 | `backend/lab_exercises.py` | Portable bounded synthetic exercise families and digest-protected receipts | Runs only when an operator invokes the exported script on a lab host |
@@ -97,6 +97,15 @@ version, timestamp, and SHA-256 digest. The browser remembers the engagement
 ID to append later revisions. The current store is shared by all users of one
 service installation; project isolation and identity-backed roles remain future
 control-plane work.
+
+Schema 3.0 plans carry digest-verified exercise receipt payloads separately from
+the compact technique execution summary. Saving a revision validates each
+receipt again on the server and stores immutable run groups with the receipt
+set digest, technique outcomes, detection results, and telemetry references.
+`GET /api/engagements/{id}/runs` retrieves them across revisions or for one
+revision. Receipt digests establish content integrity only; receipts remain
+self-reported, and telemetry references do not imply the referenced event was
+independently verified by this service.
 
 ## Core request and data flows
 

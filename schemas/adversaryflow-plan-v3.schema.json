@@ -16,6 +16,21 @@
     "execution_context": { "$ref": "adversaryflow-plan.schema.json#/$defs/executionContext" },
     "summary": { "$ref": "adversaryflow-plan.schema.json#/$defs/summary" },
     "stages": { "type": "array", "items": { "$ref": "adversaryflow-plan.schema.json#/$defs/stage" }, "minItems": 1, "maxItems": 32 },
+    "receipts": {
+      "type": "array",
+      "maxItems": 4000,
+      "items": {
+        "type": "object",
+        "required": ["technique_id", "run_id", "receipt_sha256", "receipt"],
+        "properties": {
+          "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+          "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "receipt_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "receipt": { "$ref": "adversaryflow-receipt.schema.json" }
+        },
+        "additionalProperties": false
+      }
+    },
     "procedures": {
       "type": "array",
       "maxItems": 4000,

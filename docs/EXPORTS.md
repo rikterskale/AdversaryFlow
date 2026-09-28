@@ -144,10 +144,19 @@ Correlate the receipt's run ID, timestamps, event types, and hashes with
 independently collected endpoint or SIEM telemetry before treating execution
 or detection as verified. See [Independent telemetry](TELEMETRY.md).
 
+Schema 3.0 plan records retain the original bounded-exercise receipt alongside
+the compact technique evidence. The service rechecks the receipt digest and
+its technique/run identity before accepting an engagement revision. Engagement
+run records index the receipt set, per-technique outcomes, and telemetry
+references; they do not claim to independently verify the referenced endpoint
+or SIEM events.
+
 ## JSON
 
 Schema 2.0 JSON exports conform to the checked-in
-schemas/adversaryflow-plan.schema.json contract and include:
+schemas/adversaryflow-plan.schema.json contract. Schema 3.0 adds accepted
+procedure provenance and/or digest-verified receipt payloads under
+schemas/adversaryflow-plan-v3.schema.json. Both include:
 
 - between 1 and 32 non-empty stages, with no more than 2,000 techniques per
   stage or 4,000 technique records across the plan;

@@ -4,7 +4,7 @@
   "title": "AdversaryFlow Engagement Record",
   "description": "Server-persisted engagement metadata and immutable plan revision history.",
   "type": "object",
-  "required": ["id", "actor_id", "actor_name", "data_version", "created_at", "updated_at", "revisions", "latest_plan"],
+  "required": ["id", "actor_id", "actor_name", "data_version", "created_at", "updated_at", "revisions", "latest_plan", "latest_runs"],
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "actor_id": { "type": "string", "minLength": 1 },
@@ -21,7 +21,8 @@
         { "$ref": "adversaryflow-plan.schema.json" },
         { "$ref": "adversaryflow-plan-v3.schema.json" }
       ]
-    }
+    },
+    "latest_runs": { "type": "array", "items": { "$ref": "adversaryflow-run.schema.json" } }
   },
   "$defs": {
     "revisionSummary": {

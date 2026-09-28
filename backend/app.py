@@ -473,6 +473,26 @@ def engagement_revision(engagement_id: str, revision: int):
     return jsonify(result)
 
 
+@app.route("/api/engagements/<engagement_id>/runs")
+def engagement_runs(engagement_id: str):
+    if not REQUEST_ID_PATTERN.fullmatch(engagement_id):
+        abort(400, description="Invalid engagement ID")
+    if not engagement_store.engagement_exists(engagement_id):
+        abort(404, description="Engagement was not found")
+    revision_value = request.args.get("revision")
+    try:
+        revision = int(revision_value) if revision_value is not None else None
+        limit = int(request.args.get("limit", "200"))
+    except ValueError:
+        abort(400, description="Revision and limit values must be integers")
+    if revision is not None and (revision < 1 or not engagement_store.revision_exists(engagement_id, revision)):
+        abort(404, description="Engagement revision was not found")
+    try:
+        return jsonify({"runs": engagement_store.list_run_records(engagement_id, revision, limit)})
+    except engagement_store.EngagementStoreError as exc:
+        abort(400, description=str(exc))
+
+
 @app.route("/api/execution-kit", methods=["POST"])
 def execution_kit_download():
     """Build a portable CSV plus PowerShell/Bash runner without executing it."""

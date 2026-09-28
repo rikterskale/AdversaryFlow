@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-receipt.schema.json",
+  "title": "AdversaryFlow bounded exercise receipt",
+  "type": "object",
+  "required": ["schema_version", "run_id", "technique_id", "scenario", "exercise_summary", "expected_telemetry", "status", "started_at", "completed_at", "duration_ms", "exit_code", "events", "cleanup_verified", "attestation", "error", "receipt_sha256"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+    "scenario": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "exercise_summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "expected_telemetry": { "type": "string", "maxLength": 2000 },
+    "status": { "enum": ["passed", "failed"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "exit_code": { "type": "integer", "minimum": -255, "maximum": 65535 },
+    "events": { "type": "array", "maxItems": 10000, "items": { "type": "object" } },
+    "cleanup_verified": { "type": "boolean" },
+    "attestation": { "type": "string", "maxLength": 500 },
+    "error": { "type": ["string", "null"], "maxLength": 2000 },
+    "receipt_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": true
+}

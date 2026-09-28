@@ -277,7 +277,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       {validationError ? <div className="export-validation" role="alert"><Icon name="shield" /><div><strong>Export is paused</strong><p>{validationError} Return to review or scope, correct the plan, then try again.</p></div></div> : null}
 
       <div className="engagement-save-bar">
-        <div><strong>{engagementId ? `Server engagement · revision ${engagementRevision}` : "Save an auditable server record"}</strong><span>Stores this plan revision, its ATT&amp;CK data version, and a SHA-256 digest on this service. {bundle.plan.procedures?.length ? `${bundle.plan.procedures.length} accepted procedure citation(s) included.` : "No accepted procedure citations match this actor."}</span></div>
+        <div><strong>{engagementId ? `Server engagement · revision ${engagementRevision}` : "Save an auditable server record"}</strong><span>Stores this plan revision, its ATT&amp;CK data version, and a SHA-256 digest on this service. {bundle.plan.procedures?.length ? `${bundle.plan.procedures.length} accepted procedure citation(s) included.` : "No accepted procedure citations match this actor."} {bundle.plan.receipts?.length ? `${bundle.plan.receipts.length} digest-verified self-reported receipt(s) attached.` : "No raw exercise receipts attached."}</span></div>
         <Button disabled={!exportReady || engagementLoading || !csrfToken} onClick={() => { void saveEngagement(); }} variant="secondary">
           <Icon className="button-icon" name="save" /> {engagementLoading ? "Saving…" : engagementId ? "Save new revision" : "Save engagement"}
         </Button>

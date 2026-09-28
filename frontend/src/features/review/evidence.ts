@@ -17,6 +17,7 @@ export interface ExecutionEvidence {
   stderr_sha256?: string;
   receipt_sha256?: string;
   receipt_verified?: boolean;
+  receipt_payload?: Record<string, unknown>;
   telemetry_refs?: string[];
   evidence_source?: EvidenceSource;
   detection_result?: DetectionResult;
@@ -84,6 +85,7 @@ function validDateTime(value: unknown): value is string {
 }
 
 export async function evidenceFromReceipt(source: string, techniqueId: string): Promise<Partial<ExecutionEvidence>> {
+  if (source.length > 1_048_576) throw new Error("Receipt JSON is larger than 1 MiB.");
   let parsed: unknown;
   try {
     parsed = JSON.parse(source) as unknown;
@@ -109,6 +111,7 @@ export async function evidenceFromReceipt(source: string, techniqueId: string): 
   if (!/^[a-f0-9]{64}$/.test(claimed) || await sha256Hex(canonicalJson(unsigned)) !== claimed) {
     throw new Error("Receipt digest does not match its contents.");
   }
+  const receiptPayload = { ...parsed, receipt_sha256: claimed };
   return {
     outcome: parsed.status,
     run_id: parsed.run_id,
@@ -118,6 +121,7 @@ export async function evidenceFromReceipt(source: string, techniqueId: string): 
     cleanup_completed: parsed.cleanup_verified,
     receipt_sha256: claimed,
     receipt_verified: true,
+    receipt_payload: receiptPayload,
     evidence_source: "exercise_receipt",
   };
 }
