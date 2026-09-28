@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, ability_model, attack_data, command_catalog, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
+from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
 
 
 def _frontend_dir() -> str:
@@ -94,6 +94,8 @@ def begin_request() -> None:
     if request.path == "/api/execution-kit" or request.path.startswith("/api/report/"):
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if request.path == "/api/engagements" or request.path.startswith("/api/engagements/"):
+        request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
+    if request.path == "/api/playbook/atomic":
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
         supplied = request.headers.get("Authorization", "")
@@ -530,6 +532,59 @@ def engagement_report_download(report_format: str):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.route("/api/playbook/atomic", methods=["POST"])
+def atomic_playbook_download():
+    """Generate reviewed Atomic YAML plus an explicit ability-gap manifest."""
+    _require_csrf()
+    document = request.get_json(silent=True)
+    if not isinstance(document, dict):
+        abort(400, description="A JSON AdversaryFlow plan is required")
+    try:
+        archive, manifest = atomic_adapter.build_atomic_pack(document)
+    except atomic_adapter.AtomicAdapterError as exc:
+        abort(400, description=str(exc))
+    persisted_gaps = engagement_store.upsert_ability_gaps(manifest["gaps"])
+    archive = atomic_adapter.add_backlog_records(archive, manifest, persisted_gaps)
+    _log_event("atomic_playbook_pack_generated", included=manifest["summary"]["included"],
+               gaps=manifest["summary"]["gaps"], platform=manifest["platform"],
+               plan_sha256=manifest["plan_sha256"])
+    response = send_file(io.BytesIO(archive), mimetype="application/zip", as_attachment=True,
+                         download_name="AdversaryFlow_Atomic_Red_Team_draft.zip", max_age=0)
+    response.headers["X-AdversaryFlow-Atomic-Included"] = str(manifest["summary"]["included"])
+    response.headers["X-AdversaryFlow-Atomic-Gaps"] = str(manifest["summary"]["gaps"])
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.route("/api/ability-backlog", methods=["GET"])
+def ability_backlog_list():
+    try:
+        limit = int(request.args.get("limit", "100"))
+        status = request.args.get("status")
+        return jsonify({"items": engagement_store.list_ability_gaps(limit, status)})
+    except (ValueError, engagement_store.EngagementStoreError) as exc:
+        abort(400, description=str(exc))
+
+
+@app.route("/api/ability-backlog/<item_id>", methods=["PATCH"])
+def ability_backlog_update(item_id: str):
+    _require_csrf()
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", item_id):
+        abort(400, description="Invalid ability backlog ID")
+    document = request.get_json(silent=True)
+    if not isinstance(document, dict):
+        abort(400, description="Backlog owner and status are required")
+    try:
+        updated = engagement_store.update_ability_gap(item_id, owner=document.get("owner"), status=document.get("status", ""))
+    except engagement_store.EngagementStoreError as exc:
+        abort(400, description=str(exc))
+    if updated is None:
+        abort(404, description="Ability backlog item was not found")
+    _log_event("ability_backlog_item_updated", backlog_id=item_id, status=updated["status"], owner=updated["owner"])
+    return jsonify(updated)
 
 
 # ---------------------------------------------------------------------------

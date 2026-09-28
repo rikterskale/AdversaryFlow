@@ -567,6 +567,16 @@ main { width: 100%; }
 .engagement-save-bar strong { font-size: 11px; }
 .engagement-save-bar span { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
 .engagement-save-bar button { flex: 0 0 auto; }
+.ability-backlog { display: grid; gap: 8px; margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface); }
+.ability-backlog__heading { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 5px; }
+.ability-backlog__heading strong { font-size: 10px; }
+.ability-backlog__heading span { color: var(--text-subtle); font-size: 8px; }
+.ability-backlog__item { display: grid; grid-template-columns: minmax(0, 1fr) 120px 105px auto; align-items: end; gap: 8px; border-top: 1px solid var(--border); padding: 9px 0 1px; }
+.ability-backlog__item strong { display: block; font-size: 9px; text-transform: capitalize; }
+.ability-backlog__item p { margin: 2px 0 0; color: var(--text-subtle); font-size: 8px; line-height: 1.4; }
+.ability-backlog__item label { display: grid; gap: 3px; color: var(--text-subtle); font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.ability-backlog__item input, .ability-backlog__item select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--surface-elevated); color: var(--text); font-size: 8px; text-transform: none; }
+.ability-backlog__item .button { min-height: 31px; padding: 6px 9px; font-size: 8px; }
 .export-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: min(780px, 100%); margin: 31px auto 37px; }
 .statbox { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px; background: color-mix(in srgb, var(--surface-elevated) 88%, transparent); text-align: left; }
 .statbox strong { display: block; color: var(--text); font-family: ui-monospace, "Cascadia Code", monospace; font-size: 25px; line-height: 1; }
@@ -774,6 +784,9 @@ main { width: 100%; }
   .review-actionbar > .button:first-child { width: auto; align-self: flex-start; }
   .export-stats { grid-template-columns: 1fr 1fr; }
   .engagement-save-bar { align-items: flex-start; flex-direction: column; }
+  .ability-backlog__heading { flex-direction: column; gap: 2px; }
+  .ability-backlog__item { grid-template-columns: 1fr 1fr; }
+  .ability-backlog__item > div { grid-column: 1/-1; }
   .export-section-heading, .handoff-guide__head { align-items: flex-start; flex-direction: column; }
   .kit-card { grid-template-columns: 1fr; }
   .kit-card__action { grid-column: 1; }

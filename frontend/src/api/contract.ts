@@ -13,6 +13,22 @@ export interface EngagementSaveResponse {
   created_at: string;
 }
 
+export type AbilityGapStatus = "open" | "in_progress" | "accepted" | "closed";
+
+export interface AbilityBacklogItem {
+  id: string;
+  technique_id: string;
+  platform: string;
+  gap: "no_ability" | "wrong_shape" | "out_of_scope" | "not_accepted";
+  reason: string;
+  ability_id: string | null;
+  procedure_candidate_ids: string[];
+  owner: string | null;
+  status: AbilityGapStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Actor {
   stix_id: string;
   attack_id: string;

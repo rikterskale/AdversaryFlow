@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-atomic-manifest.schema.json",
+  "title": "AdversaryFlow Atomic Red Team export manifest",
+  "type": "object",
+  "required": ["schema_version", "adapter", "adapter_status", "plan_sha256", "data_version", "actor_id", "platform", "procedure_evidence", "included", "gaps", "summary"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "adapter": { "const": "atomic-red-team" },
+    "adapter_status": { "enum": ["draft", "ready"] },
+    "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "data_version": { "type": "string", "minLength": 1 },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "platform": { "enum": ["windows", "linux", "macos"] },
+    "procedure_evidence": { "type": "array", "items": { "$ref": "adversaryflow-plan-v3.schema.json#/properties/procedures/items" } },
+    "included": { "type": "array", "items": { "type": "object" } },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["backlog_id", "technique_id", "platform", "gap", "reason", "ability_id", "procedure_candidate_ids", "owner", "status"],
+        "properties": {
+          "backlog_id": { "type": "string", "format": "uuid" },
+          "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+          "platform": { "type": "string" },
+          "gap": { "enum": ["no_ability", "wrong_shape", "out_of_scope", "not_accepted"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "ability_id": { "type": ["string", "null"] },
+          "procedure_candidate_ids": { "type": "array", "items": { "type": "string" } },
+          "owner": { "type": ["string", "null"] },
+          "status": { "enum": ["open", "in_progress", "accepted", "closed"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["included", "gaps"],
+      "properties": {
+        "included": { "type": "integer", "minimum": 0 },
+        "gaps": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

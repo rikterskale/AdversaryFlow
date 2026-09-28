@@ -200,6 +200,72 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
+  /api/playbook/atomic:
+    post:
+      summary: Generate an Atomic Red Team draft pack and ability backlog
+      description: Rebinds plan techniques to the local catalog, exports only abilities marked reviewed as Atomic YAML, and places missing, wrong-shape, out-of-scope, and unaccepted items in an open-gap manifest. This route serializes files only and never invokes an Atomic executor.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { $ref: "../schemas/adversaryflow-plan.schema.json" }
+                - { $ref: "../schemas/adversaryflow-plan-v3.schema.json" }
+      responses:
+        "200":
+          description: ZIP containing reviewed Atomic YAML files when available and an AdversaryFlow manifest
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+  /api/ability-backlog:
+    get:
+      summary: List persisted ability gap backlog items
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+        - name: status
+          in: query
+          required: false
+          schema: { enum: [open, in_progress, accepted, closed] }
+      responses:
+        "200":
+          description: Backlog items with owners and workflow status
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/ability-backlog/{item_id}:
+    patch:
+      summary: Assign an owner and update backlog status
+      parameters:
+        - { name: item_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner, status]
+              properties:
+                owner: { type: [string, "null"], maxLength: 120 }
+                status: { enum: [open, in_progress, accepted, closed] }
+      responses:
+        "200": { description: Updated backlog item, content: { application/json: { schema: { type: object } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/engagements:
     get:
       summary: List saved engagement records

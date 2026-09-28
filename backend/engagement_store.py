@@ -74,6 +74,22 @@ def initialize() -> None:
         );
         CREATE INDEX IF NOT EXISTS plan_revisions_digest_idx
             ON plan_revisions(plan_sha256);
+        CREATE TABLE IF NOT EXISTS ability_backlog (
+            id TEXT PRIMARY KEY,
+            item_key TEXT NOT NULL UNIQUE,
+            technique_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            gap TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            ability_id TEXT,
+            procedure_candidate_ids_json TEXT NOT NULL,
+            owner TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS ability_backlog_status_idx
+            ON ability_backlog(status, updated_at DESC);
         """)
 
 
@@ -196,3 +212,86 @@ def get_revision(engagement_id: str, revision: int) -> Optional[Dict[str, Any]]:
     result = dict(row)
     result["plan"] = json.loads(result.pop("plan_json"))
     return result
+
+
+def upsert_ability_gaps(gaps: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Persist generated gap rows without overwriting existing ownership/status."""
+    _ensure_initialized()
+    results: List[Dict[str, Any]] = []
+    connection = _connect()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        for gap in gaps:
+            key_fields = {
+                "technique_id": str(gap.get("technique_id", "")),
+                "platform": str(gap.get("platform", "")),
+                "gap": str(gap.get("gap", "")),
+                "ability_id": gap.get("ability_id"),
+                "procedure_candidate_ids": sorted(str(value) for value in gap.get("procedure_candidate_ids", [])),
+            }
+            item_key = hashlib.sha256(json.dumps(key_fields, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+            now = _utc_now()
+            row = connection.execute("SELECT * FROM ability_backlog WHERE item_key = ?", (item_key,)).fetchone()
+            if row is None:
+                item_id = str(uuid.uuid4())
+                connection.execute("""
+                    INSERT INTO ability_backlog
+                    (id, item_key, technique_id, platform, gap, reason, ability_id,
+                     procedure_candidate_ids_json, owner, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'open', ?, ?)
+                """, (item_id, item_key, key_fields["technique_id"], key_fields["platform"], key_fields["gap"],
+                      str(gap.get("reason", ""))[:1000], key_fields["ability_id"],
+                      json.dumps(key_fields["procedure_candidate_ids"], separators=(",", ":")), now, now))
+            else:
+                item_id = row["id"]
+                connection.execute("UPDATE ability_backlog SET reason = ?, updated_at = ? WHERE id = ?",
+                                   (str(gap.get("reason", ""))[:1000], now, item_id))
+            saved = connection.execute("SELECT * FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
+            results.append(_backlog_record(saved))
+        connection.execute("COMMIT")
+    except Exception:
+        if connection.in_transaction:
+            connection.execute("ROLLBACK")
+        raise
+    finally:
+        connection.close()
+    return results
+
+
+def _backlog_record(row: sqlite3.Row) -> Dict[str, Any]:
+    result = dict(row)
+    result["procedure_candidate_ids"] = json.loads(result.pop("procedure_candidate_ids_json"))
+    result.pop("item_key", None)
+    return result
+
+
+def list_ability_gaps(limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    _ensure_initialized()
+    if not 1 <= limit <= 200:
+        raise EngagementStoreError("Backlog limit must be between 1 and 200")
+    if status is not None and status not in {"open", "in_progress", "accepted", "closed"}:
+        raise EngagementStoreError("Invalid backlog status")
+    with _connect() as connection:
+        if status:
+            rows = connection.execute("SELECT * FROM ability_backlog WHERE status = ? ORDER BY updated_at DESC LIMIT ?", (status, limit)).fetchall()
+        else:
+            rows = connection.execute("SELECT * FROM ability_backlog ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+    return [_backlog_record(row) for row in rows]
+
+
+def update_ability_gap(item_id: str, *, owner: Optional[str], status: str) -> Optional[Dict[str, Any]]:
+    _ensure_initialized()
+    if not isinstance(status, str) or status not in {"open", "in_progress", "accepted", "closed"}:
+        raise EngagementStoreError("Invalid backlog status")
+    if owner is not None:
+        if not isinstance(owner, str) or len(owner.strip()) > 120:
+            raise EngagementStoreError("Backlog owner must be at most 120 characters")
+        owner = owner.strip() or None
+    now = _utc_now()
+    with _connect() as connection:
+        cursor = connection.execute("UPDATE ability_backlog SET owner = ?, status = ?, updated_at = ? WHERE id = ?",
+                                    (owner, status, now, item_id))
+        if cursor.rowcount != 1:
+            return None
+        row = connection.execute("SELECT * FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
+    return _backlog_record(row)

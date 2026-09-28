@@ -41,6 +41,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/attack_data.py` | Downloads, validates, hashes, caches, and indexes the official STIX bundles; derives live tactic order | Only the configured MITRE source is accepted |
 | `backend/intelligence_import.py` | Parses bounded CSV, ATT&CK Navigator layer, and STIX 2.1 input into provenance-hashed review candidates and computes technique diffs | Imports remain unaccepted; source URLs are recorded but never fetched |
 | `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
+| `backend/atomic_adapter.py` | Converts reviewed internal abilities into Atomic Red Team YAML and writes structured gap rows for the rest | Only `review_status: reviewed` abilities become Atomic tests; the service never runs them |
 | `backend/engagement_store.py` | Stores engagements and immutable plan revisions in SQLite with pinned ATT&CK data version and canonical plan digest | Local single-install store; digest detects changes but is not a digital signature |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
@@ -175,6 +176,18 @@ record and digest for retrieval. Saving is an explicit export-screen action;
 regular browser evidence autosave remains local. Each persisted plan pins the
 ATT&CK feed version that produced it, so refreshing the feed does not rewrite
 prior revisions.
+
+`POST /api/playbook/atomic` rebinds selected plan techniques to the local
+catalog and exports reviewed internal abilities in Atomic Red Team YAML. Other
+entries stay in the accompanying manifest as `no_ability`, `wrong_shape`,
+`out_of_scope`, or `not_accepted` backlog items with owner and status fields.
+Current code-backed catalog entries are `unassessed`, so they are not promoted
+to Atomic tests by this adapter yet.
+
+Generating the pack upserts its gaps into a persistent SQLite backlog. The
+export screen can list these items and assign an owner and status. Those
+assignments are installation-wide today; identity-based roles and project
+boundaries remain separate control-plane work.
 
 ## Trust boundaries and controls
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { apiFetch, responseJson } from "../../api/client";
-import type { Actor, AttackDomain, EngagementSaveResponse, WorkflowResponse } from "../../api/contract";
+import type { AbilityBacklogItem, AbilityGapStatus, Actor, AttackDomain, EngagementSaveResponse, WorkflowResponse } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
@@ -58,7 +58,12 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const setEngagementRecord = useWizardStore((state) => state.setEngagementRecord);
   const records = useWorkspaceEvidence(actor, workflow);
   const [kitLoading, setKitLoading] = useState(false);
+  const [atomicLoading, setAtomicLoading] = useState(false);
   const [engagementLoading, setEngagementLoading] = useState(false);
+  const [backlogOpen, setBacklogOpen] = useState(false);
+  const [backlogLoading, setBacklogLoading] = useState(false);
+  const [backlogItems, setBacklogItems] = useState<AbilityBacklogItem[]>([]);
+  const [backlogSaving, setBacklogSaving] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
   const [reportPreview, setReportPreview] = useState<ReportPreviewState>({ status: "empty" });
   const [reportDownloadError, setReportDownloadError] = useState<string | null>(null);
@@ -121,6 +126,28 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
     }
   };
 
+  const exportAtomicDraft = async (): Promise<void> => {
+    if (atomicLoading || validationError || !csrfToken) return;
+    setAtomicLoading(true);
+    try {
+      const response = await apiFetch("/api/playbook/atomic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
+        body: JSON.stringify(bundle.plan),
+      });
+      if (!response.ok) await responseJson(response);
+      const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), "AdversaryFlow_Atomic_Red_Team_draft.zip");
+      const included = Number(response.headers.get("X-AdversaryFlow-Atomic-Included") ?? "0");
+      const gaps = Number(response.headers.get("X-AdversaryFlow-Atomic-Gaps") ?? "0");
+      downloadBlob(await response.blob(), filename);
+      onNotice(`Atomic Red Team draft ready · ${included} reviewed tests included · ${gaps} items in the manifest gap backlog`);
+    } catch (error: unknown) {
+      onNotice(error instanceof Error ? `Atomic export failed: ${error.message}` : "Atomic playbook generation failed.");
+    } finally {
+      setAtomicLoading(false);
+    }
+  };
+
   const saveEngagement = async (): Promise<void> => {
     if (engagementLoading || validationError || !csrfToken) return;
     setEngagementLoading(true);
@@ -137,6 +164,40 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       onNotice(error instanceof Error ? `Engagement save failed: ${error.message}` : "The engagement could not be saved.");
     } finally {
       setEngagementLoading(false);
+    }
+  };
+
+  const loadAbilityBacklog = async (): Promise<void> => {
+    if (backlogLoading) return;
+    setBacklogLoading(true);
+    try {
+      const response = await apiFetch("/api/ability-backlog?limit=200");
+      const result = await responseJson(response) as { items: AbilityBacklogItem[] };
+      setBacklogItems(result.items);
+      setBacklogOpen(true);
+    } catch (error: unknown) {
+      onNotice(error instanceof Error ? error.message : "The ability backlog could not be loaded.");
+    } finally {
+      setBacklogLoading(false);
+    }
+  };
+
+  const updateBacklogItem = async (item: AbilityBacklogItem): Promise<void> => {
+    if (backlogSaving || !csrfToken) return;
+    setBacklogSaving(item.id);
+    try {
+      const response = await apiFetch(`/api/ability-backlog/${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
+        body: JSON.stringify({ owner: item.owner?.trim() || null, status: item.status }),
+      });
+      const updated = await responseJson(response) as AbilityBacklogItem;
+      setBacklogItems((items) => items.map((current) => current.id === updated.id ? updated : current));
+      onNotice(`Backlog item ${updated.technique_id} updated`);
+    } catch (error: unknown) {
+      onNotice(error instanceof Error ? error.message : "The backlog item could not be updated.");
+    } finally {
+      setBacklogSaving(null);
     }
   };
 
@@ -205,7 +266,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   };
 
   return (
-    <section aria-busy={kitLoading || reportPreview.status === "loading" || Boolean(reportLoading)} aria-labelledby="export-title" className="screen export-screen">
+    <section aria-busy={kitLoading || atomicLoading || engagementLoading || backlogLoading || Boolean(backlogSaving) || reportPreview.status === "loading" || Boolean(reportLoading)} aria-labelledby="export-title" className="screen export-screen">
       <header className="export-hero">
         <span aria-hidden="true" className={`export-hero__check ${exportReady ? "" : "is-invalid"}`}><Icon name={exportReady ? "check" : "close"} /></span>
         <p className="eyebrow">Step 4 of 4 · Export kit</p>
@@ -317,6 +378,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
           <div className="secondary-exports">
             <span>Additional planning artifacts</span>
+            <button disabled={!exportReady || atomicLoading || !csrfToken} onClick={() => { void exportAtomicDraft(); }} type="button">{atomicLoading ? "Preparing Atomic draft…" : "Atomic Red Team draft + gap backlog"}<Icon name={atomicLoading ? "package" : "download"} /></button>
+            <button disabled={backlogLoading} onClick={() => { if (backlogOpen) setBacklogOpen(false); else void loadAbilityBacklog(); }} type="button">{backlogLoading ? "Loading ability backlog…" : backlogOpen ? "Hide ability backlog" : "Manage ability backlog"}<Icon name="arrow-right" /></button>
             <button disabled={!exportReady} onClick={() => {
               downloadBlob(new Blob([JSON.stringify(bundle.plan, null, 2)], { type: "application/json" }), `AdversaryFlow_${bundle.slug}.json`);
               onNotice("JSON plan saved with your evidence");
@@ -324,6 +387,20 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
             <button disabled={!exportReady} onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
             <button disabled={!exportReady} onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>
           </div>
+
+          {backlogOpen ? (
+            <section aria-label="Persistent ability backlog" className="ability-backlog">
+              <div className="ability-backlog__heading"><strong>Ability content backlog</strong><span>Assign an owner and move each gap through review.</span></div>
+              {backlogItems.length ? backlogItems.map((item) => (
+                <article className="ability-backlog__item" key={item.id}>
+                  <div><strong>{item.technique_id} · {item.platform} · {item.gap.replaceAll("_", " ")}</strong><p>{item.reason}</p></div>
+                  <label>Owner<input maxLength={120} onChange={(event) => setBacklogItems((items) => items.map((current) => current.id === item.id ? { ...current, owner: event.target.value } : current))} placeholder="Unassigned" value={item.owner ?? ""} /></label>
+                  <label>Status<select onChange={(event) => setBacklogItems((items) => items.map((current) => current.id === item.id ? { ...current, status: event.target.value as AbilityGapStatus } : current))} value={item.status}><option value="open">Open</option><option value="in_progress">In progress</option><option value="accepted">Accepted</option><option value="closed">Closed</option></select></label>
+                  <Button disabled={backlogSaving !== null} onClick={() => { void updateBacklogItem(item); }} variant="secondary">{backlogSaving === item.id ? "Saving…" : "Save"}</Button>
+                </article>
+              )) : <p className="muted">No backlog items yet. Generate an Atomic draft to classify current plan gaps.</p>}
+            </section>
+          ) : null}
 
           <div className="verification-card">
             <div><Icon name="shield" /><span><strong>Evidence-aware, command-free reports</strong><small>Catalog mappings are rebound before rendering</small></span></div>
