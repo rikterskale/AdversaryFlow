@@ -1,6 +1,6 @@
 import type { ChangeEvent } from "react";
 
-import type { Actor, AttackDomain, IntelligenceImportResponse } from "../../api/contract";
+import type { Actor, AttackDomain, IntelligenceImportResponse, ProcedureEvidence } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { ErrorState } from "../../components/Feedback";
 import { Icon } from "../../components/Icon";
@@ -10,6 +10,7 @@ interface WelcomeProps {
   onBegin: () => void;
   onImport: (file: File) => Promise<void>;
   onIntelligenceImport: (args: { file: File; source_kind: "csv" | "json"; source_name: string; source_url?: string; actor_stix_id: string; domains: AttackDomain[]; csrfToken: string }) => Promise<IntelligenceImportResponse>;
+  onAttachProcedures?: (procedures: ProcedureEvidence[]) => void;
   actors: Actor[];
   domains: AttackDomain[];
   csrfToken: string;
@@ -24,7 +25,7 @@ interface WelcomeProps {
   onRetryCatalog?: () => void;
 }
 
-export function Welcome({ onBegin, onImport, onIntelligenceImport, actors, domains, csrfToken, onNotice, onResume, ready, resumeActor, setupError = "", onRetrySetup, catalogError = "", catalogRetrying = false, onRetryCatalog }: WelcomeProps): React.JSX.Element {
+export function Welcome({ onBegin, onImport, onIntelligenceImport, onAttachProcedures = () => undefined, actors, domains, csrfToken, onNotice, onResume, ready, resumeActor, setupError = "", onRetrySetup, catalogError = "", catalogRetrying = false, onRetryCatalog }: WelcomeProps): React.JSX.Element {
   const importPlan = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -50,14 +51,14 @@ export function Welcome({ onBegin, onImport, onIntelligenceImport, actors, domai
           </div>
         ) : null}
         <div className="resume-panel">
-          <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 plan. Imported commands require review; your saved guardrails stay in place.</p></div>
+          <div><p className="eyebrow">Continue existing work</p><p>Resume browser-saved progress or import a schema 2.0 / 3.0 plan. Imported commands require review; your saved guardrails stay in place.</p></div>
           <div className="resume-panel__actions">
             {resumeActor ? <Button onClick={onResume} variant="secondary">Resume {resumeActor.name} plan</Button> : null}
             <label className="button button--ghost import-button" htmlFor="importPlan"><Icon className="button-icon" name="file" /> Resume JSON plan</label>
             <input accept="application/json,.json" className="sr-only" id="importPlan" onChange={importPlan} type="file" />
           </div>
         </div>
-        {ready && actors.length ? <IntelligenceImportPanel actors={actors} csrfToken={csrfToken} domains={domains} onImport={onIntelligenceImport} onNotice={onNotice} /> : null}
+        {ready && actors.length ? <IntelligenceImportPanel actors={actors} csrfToken={csrfToken} domains={domains} onAttachProcedures={onAttachProcedures} onImport={onIntelligenceImport} onNotice={onNotice} /> : null}
       </div>
       <div className="boundary-card">
         <div className="boundary-card__head"><span className="boundary-icon"><Icon name="shield" /></span><div><p className="eyebrow">Product boundary</p><h2>Planner, never executor</h2></div></div>

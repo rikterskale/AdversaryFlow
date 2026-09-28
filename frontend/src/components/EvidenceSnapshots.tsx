@@ -16,7 +16,7 @@ export function EvidenceSnapshots(): React.JSX.Element | null {
       <Button disabled={!snapshot.workflow || !snapshot.actor} onClick={() => restore(key)}>Restore snapshot</Button>
       <Button onClick={() => {
         const document = snapshot.actor && snapshot.workflow
-          ? buildExportBundle(snapshot.actor, snapshot.workflow, snapshot.scope, snapshot.records, snapshot.domains).plan
+          ? buildExportBundle(snapshot.actor, snapshot.workflow, snapshot.scope, snapshot.records, snapshot.domains, snapshot.procedureEvidence ?? []).plan
           : { evidence_identity: key, records: snapshot.records };
         const url = URL.createObjectURL(new Blob([JSON.stringify(document, null, 2)], { type: "application/json" }));
         const link = window.document.createElement("a");

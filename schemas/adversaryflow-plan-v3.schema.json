@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-plan-v3.schema.json",
+  "title": "AdversaryFlow plan export with reviewed procedures",
+  "type": "object",
+  "required": ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages", "procedures"],
+  "properties": {
+    "schema_version": { "const": "3.0" },
+    "tool": { "const": "AdversaryFlow" },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "data_version": { "type": "string", "minLength": 1 },
+    "domains": { "type": "array", "items": { "enum": ["enterprise", "ics", "mobile"] }, "minItems": 1, "uniqueItems": true },
+    "generated": { "type": "string", "format": "date-time" },
+    "actor": { "$ref": "adversaryflow-plan.schema.json#/$defs/actor" },
+    "scope": { "$ref": "adversaryflow-plan.schema.json#/$defs/scope" },
+    "execution_context": { "$ref": "adversaryflow-plan.schema.json#/$defs/executionContext" },
+    "summary": { "$ref": "adversaryflow-plan.schema.json#/$defs/summary" },
+    "stages": { "type": "array", "items": { "$ref": "adversaryflow-plan.schema.json#/$defs/stage" }, "minItems": 1, "maxItems": 32 },
+    "procedures": {
+      "type": "array",
+      "maxItems": 4000,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms", "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure", "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at"],
+        "properties": {
+          "candidate_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "actor_stix_id": { "type": "string", "minLength": 1 },
+          "mapping_data_version": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+          "technique_name": { "type": "string", "minLength": 1 },
+          "tactics": { "type": "array", "items": { "type": "string" } },
+          "platforms": { "type": "array", "items": { "type": "string" } },
+          "source_kind": { "enum": ["csv", "navigator_layer", "stix2_bundle"] },
+          "source_name": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "source_url": { "type": ["string", "null"], "format": "uri" },
+          "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "evidence_quote": { "type": "string", "maxLength": 2000 },
+          "procedure": { "type": "string", "maxLength": 2000 },
+          "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "review_status": { "const": "accepted" },
+          "reviewed_by": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "reviewed_at": { "type": "string", "format": "date-time" },
+          "accepted_by": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "accepted_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

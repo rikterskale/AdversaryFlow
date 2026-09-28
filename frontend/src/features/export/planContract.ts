@@ -1,4 +1,4 @@
-import type { Actor, AttackDomain, Command, WorkflowResponse } from "../../api/contract";
+import type { Actor, AttackDomain, Command, ProcedureEvidence, WorkflowResponse } from "../../api/contract";
 import type { ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
 
@@ -43,7 +43,7 @@ export interface PlanStage {
 }
 
 export interface PlanExport {
-  schema_version: "2.0";
+  schema_version: "2.0" | "3.0";
   tool: "AdversaryFlow";
   tool_version: string;
   data_version: string;
@@ -54,6 +54,7 @@ export interface PlanExport {
   execution_context: { operator: string; target: string };
   summary: PlanSummary;
   stages: PlanStage[];
+  procedures?: ProcedureEvidence[];
 }
 
 const MAX_PLAN_STEPS = 4_000;
@@ -158,12 +159,35 @@ function validateExecution(value: unknown): void {
 }
 
 export function validateImportedPlan(data: unknown): asserts data is PlanExport {
-  const rootKeys = ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages"];
-  if (!isRecord(data) || data.schema_version !== "2.0" || data.tool !== "AdversaryFlow") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  const baseKeys = ["schema_version", "tool", "tool_version", "data_version", "domains", "generated", "actor", "scope", "execution_context", "summary", "stages"];
+  if (!isRecord(data) || (data.schema_version !== "2.0" && data.schema_version !== "3.0") || data.tool !== "AdversaryFlow") throw new Error("This is not an AdversaryFlow 2.0 plan export");
+  const rootKeys = data.schema_version === "3.0" ? [...baseKeys, "procedures"] : baseKeys;
   if (!onlyKeys(data, rootKeys)) throw new Error("Plan contains unknown or missing top-level fields");
   if (!nonEmptyString(data.tool_version) || !nonEmptyString(data.data_version)) throw new Error("Plan is missing its tool or ATT&CK data version");
   if (!dateTime(data.generated)) throw new Error("Plan generated timestamp is invalid");
   validateActor(data.actor);
+  if (data.schema_version === "3.0") {
+    if (!Array.isArray(data.procedures) || data.procedures.length > 4_000) throw new Error("Plan procedure evidence is invalid");
+    const sourceKinds = new Set(["csv", "navigator_layer", "stix2_bundle"]);
+    const actorRecord = data.actor as Record<string, unknown>;
+    data.procedures.forEach((procedure) => {
+      const keys = ["candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms", "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure", "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at"];
+      if (!onlyKeys(procedure, keys) || !nonEmptyString(procedure.candidate_id) || procedure.candidate_id.length > 128
+        || procedure.actor_stix_id !== actorRecord.stix_id || !nonEmptyString(procedure.mapping_data_version) || procedure.mapping_data_version.length > 500
+        || typeof procedure.technique_id !== "string" || !/^T[0-9]{4}(?:\.[0-9]{3})?$/.test(procedure.technique_id)
+        || !nonEmptyString(procedure.technique_name) || !stringArray(procedure.tactics) || !stringArray(procedure.platforms)
+        || typeof procedure.source_kind !== "string" || !sourceKinds.has(procedure.source_kind)
+        || !nonEmptyString(procedure.source_name) || procedure.source_name.length > 300 || !uriOrNull(procedure.source_url)
+        || typeof procedure.source_sha256 !== "string" || !/^[a-fA-F0-9]{64}$/.test(procedure.source_sha256)
+        || typeof procedure.evidence_quote !== "string" || procedure.evidence_quote.length > 2_000
+        || typeof procedure.procedure !== "string" || procedure.procedure.length > 2_000
+        || (procedure.confidence !== null && (typeof procedure.confidence !== "number" || !Number.isFinite(procedure.confidence) || procedure.confidence < 0 || procedure.confidence > 1))
+        || procedure.review_status !== "accepted" || !nonEmptyString(procedure.reviewed_by) || procedure.reviewed_by.length > 120
+        || !dateTime(procedure.reviewed_at) || !nonEmptyString(procedure.accepted_by) || procedure.accepted_by.length > 120 || !dateTime(procedure.accepted_at)) {
+        throw new Error("Plan contains invalid or unaccepted procedure evidence");
+      }
+    });
+  }
   const allowedDomains = new Set(["enterprise", "ics", "mobile"]);
   if (!uniqueStrings(data.domains) || !data.domains.length || data.domains.some((domain) => !allowedDomains.has(domain))) throw new Error("Plan contains an invalid ATT&CK domain");
 

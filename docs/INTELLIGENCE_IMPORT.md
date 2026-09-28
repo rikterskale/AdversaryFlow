@@ -21,17 +21,19 @@ may be named `technique_id`, `attack_id`, `attack_technique`, `external_id`, or
 `id`. Confidence must be an explicit number from 0 to 1.
 
 Every candidate starts in `needs_review`. The operator may accept or reject it
-in the UI and download the review record. Acceptance identifies the reviewer
-and timestamp in that exported record. It is not yet linked to a generated plan
-or stored by the service; those are later workflow and persistence stages.
-The downloaded reviewer name and timestamp are operator-entered metadata, not
-an authenticated signature or server audit event, and the JSON can be edited
-after export.
+in the UI, download the review record, and attach accepted mappings to the
+planning workspace. An attached mapping appears in schema 3.0 plan JSON only
+when the plan actor matches the actor selected during import. Procedure evidence
+keeps the quote, source digest, technique mapping, and reviewer/acceptance
+metadata. Saving that plan as an engagement creates a server-side revision.
+The reviewer name and timestamp remain operator-entered metadata, not an
+authenticated signature; the plan JSON can be edited after export.
 
 Imports are limited to 16 MiB and 4,000 unique candidates. Only HTTPS source
 URLs are accepted. Imported text is rendered as text, and this endpoint does
-not fetch the supplied URL, run commands, or mutate server state. Current
-AdversaryFlow plan JSON remains schema 2.0 and is still accepted independently.
+not fetch the supplied URL or run commands. Schema 2.0 plans remain supported
+for plans without accepted procedure evidence; schema 3.0 is used when accepted
+procedure evidence is attached.
 
 The API accepts raw file content at `POST /api/intelligence/import`. Query
 parameters select `domains`, `actor_stix_id`, `source_kind` (`csv` or `json`),

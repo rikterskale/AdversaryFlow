@@ -130,6 +130,28 @@ export interface ProcedureCandidate {
   }[];
 }
 
+export interface ProcedureEvidence {
+  candidate_id: string;
+  actor_stix_id: string;
+  mapping_data_version: string;
+  technique_id: string;
+  technique_name: string;
+  tactics: string[];
+  platforms: string[];
+  source_kind: ProcedureCandidate["source_kind"];
+  source_name: string;
+  source_url: string | null;
+  source_sha256: string;
+  evidence_quote: string;
+  procedure: string;
+  confidence: number | null;
+  review_status: "accepted";
+  reviewed_by: string;
+  reviewed_at: string;
+  accepted_by: string;
+  accepted_at: string;
+}
+
 export interface IntelligenceImportResponse {
   schema_version: "1.0";
   source: { kind: ProcedureCandidate["source_kind"]; name: string; url: string | null; sha256: string };

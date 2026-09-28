@@ -243,7 +243,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     """Validate the browser's plan export and assign stable occurrence IDs."""
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
-    if document.get("schema_version") != "2.0" or document.get("tool") != "AdversaryFlow":
+    schema_version = document.get("schema_version")
+    if schema_version not in {"2.0", "3.0"} or document.get("tool") != "AdversaryFlow":
         raise ExecutionKitError("Only AdversaryFlow schema 2.0 plans can produce execution kits")
 
     actor = document.get("actor")
@@ -252,6 +253,48 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     stages = document.get("stages")
     if not isinstance(actor, dict) or not isinstance(scope, dict) or not isinstance(context, dict):
         raise ExecutionKitError("Plan metadata is incomplete")
+    if schema_version == "3.0":
+        procedures = document.get("procedures")
+        if not isinstance(procedures, list) or len(procedures) > 4_000:
+            raise ExecutionKitError("Schema 3.0 plan procedure evidence is invalid")
+        candidate_ids = set()
+        procedure_keys = {
+            "candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms",
+            "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure",
+            "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at",
+        }
+        for item in procedures:
+            if not isinstance(item, dict) or set(item) != procedure_keys or item.get("review_status") != "accepted":
+                raise ExecutionKitError("Schema 3.0 plans may include only accepted procedure evidence")
+            if (item.get("actor_stix_id") != actor.get("stix_id")
+                    or not isinstance(item.get("candidate_id"), str) or not item["candidate_id"]
+                    or len(item["candidate_id"]) > 128 or item["candidate_id"] in candidate_ids
+                    or not isinstance(item.get("mapping_data_version"), str) or not item["mapping_data_version"]
+                    or len(item["mapping_data_version"]) > 500
+                    or not isinstance(item.get("technique_id"), str)
+                    or not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(item["technique_id"])
+                    or not isinstance(item.get("technique_name"), str) or not item["technique_name"].strip()
+                    or not isinstance(item.get("tactics"), list) or not all(isinstance(value, str) for value in item["tactics"])
+                    or not isinstance(item.get("platforms"), list) or not all(isinstance(value, str) for value in item["platforms"])
+                    or item.get("source_kind") not in {"csv", "navigator_layer", "stix2_bundle"}
+                    or not isinstance(item.get("source_name"), str) or len(item["source_name"]) > 300
+                    or not item["source_name"].strip()
+                    or (item["source_url"] is not None and (not isinstance(item["source_url"], str)
+                        or len(item["source_url"]) > 2_000 or not item["source_url"].startswith("https://")))
+                    or not isinstance(item.get("source_sha256"), str)
+                    or not re.fullmatch(r"[a-fA-F0-9]{64}", item["source_sha256"])
+                    or not isinstance(item.get("evidence_quote"), str) or len(item["evidence_quote"]) > 2_000
+                    or not isinstance(item.get("procedure"), str) or len(item["procedure"]) > 2_000
+                    or (item.get("confidence") is not None and (isinstance(item["confidence"], bool)
+                        or not isinstance(item["confidence"], (float, int)) or not 0 <= item["confidence"] <= 1))
+                    or not isinstance(item.get("reviewed_by"), str) or not item["reviewed_by"].strip() or len(item["reviewed_by"]) > 120
+                    or not isinstance(item.get("reviewed_at"), str) or not item["reviewed_at"]
+                    or not isinstance(item.get("accepted_by"), str) or not item["accepted_by"].strip() or len(item["accepted_by"]) > 120
+                    or not isinstance(item.get("accepted_at"), str) or not item["accepted_at"]):
+                raise ExecutionKitError("Schema 3.0 plan contains invalid procedure evidence")
+            candidate_ids.add(item["candidate_id"])
+    elif "procedures" in document:
+        raise ExecutionKitError("Schema 2.0 plans cannot contain schema 3.0 procedure evidence")
     if not isinstance(stages, list) or not stages or len(stages) > 32:
         raise ExecutionKitError("Plan must contain between 1 and 32 stages")
 

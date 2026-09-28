@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, AUTH_REQUIRED_EVENT, getActors, getHealth, getSession, getWorkflow, prepareService, previewIntelligenceImport, refreshAttackData, setApiToken } from "../api/client";
-import type { Actor, AttackDomain, SessionResponse } from "../api/contract";
+import type { Actor, AttackDomain, ProcedureEvidence, SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { Dialog } from "../components/Dialog";
 import { EvidenceSnapshots } from "../components/EvidenceSnapshots";
@@ -26,6 +26,7 @@ export function App(): React.JSX.Element {
   const currentStep = useWizardStore((state) => state.currentStep);
   const domains = useWizardStore((state) => state.domains);
   const selectedActor = useWizardStore((state) => state.selectedActor);
+  const procedureEvidence = useWizardStore((state) => state.procedureEvidence);
   const maxStep = useWizardStore((state) => state.maxStep);
   const importedWorkflow = useWizardStore((state) => state.importedWorkflow);
   const savedWorkflow = useWizardStore((state) => state.savedWorkflow);
@@ -36,6 +37,7 @@ export function App(): React.JSX.Element {
   const importPlan = useWizardStore((state) => state.importPlan);
   const resetAfterRefresh = useWizardStore((state) => state.resetAfterRefresh);
   const restart = useWizardStore((state) => state.restart);
+  const attachProcedureEvidence = useWizardStore((state) => state.attachProcedureEvidence);
   const initialWorkspaceStep = useRef<WizardStep>(currentStep);
   const queryClient = useQueryClient();
 
@@ -169,7 +171,11 @@ export function App(): React.JSX.Element {
   };
 
   const beginPlan = (): void => {
-    if (selectedActor || maxStep > 0) restart();
+    if (selectedActor || maxStep > 0) {
+      const acceptedProcedures = procedureEvidence;
+      restart();
+      attachProcedureEvidence(acceptedProcedures);
+    }
     useWizardStore.getState().setStep(1);
   };
 
@@ -189,7 +195,7 @@ export function App(): React.JSX.Element {
       importPlan(value);
       setNotice("Plan imported with its saved guardrails; verify commands and data version before use");
     } catch (error: unknown) {
-      setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 JSON export.");
+      setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.");
     }
   };
 
@@ -212,7 +218,7 @@ export function App(): React.JSX.Element {
   let content: React.JSX.Element;
   let focusKey = "welcome";
   if (startupPhase === "failed" && !canUseSavedPlan) {
-    content = <Welcome actors={actorsQuery.data?.actors ?? []} csrfToken={session?.csrf_token ?? ""} domains={domains} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
+    content = <Welcome actors={actorsQuery.data?.actors ?? []} csrfToken={session?.csrf_token ?? ""} domains={domains} onAttachProcedures={(procedures: ProcedureEvidence[]) => attachProcedureEvidence(procedures)} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
   } else if (startupPhase !== "ready" && !canUseSavedPlan) {
     content = (
       <section className="screen setup-screen">
@@ -223,7 +229,7 @@ export function App(): React.JSX.Element {
       </section>
     );
   } else if (currentStep === 0) {
-    content = <Welcome actors={actorsQuery.data?.actors ?? []} catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} csrfToken={session?.csrf_token ?? ""} domains={domains} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
+    content = <Welcome actors={actorsQuery.data?.actors ?? []} catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} csrfToken={session?.csrf_token ?? ""} domains={domains} onAttachProcedures={(procedures: ProcedureEvidence[]) => attachProcedureEvidence(procedures)} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
   } else if (currentStep === 1 || !selectedActor) {
     focusKey = "actors";
     content = (

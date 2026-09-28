@@ -137,9 +137,10 @@ control-plane work.
 3. The service resolves IDs against the pinned in-memory ATT&CK bundle and
    returns the report-only, ATT&CK-only, and shared sets plus current catalog
    source metadata.
-4. The operator may accept or reject each mapping and download a versioned
-   review record. The service does not persist the record or attach it to an
-   engagement plan yet.
+4. The operator may accept or reject each mapping, download a review record,
+   and attach accepted procedures to the browser planning workspace.
+5. Matching actor procedures are retained as provenance records in schema 3.0
+   plan JSON and included in an explicit server-side engagement revision.
 
 Navigator scores are not treated as mapping confidence. STIX technique
 descriptions and actor relationships are not represented as report quotations.
@@ -147,7 +148,8 @@ CSV can carry a procedure, quotation, confidence, platform, and source URL.
 
 ### Export and handoff
 
-The browser builds the strict schema 2.0 plan record. On the Export step,
+The browser builds a strict schema 2.0 plan, or schema 3.0 when accepted
+procedure evidence is attached. On the Export step,
 **Generate report** requests HTML, presents explicit empty/loading/error/ready
 states, and places the self-contained document in a sandboxed preview.
 
@@ -158,7 +160,7 @@ catalog Sigma references only when explicitly present, complete evidence, and
 categorized gaps. PDF consumes the same generated HTML. Reports contain no
 runnable command text and make no report-time network calls.
 
-`POST /api/report/json` returns the submitted schema 2.0 plan unchanged as the
+`POST /api/report/json` returns the submitted schema-versioned plan unchanged as the
 canonical machine-readable evidence and resume record. It is not a parallel
 report model. The HTML/PDF source-plan digest is calculated from this input.
 

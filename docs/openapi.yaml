@@ -184,7 +184,7 @@ paths:
               type: object
               required: [schema_version, tool, actor, scope, execution_context, stages]
               properties:
-                schema_version: { const: "2.0" }
+                schema_version: { enum: ["2.0", "3.0"] }
                 tool: { const: AdversaryFlow }
                 actor: { type: object }
                 scope: { type: object }
@@ -222,7 +222,7 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
     post:
       summary: Create or append an immutable engagement plan revision
-      description: Validates an AdversaryFlow schema 2.0 plan and stores its pinned ATT&CK data version, revision, and canonical SHA-256 digest in the local SQLite engagement store. Omit engagement_id to create a new engagement.
+      description: Validates an AdversaryFlow schema 2.0 or 3.0 plan and stores its pinned ATT&CK data version, revision, and canonical SHA-256 digest in the local SQLite engagement store. Omit engagement_id to create a new engagement.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -234,7 +234,10 @@ paths:
               required: [plan]
               properties:
                 engagement_id: { type: string, format: uuid }
-                plan: { type: object, description: AdversaryFlow schema 2.0 plan }
+                plan:
+                  oneOf:
+                    - { $ref: "../schemas/adversaryflow-plan.schema.json" }
+                    - { $ref: "../schemas/adversaryflow-plan-v3.schema.json" }
       responses:
         "201":
           description: Stored immutable plan revision
@@ -300,7 +303,7 @@ paths:
               type: object
               required: [schema_version, tool, actor, scope, execution_context, stages]
               properties:
-                schema_version: { const: "2.0" }
+                schema_version: { enum: ["2.0", "3.0"] }
                 tool: { const: AdversaryFlow }
                 actor: { type: object }
                 scope: { type: object }

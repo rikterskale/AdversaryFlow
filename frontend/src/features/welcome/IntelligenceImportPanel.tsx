@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { Actor, AttackDomain, IntelligenceImportResponse, ProcedureCandidate } from "../../api/contract";
+import type { Actor, AttackDomain, IntelligenceImportResponse, ProcedureCandidate, ProcedureEvidence } from "../../api/contract";
 import { Button } from "../../components/Button";
 
 interface IntelligenceImportPanelProps {
@@ -17,6 +17,7 @@ interface IntelligenceImportPanelProps {
     csrfToken: string;
   }) => Promise<IntelligenceImportResponse>;
   onNotice: (message: string) => void;
+  onAttachProcedures: (procedures: ProcedureEvidence[]) => void;
 }
 
 function downloadReviewedCase(value: IntelligenceImportResponse): void {
@@ -29,7 +30,7 @@ function downloadReviewedCase(value: IntelligenceImportResponse): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, onNotice }: IntelligenceImportPanelProps): React.JSX.Element {
+export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, onNotice, onAttachProcedures }: IntelligenceImportPanelProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [actorId, setActorId] = useState(actors[0]?.stix_id ?? "");
@@ -93,6 +94,32 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
     ["ATT&CK only", result.comparison.attack_only],
     ["Both", result.comparison.both],
   ] as const : [];
+  const attachAccepted = (): void => {
+    if (!result) return;
+    const procedures = result.candidates.filter((item) => item.review_status === "accepted").map((item): ProcedureEvidence => ({
+      candidate_id: item.candidate_id,
+      actor_stix_id: result.actor.stix_id,
+      mapping_data_version: result.data_version,
+      technique_id: item.technique_id,
+      technique_name: item.technique_name,
+      tactics: [...item.tactics],
+      platforms: [...item.platforms],
+      source_kind: item.source_kind,
+      source_name: item.source_name,
+      source_url: item.source_url,
+      source_sha256: item.source_sha256,
+      evidence_quote: item.evidence_quote,
+      procedure: item.procedure,
+      confidence: item.confidence,
+      review_status: "accepted",
+      reviewed_by: item.reviewed_by,
+      reviewed_at: item.reviewed_at,
+      accepted_by: item.accepted_by,
+      accepted_at: item.accepted_at,
+    }));
+    onAttachProcedures(procedures);
+    onNotice(`Attached ${procedures.length} accepted procedures to the ${result.actor.name} planning workspace`);
+  };
 
   return (
     <section className="intelligence-import">
@@ -133,12 +160,13 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
                     {candidate.evidence_quote ? <blockquote>{candidate.evidence_quote}</blockquote> : <p className="muted">No report quotation was included in the structured source.</p>}
                     <p className="intelligence-candidate__source">Source: {candidate.source_name}{candidate.source_url ? <> · <a href={candidate.source_url} rel="noreferrer" target="_blank">open source</a></> : " · no source URL"} · catalog: {candidate.catalog_source}</p>
                     {candidate.abilities.length ? <p className="intelligence-candidate__source">Ability fidelity: {candidate.abilities.map((ability) => `${ability.platform} ${ability.fidelity} (${ability.review_status})`).join(" · ")}</p> : null}
-                    <div className="intelligence-candidate__actions"><Button disabled={candidate.review_status === "accepted"} onClick={() => decide(candidate.candidate_id, "accepted")} variant="secondary">Accept mapping</Button><Button disabled={candidate.review_status === "rejected"} onClick={() => decide(candidate.candidate_id, "rejected")} variant="ghost">Reject</Button></div>
+                    <div className="intelligence-candidate__actions"><Button disabled={candidate.review_status === "accepted" || !candidate.technique_known} onClick={() => decide(candidate.candidate_id, "accepted")} variant="secondary">Accept mapping</Button><Button disabled={candidate.review_status === "rejected"} onClick={() => decide(candidate.candidate_id, "rejected")} variant="ghost">Reject</Button></div>
                   </article>
                 ))}
               </div>
               <Button disabled={!result.candidates.some((item) => item.review_status !== "needs_review")} onClick={() => downloadReviewedCase(result)} variant="primary">Download reviewed mapping record</Button>
-              <p className="muted">This record captures analyst decisions for the imported mappings. It does not execute commands or add the mappings to an engagement plan yet.</p>
+              <Button disabled={!result.candidates.some((item) => item.review_status === "accepted")} onClick={attachAccepted} variant="secondary">Attach accepted procedures to planning workspace</Button>
+              <p className="muted">Only accepted mappings are attached. They retain source provenance and reviewer attribution and will appear in a schema 3.0 plan for the matching actor.</p>
             </div>
           ) : null}
         </div>

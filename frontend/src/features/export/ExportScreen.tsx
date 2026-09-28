@@ -54,6 +54,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const scope = useWizardStore((state) => state.scope);
   const engagementId = useWizardStore((state) => state.engagementId);
   const engagementRevision = useWizardStore((state) => state.engagementRevision);
+  const procedureEvidence = useWizardStore((state) => state.procedureEvidence);
   const setEngagementRecord = useWizardStore((state) => state.setEngagementRecord);
   const records = useWorkspaceEvidence(actor, workflow);
   const [kitLoading, setKitLoading] = useState(false);
@@ -62,7 +63,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const [reportPreview, setReportPreview] = useState<ReportPreviewState>({ status: "empty" });
   const [reportDownloadError, setReportDownloadError] = useState<string | null>(null);
   const [restartOpen, setRestartOpen] = useState(false);
-  const bundle = useMemo(() => buildExportBundle(actor, workflow, scope, records, domains), [actor, domains, records, scope, workflow]);
+  const bundle = useMemo(() => buildExportBundle(actor, workflow, scope, records, domains, procedureEvidence), [actor, domains, procedureEvidence, records, scope, workflow]);
   const validationError = useMemo(() => {
     try {
       validateImportedPlan(bundle.plan);
@@ -209,13 +210,13 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         <span aria-hidden="true" className={`export-hero__check ${exportReady ? "" : "is-invalid"}`}><Icon name={exportReady ? "check" : "close"} /></span>
         <p className="eyebrow">Step 4 of 4 · Export kit</p>
         <h1 id="export-title">{exportReady ? "Your emulation plan is ready" : "Your plan needs attention"}</h1>
-        <p>{actor.name} · {actor.attack_id} · {platform} · generated from ATT&amp;CK data <code>{workflow.metadata.data_version}</code></p>
+        <p>{actor.name} · {actor.attack_id} · {platform} · {bundle.plan.procedures?.length ?? 0} accepted procedure citations · generated from ATT&amp;CK data <code>{workflow.metadata.data_version}</code></p>
       </header>
 
       {validationError ? <div className="export-validation" role="alert"><Icon name="shield" /><div><strong>Export is paused</strong><p>{validationError} Return to review or scope, correct the plan, then try again.</p></div></div> : null}
 
       <div className="engagement-save-bar">
-        <div><strong>{engagementId ? `Server engagement · revision ${engagementRevision}` : "Save an auditable server record"}</strong><span>Stores this plan revision, its ATT&amp;CK data version, and a SHA-256 digest on this service.</span></div>
+        <div><strong>{engagementId ? `Server engagement · revision ${engagementRevision}` : "Save an auditable server record"}</strong><span>Stores this plan revision, its ATT&amp;CK data version, and a SHA-256 digest on this service. {bundle.plan.procedures?.length ? `${bundle.plan.procedures.length} accepted procedure citation(s) included.` : "No accepted procedure citations match this actor."}</span></div>
         <Button disabled={!exportReady || engagementLoading || !csrfToken} onClick={() => { void saveEngagement(); }} variant="secondary">
           <Icon className="button-icon" name="save" /> {engagementLoading ? "Saving…" : engagementId ? "Save new revision" : "Save engagement"}
         </Button>
@@ -298,7 +299,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
                 <div aria-label="Report downloads" className="report-downloads">
                   <button aria-label="Download HTML engagement report" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("html"); }} type="button"><Icon name="download" /><span><strong>HTML</strong><small>Self-contained</small></span></button>
                   <button aria-label="Download PDF engagement report" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("pdf"); }} type="button"><Icon name="download" /><span><strong>{reportLoading === "pdf" ? "Building…" : "PDF"}</strong><small>Print-ready</small></span></button>
-                  <button aria-label="Download Schema-versioned JSON" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("json"); }} type="button"><Icon name="download" /><span><strong>{reportLoading === "json" ? "Building…" : "JSON"}</strong><small>Schema 2.0</small></span></button>
+                  <button aria-label="Download Schema-versioned JSON" disabled={Boolean(reportLoading)} onClick={() => { void exportReport("json"); }} type="button"><Icon name="download" /><span><strong>{reportLoading === "json" ? "Building…" : "JSON"}</strong><small>Schema {bundle.plan.schema_version}</small></span></button>
                 </div>
                 {reportDownloadError ? <p className="report-download-error" role="alert">{reportDownloadError}</p> : null}
               </div>
@@ -329,7 +330,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
             <ul>
               <li>Reports never include runnable command bodies.</li>
               <li>Sigma links appear only when the catalog supplies one.</li>
-              <li>JSON keeps the schema 2.0 source record intact.</li>
+              <li>JSON keeps the schema {bundle.plan.schema_version} source record intact, including any accepted procedure evidence.</li>
             </ul>
           </div>
           <Button className="summary-copy" disabled={!exportReady} onClick={() => { void copySummary(); }} variant="ghost"><Icon className="button-icon" name="copy" /> Copy plan summary</Button>

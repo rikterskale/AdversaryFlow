@@ -16,7 +16,12 @@
       "type": "array",
       "items": { "$ref": "#/$defs/revisionSummary" }
     },
-    "latest_plan": { "$ref": "adversaryflow-plan.schema.json" }
+    "latest_plan": {
+      "oneOf": [
+        { "$ref": "adversaryflow-plan.schema.json" },
+        { "$ref": "adversaryflow-plan-v3.schema.json" }
+      ]
+    }
   },
   "$defs": {
     "revisionSummary": {
