@@ -8,16 +8,17 @@ import os
 import re
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import attack_data, content_pack
+from . import attack_data, content_pack, webhook
 
 
 MAX_STORED_ENGAGEMENTS = 10_000
 MAX_REVISIONS_PER_ENGAGEMENT = 2_000
 MAX_AUDIT_EVENTS = 200_000
+MAX_WEBHOOK_DELIVERIES = 200_000
 
 
 class EngagementStoreError(ValueError):
@@ -126,6 +127,24 @@ def initialize() -> None:
             event_digest TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS audit_events_type_idx ON audit_events(event_type, sequence DESC);
+        CREATE TABLE IF NOT EXISTS webhook_outbox (
+            delivery_id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL UNIQUE,
+            engagement_id TEXT NOT NULL REFERENCES engagements(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL,
+            run_id TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            next_attempt_at TEXT NOT NULL,
+            lease_until TEXT,
+            last_attempt_at TEXT,
+            delivered_at TEXT,
+            last_error TEXT,
+            FOREIGN KEY (engagement_id, revision) REFERENCES plan_revisions(engagement_id, revision) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS webhook_outbox_due_idx ON webhook_outbox(status, next_attempt_at);
         """)
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(plan_revisions)").fetchall()}
         if "content_pack_sha256" not in columns:
@@ -216,6 +235,7 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
                              payload={"plan_sha256": digest, "content_pack_sha256": content_pack_sha256,
                                       "data_version": data_version, "scope_sha256": scope_digest,
                                       "technique_count": technique_count})
+        _queue_run_webhooks(connection, key, revision, digest, content_pack_sha256, now)
         connection.execute("COMMIT")
     except Exception:
         if connection.in_transaction:
@@ -445,6 +465,123 @@ def _verify_audit_chain(connection: sqlite3.Connection) -> int:
             raise EngagementStoreError(f"Audit log hash chain verification failed at sequence {row['sequence']}")
         previous = row["event_digest"]
     return count
+
+
+def _queue_run_webhooks(connection: sqlite3.Connection, engagement_id: str, revision: int,
+                        plan_sha256: str, content_pack_sha256: str, created_at: str) -> int:
+    try:
+        if webhook.load_config() is None:
+            return 0
+    except webhook.WebhookConfigurationError as exc:
+        raise EngagementStoreError(str(exc)) from exc
+    runs = connection.execute("SELECT * FROM run_records WHERE engagement_id = ? AND revision = ? ORDER BY run_id",
+                              (engagement_id, revision)).fetchall()
+    if not runs:
+        return 0
+    retained = connection.execute("SELECT COUNT(*) AS n FROM webhook_outbox").fetchone()["n"]
+    if retained + len(runs) > MAX_WEBHOOK_DELIVERIES:
+        raise EngagementStoreError("The run webhook outbox reached its configured capacity; archive or prune delivered events before saving more runs")
+    for run in runs:
+        event_id = str(uuid.uuid4())
+        delivery_id = str(uuid.uuid4())
+        payload = {
+            "schema_version": "1.0", "event": "run_recorded", "event_id": event_id,
+            "occurred_at": created_at, "engagement_id": engagement_id, "revision": revision,
+            "plan_sha256": plan_sha256, "content_pack_sha256": content_pack_sha256,
+            "run": {
+                "run_id": run["run_id"], "platform": run["platform"], "started_at": run["started_at"],
+                "completed_at": run["completed_at"], "result": run["result"],
+                "receipt_count": run["receipt_count"], "receipt_set_sha256": run["receipt_set_sha256"],
+                "telemetry_refs": json.loads(run["telemetry_refs_json"]),
+            },
+        }
+        payload_json, payload_digest = _canonical(payload)
+        connection.execute("""
+            INSERT INTO webhook_outbox
+            (delivery_id, event_id, engagement_id, revision, run_id, payload_json,
+             status, attempts, created_at, next_attempt_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)
+        """, (delivery_id, event_id, engagement_id, revision, run["run_id"], payload_json, created_at, created_at))
+        _insert_audit_event(connection, event_type="run_webhook_queued", principal="service",
+                            entity_type="engagement", entity_id=engagement_id, revision=revision,
+                            payload={"event_id": event_id, "run_id": run["run_id"],
+                                     "payload_sha256": payload_digest})
+    return len(runs)
+
+
+def claim_webhook_deliveries(limit: int = 10) -> List[Dict[str, Any]]:
+    """Lease due notifications for one worker process."""
+    _ensure_initialized()
+    if not 1 <= limit <= 100:
+        raise EngagementStoreError("Webhook delivery claim limit must be 1-100")
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat(timespec="seconds").replace("+00:00", "Z")
+    lease_text = (now + timedelta(seconds=60)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    claimed: List[Dict[str, Any]] = []
+    with _connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            rows = connection.execute("""
+                SELECT delivery_id FROM webhook_outbox
+                WHERE (status = 'pending' AND next_attempt_at <= ?)
+                   OR (status = 'in_flight' AND lease_until <= ?)
+                ORDER BY created_at, delivery_id LIMIT ?
+            """, (now_text, now_text, limit)).fetchall()
+            for item in rows:
+                connection.execute("""
+                    UPDATE webhook_outbox
+                    SET status = 'in_flight', attempts = attempts + 1, last_attempt_at = ?, lease_until = ?
+                    WHERE delivery_id = ?
+                """, (now_text, lease_text, item["delivery_id"]))
+                row = connection.execute("SELECT * FROM webhook_outbox WHERE delivery_id = ?", (item["delivery_id"],)).fetchone()
+                value = dict(row)
+                value["payload"] = json.loads(value.pop("payload_json"))
+                claimed.append(value)
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+    return claimed
+
+
+def complete_webhook_delivery(delivery_id: str, *, success: bool, error: str = "",
+                              max_attempts: int = 12) -> None:
+    """Record delivery success or schedule bounded exponential retry."""
+    _ensure_initialized()
+    with _connect() as connection:
+        row = connection.execute("SELECT attempts FROM webhook_outbox WHERE delivery_id = ?", (delivery_id,)).fetchone()
+        if row is None:
+            raise EngagementStoreError("Webhook delivery was not found")
+        now = datetime.now(timezone.utc)
+        now_text = now.isoformat(timespec="seconds").replace("+00:00", "Z")
+        if success:
+            connection.execute("UPDATE webhook_outbox SET status = 'delivered', delivered_at = ?, lease_until = NULL, last_error = NULL WHERE delivery_id = ?",
+                               (now_text, delivery_id))
+            return
+        attempts = row["attempts"]
+        if attempts >= max_attempts:
+            connection.execute("UPDATE webhook_outbox SET status = 'dead', lease_until = NULL, last_error = ? WHERE delivery_id = ?",
+                               (error[:500], delivery_id))
+            return
+        delays = [5, 15, 60, 300, 900, 3600]
+        delay = delays[min(max(attempts - 1, 0), len(delays) - 1)]
+        next_text = (now + timedelta(seconds=delay)).isoformat(timespec="seconds").replace("+00:00", "Z")
+        connection.execute("UPDATE webhook_outbox SET status = 'pending', next_attempt_at = ?, lease_until = NULL, last_error = ? WHERE delivery_id = ?",
+                           (next_text, error[:500], delivery_id))
+
+
+def list_webhook_deliveries(limit: int = 100) -> List[Dict[str, Any]]:
+    _ensure_initialized()
+    if not 1 <= limit <= 1_000:
+        raise EngagementStoreError("Webhook delivery list limit must be 1-1000")
+    with _connect() as connection:
+        rows = connection.execute("""
+            SELECT delivery_id, event_id, engagement_id, revision, run_id, status, attempts,
+                   created_at, next_attempt_at, last_attempt_at, delivered_at, last_error
+            FROM webhook_outbox ORDER BY created_at DESC, delivery_id DESC LIMIT ?
+        """, (limit,)).fetchall()
+    return [dict(row) for row in rows]
 
 
 def append_audit_event(*, event_type: str, principal: str = "unknown", entity_type: str,

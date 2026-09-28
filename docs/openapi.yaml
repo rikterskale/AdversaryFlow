@@ -292,6 +292,44 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /api/webhook-deliveries:
+    get:
+      summary: List recent run webhook delivery status
+      description: Returns bounded delivery metadata only. Event payloads, configured endpoint, and HMAC secret are never exposed. The route returns an empty list when webhook delivery has never been configured.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+      responses:
+        "200":
+          description: Recent notification status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliveries]
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      type: object
+                      required: [delivery_id, event_id, engagement_id, revision, run_id, status, attempts, created_at, next_attempt_at]
+                      properties:
+                        delivery_id: { type: string, format: uuid }
+                        event_id: { type: string, format: uuid }
+                        engagement_id: { type: string }
+                        revision: { type: integer, minimum: 1 }
+                        run_id: { type: string }
+                        status: { type: string, enum: [pending, in_flight, delivered, dead] }
+                        attempts: { type: integer, minimum: 0 }
+                        created_at: { type: string, format: date-time }
+                        next_attempt_at: { type: string, format: date-time }
+                        last_attempt_at: { type: [string, "null"], format: date-time }
+                        delivered_at: { type: [string, "null"], format: date-time }
+                        last_error: { type: [string, "null"], maxLength: 500 }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /api/ability-backlog/{item_id}:
     patch:
       summary: Assign an owner and update backlog status

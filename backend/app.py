@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, content_pack, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
+from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, content_pack, diagnostics, engagement_store, execution_kit, intelligence_import, reporting, webhook
 
 
 def _frontend_dir() -> str:
@@ -509,6 +509,21 @@ def audit_events_list():
         abort(503, description=str(exc))
 
 
+@app.route("/api/webhook-deliveries", methods=["GET"])
+def webhook_deliveries_list():
+    """Expose delivery state without returning configured URL, secret, or payload."""
+    try:
+        limit = int(request.args.get("limit", "100"))
+    except ValueError:
+        abort(400, description="Webhook delivery limit must be an integer")
+    except engagement_store.EngagementStoreError as exc:
+        abort(400, description=str(exc))
+    try:
+        return jsonify({"deliveries": engagement_store.list_webhook_deliveries(limit)})
+    except engagement_store.EngagementStoreError as exc:
+        abort(400, description=str(exc))
+
+
 @app.route("/api/execution-kit", methods=["POST"])
 def execution_kit_download():
     """Build a portable CSV plus PowerShell/Bash runner without executing it."""
@@ -876,6 +891,8 @@ def main(argv: List[str] | None = None) -> int:
 
     if not args.no_preload:
         _start_bootstrap()
+
+    webhook.start_worker()
 
     from waitress import serve
 

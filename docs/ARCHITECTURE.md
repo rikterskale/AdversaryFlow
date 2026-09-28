@@ -115,6 +115,14 @@ returning a page. Principal labels come from the plan's operator field or are
 `unknown`; they are not authenticated until the identity and role control
 plane is implemented. See [Audit log](AUDIT.md).
 
+When run evidence is saved and the administrator has configured an HTTPS run
+webhook, the same revision transaction adds signed-notification payloads to a
+SQLite outbox. A background worker leases due rows, signs each canonical JSON
+body with HMAC-SHA256, and retries delivery with bounded backoff. This is an
+at-least-once notification channel, not a run executor; the service never
+starts Caldera, Atomic, or Mythic. Delivery status is available from
+`GET /api/webhook-deliveries`.
+
 ## Core request and data flows
 
 ### Startup and ATT&CK preparation

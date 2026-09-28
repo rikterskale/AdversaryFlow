@@ -41,8 +41,32 @@ are structured JSON.
 | Skip startup load | --no-preload | — | Disabled |
 | Open browser | --open | — | Source launcher only |
 | Remote API token | --api-token | ADVERSARYFLOW_API_TOKEN | Unset |
+| Run webhook URL | — | ADVERSARYFLOW_RUN_WEBHOOK_URL | Disabled |
+| Run webhook HMAC secret | — | ADVERSARYFLOW_RUN_WEBHOOK_SECRET | Disabled |
 | Log level | --log-level | ADVERSARYFLOW_LOG_LEVEL | info |
 | Download limit | — | ADVERSARYFLOW_MAX_BUNDLE_BYTES | 128 MiB |
+
+### Run-record webhook
+
+To notify an external system when run evidence is saved with an engagement
+revision, configure both `ADVERSARYFLOW_RUN_WEBHOOK_URL` and
+`ADVERSARYFLOW_RUN_WEBHOOK_SECRET` before starting the service. The endpoint
+must use HTTPS and the secret must contain at least 32 UTF-8 bytes. The service
+does not send the event until the revision and outbox row commit together.
+Delivery is asynchronous, signed with HMAC-SHA256 over the exact JSON body,
+and retried with bounded backoff. Receivers should deduplicate using
+`X-AdversaryFlow-Event-ID`; at-least-once delivery means a receiver can see a
+duplicate after a timeout.
+
+Events are `run_recorded` notifications with engagement/revision digests, run
+summary, receipt-set digest, and telemetry references. Receipt bodies and
+secrets are not included. `GET /api/webhook-deliveries` shows recent delivery
+status and bounded error class metadata, but not the event payload or endpoint.
+Invalid or partial configuration disables delivery; no webhook is sent by
+default. The SQLite outbox retains up to 200,000 events and rejects a revision
+that would exceed that limit rather than dropping notifications. Keep a
+separate backup of the engagement database and configure webhook secrets via
+the service environment, not plan fields.
 
 ## Network boundary
 
