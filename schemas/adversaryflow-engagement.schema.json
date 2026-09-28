@@ -4,7 +4,7 @@
   "title": "AdversaryFlow Engagement Record",
   "description": "Server-persisted engagement metadata and immutable plan revision history.",
   "type": "object",
-  "required": ["id", "actor_id", "actor_name", "data_version", "created_at", "updated_at", "revisions", "latest_plan", "latest_runs"],
+  "required": ["id", "actor_id", "actor_name", "data_version", "created_at", "updated_at", "revisions", "latest_plan", "latest_runs", "latest_content_pack_sha256", "latest_content_packs"],
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "actor_id": { "type": "string", "minLength": 1 },
@@ -22,17 +22,34 @@
         { "$ref": "adversaryflow-plan-v3.schema.json" }
       ]
     },
-    "latest_runs": { "type": "array", "items": { "$ref": "adversaryflow-run.schema.json" } }
+    "latest_runs": { "type": "array", "items": { "$ref": "adversaryflow-run.schema.json" } },
+    "latest_content_pack_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "latest_content_packs": { "type": "array", "items": { "$ref": "#/$defs/contentPackPin" } }
   },
   "$defs": {
     "revisionSummary": {
       "type": "object",
-      "required": ["revision", "schema_version", "plan_sha256", "created_at"],
+      "required": ["revision", "schema_version", "plan_sha256", "content_pack_sha256", "created_at"],
       "properties": {
         "revision": { "type": "integer", "minimum": 1 },
         "schema_version": { "type": "string" },
         "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "content_pack_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "contentPackPin": {
+      "type": "object",
+      "required": ["pack_id", "pack_version", "attack_version", "signer_key_id", "pack_sha256", "ability_count", "detection_binding_count"],
+      "properties": {
+        "pack_id": { "type": "string", "minLength": 1 },
+        "pack_version": { "type": "string", "minLength": 1 },
+        "attack_version": { "type": "string", "minLength": 1 },
+        "signer_key_id": { "type": "string", "minLength": 1 },
+        "pack_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "ability_count": { "type": "integer", "minimum": 0 },
+        "detection_binding_count": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     }

@@ -159,7 +159,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       });
       const saved = await responseJson(response) as EngagementSaveResponse;
       setEngagementRecord(saved.engagement_id, saved.revision);
-      onNotice(`Engagement saved · revision ${saved.revision} · SHA-256 ${saved.plan_sha256.slice(0, 12)}`);
+      const packPin = saved.content_pack_sha256 ? ` · pack set ${saved.content_pack_sha256.slice(0, 12)}` : "";
+      onNotice(`Engagement saved · revision ${saved.revision} · plan SHA-256 ${saved.plan_sha256.slice(0, 12)}${packPin}`);
     } catch (error: unknown) {
       onNotice(error instanceof Error ? `Engagement save failed: ${error.message}` : "The engagement could not be saved.");
     } finally {

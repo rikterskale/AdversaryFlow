@@ -10,6 +10,16 @@ export interface EngagementSaveResponse {
   engagement_id: string;
   revision: number;
   plan_sha256: string;
+  content_pack_sha256?: string;
+  content_packs?: Array<{
+    pack_id: string;
+    pack_version: string;
+    attack_version: string;
+    signer_key_id: string;
+    pack_sha256: string;
+    ability_count: number;
+    detection_binding_count: number;
+  }>;
   created_at: string;
 }
 

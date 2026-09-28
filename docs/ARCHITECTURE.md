@@ -94,8 +94,9 @@ the operator's guardrails.
 When an operator saves an engagement, the service stores its plan on the server
 in SQLite. Revisions are append-only, actor identity cannot change within an
 engagement, and each revision records the source ATT&CK data version, schema
-version, timestamp, and SHA-256 digest. The browser remembers the engagement
-ID to append later revisions. The current store is shared by all users of one
+version, timestamp, plan SHA-256, and verified content-pack-set SHA-256 digest
+with the exact pack IDs, versions, signer keys, and pack hashes. The browser
+remembers the engagement ID to append later revisions. The current store is shared by all users of one
 service installation; project isolation and identity-backed roles remain future
 control-plane work.
 

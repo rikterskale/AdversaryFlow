@@ -449,7 +449,8 @@ def engagements():
     except (execution_kit.ExecutionKitError, engagement_store.EngagementStoreError) as exc:
         abort(400, description=str(exc))
     _log_event("engagement_revision_saved", engagement_id=saved["engagement_id"],
-               revision=saved["revision"], plan_sha256=saved["plan_sha256"])
+               revision=saved["revision"], plan_sha256=saved["plan_sha256"],
+               content_pack_sha256=saved["content_pack_sha256"])
     return jsonify(saved), 201
 
 

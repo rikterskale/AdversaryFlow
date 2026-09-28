@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import attack_data
+from . import attack_data, content_pack
 
 
 MAX_STORED_ENGAGEMENTS = 10_000
@@ -68,6 +68,8 @@ def initialize() -> None:
             revision INTEGER NOT NULL,
             schema_version TEXT NOT NULL,
             plan_sha256 TEXT NOT NULL,
+            content_pack_sha256 TEXT NOT NULL DEFAULT '',
+            content_packs_json TEXT NOT NULL DEFAULT '[]',
             plan_json TEXT NOT NULL,
             created_at TEXT NOT NULL,
             PRIMARY KEY (engagement_id, revision)
@@ -108,6 +110,14 @@ def initialize() -> None:
         );
         CREATE INDEX IF NOT EXISTS run_records_run_idx ON run_records(run_id);
         """)
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(plan_revisions)").fetchall()}
+        if "content_pack_sha256" not in columns:
+            connection.execute("ALTER TABLE plan_revisions ADD COLUMN content_pack_sha256 TEXT NOT NULL DEFAULT ''")
+        if "content_packs_json" not in columns:
+            connection.execute("ALTER TABLE plan_revisions ADD COLUMN content_packs_json TEXT NOT NULL DEFAULT '[]'")
+        empty_pack_digest = _canonical({"packs": []})[1]
+        connection.execute("UPDATE plan_revisions SET content_pack_sha256 = ? WHERE content_pack_sha256 = ''",
+                           (empty_pack_digest,))
 
 
 def _ensure_initialized() -> None:
@@ -129,6 +139,12 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
         raise EngagementStoreError("Plan actor and ATT&CK data version are required")
     schema_version = str(plan.get("schema_version") or "")
     plan_json, digest = _canonical(plan)
+    try:
+        content_packs, _, _ = content_pack.installed_packs()
+    except content_pack.ContentPackError as exc:
+        raise EngagementStoreError(f"Cannot pin an invalid content-pack set: {exc}") from exc
+    content_packs.sort(key=lambda item: item["pack_id"])
+    content_packs_json, content_pack_sha256 = _canonical({"packs": content_packs})
     now = _utc_now()
     if engagement_id is not None:
         if not isinstance(engagement_id, str):
@@ -167,8 +183,8 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
         if revision > MAX_REVISIONS_PER_ENGAGEMENT:
             raise EngagementStoreError("This engagement reached the revision limit")
         connection.execute(
-            "INSERT INTO plan_revisions (engagement_id, revision, schema_version, plan_sha256, plan_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (key, revision, schema_version, digest, plan_json, now),
+            "INSERT INTO plan_revisions (engagement_id, revision, schema_version, plan_sha256, content_pack_sha256, content_packs_json, plan_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (key, revision, schema_version, digest, content_pack_sha256, content_packs_json, plan_json, now),
         )
         _persist_run_records(connection, key, revision, plan, now)
         connection.execute("COMMIT")
@@ -178,7 +194,8 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
         raise
     finally:
         connection.close()
-    return {"engagement_id": key, "revision": revision, "plan_sha256": digest, "created_at": now}
+    return {"engagement_id": key, "revision": revision, "plan_sha256": digest,
+            "content_pack_sha256": content_pack_sha256, "content_packs": content_packs, "created_at": now}
 
 
 def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
@@ -188,7 +205,7 @@ def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute("""
             SELECT e.id, e.actor_id, e.actor_name, e.data_version, e.created_at, e.updated_at,
-                   r.revision, r.schema_version, r.plan_sha256
+                   r.revision, r.schema_version, r.plan_sha256, r.content_pack_sha256
             FROM engagements AS e
             JOIN plan_revisions AS r ON r.engagement_id = e.id
             WHERE r.revision = (SELECT MAX(r2.revision) FROM plan_revisions AS r2 WHERE r2.engagement_id = e.id)
@@ -205,11 +222,11 @@ def get_engagement(engagement_id: str) -> Optional[Dict[str, Any]]:
         if row is None:
             return None
         revisions = connection.execute(
-            "SELECT revision, schema_version, plan_sha256, created_at FROM plan_revisions WHERE engagement_id = ? ORDER BY revision DESC",
+            "SELECT revision, schema_version, plan_sha256, content_pack_sha256, created_at FROM plan_revisions WHERE engagement_id = ? ORDER BY revision DESC",
             (engagement_id,),
         ).fetchall()
         latest = connection.execute(
-            "SELECT plan_json FROM plan_revisions WHERE engagement_id = ? ORDER BY revision DESC LIMIT 1",
+            "SELECT plan_json, content_pack_sha256, content_packs_json FROM plan_revisions WHERE engagement_id = ? ORDER BY revision DESC LIMIT 1",
             (engagement_id,),
         ).fetchone()
         latest_revision = revisions[0]["revision"] if revisions else None
@@ -220,6 +237,8 @@ def get_engagement(engagement_id: str) -> Optional[Dict[str, Any]]:
     result = dict(row)
     result["revisions"] = [dict(item) for item in revisions]
     result["latest_plan"] = json.loads(latest["plan_json"]) if latest else None
+    result["latest_content_pack_sha256"] = latest["content_pack_sha256"] if latest else None
+    result["latest_content_packs"] = json.loads(latest["content_packs_json"]) if latest else []
     result["latest_runs"] = [_run_record(item) for item in runs]
     return result
 
@@ -241,13 +260,14 @@ def get_revision(engagement_id: str, revision: int) -> Optional[Dict[str, Any]]:
     _ensure_initialized()
     with _connect() as connection:
         row = connection.execute(
-            "SELECT engagement_id, revision, schema_version, plan_sha256, plan_json, created_at FROM plan_revisions WHERE engagement_id = ? AND revision = ?",
+        "SELECT engagement_id, revision, schema_version, plan_sha256, content_pack_sha256, content_packs_json, plan_json, created_at FROM plan_revisions WHERE engagement_id = ? AND revision = ?",
             (engagement_id, revision),
         ).fetchone()
     if row is None:
         return None
     result = dict(row)
     result["plan"] = json.loads(result.pop("plan_json"))
+    result["content_packs"] = json.loads(result.pop("content_packs_json"))
     result["runs"] = list_run_records(engagement_id, revision, limit=4_000)
     return result
 

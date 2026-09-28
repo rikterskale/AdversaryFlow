@@ -172,11 +172,15 @@ def _validate_binding(raw: Any) -> Dict[str, Any]:
     return dict(raw)
 
 
-def _safe_zip(path: Path) -> Dict[str, bytes]:
+def _safe_zip(path: Path) -> Tuple[Dict[str, bytes], str]:
     try:
         if path.stat().st_size > MAX_PACK_BYTES:
             raise ContentPackError("Content pack exceeds the compressed size limit")
-        with zipfile.ZipFile(path, "r") as archive:
+        raw = path.read_bytes()
+        if len(raw) > MAX_PACK_BYTES:
+            raise ContentPackError("Content pack exceeds the compressed size limit")
+        pack_sha256 = _digest(raw)
+        with zipfile.ZipFile(io.BytesIO(raw), "r") as archive:
             infos = archive.infolist()
             if not infos or len(infos) > len(ALLOWED_FILES) + 1:
                 raise ContentPackError("Content pack has an unexpected number of files")
@@ -195,7 +199,7 @@ def _safe_zip(path: Path) -> Dict[str, bytes]:
                 files[info.filename] = archive.read(info)
             if "manifest.json" not in files or "abilities.json" not in files:
                 raise ContentPackError("Content pack must include manifest.json and abilities.json")
-            return files
+            return files, pack_sha256
     except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         if isinstance(exc, ContentPackError):
             raise
@@ -204,7 +208,7 @@ def _safe_zip(path: Path) -> Dict[str, bytes]:
 
 def verify_pack(path: str | Path, trusted_keys: Optional[str] = None) -> Dict[str, Any]:
     """Verify signature, payload digests, abilities, and optional detection bindings."""
-    files = _safe_zip(Path(path))
+    files, pack_sha256 = _safe_zip(Path(path))
     try:
         manifest = json.loads(files["manifest.json"].decode("utf-8"))
         abilities_doc = json.loads(files["abilities.json"].decode("utf-8"))
@@ -255,6 +259,7 @@ def verify_pack(path: str | Path, trusted_keys: Optional[str] = None) -> Dict[st
     return {
         "schema_version": "1.0", "pack_id": manifest["pack_id"], "pack_version": manifest["pack_version"],
         "attack_version": manifest["attack_version"], "signer_key_id": manifest["signer_key_id"],
+        "pack_sha256": pack_sha256,
         "files": sorted(file_digests), "ability_count": len(abilities), "detection_binding_count": len(bindings),
         "abilities": abilities, "detection_bindings": bindings,
     }
@@ -344,7 +349,7 @@ def installed_packs(directory: Optional[str] = None) -> Tuple[List[Dict[str, Any
         if verified["pack_id"] in pack_ids:
             raise ContentPackError(f"Multiple installed versions found for content pack {verified['pack_id']}")
         pack_ids.add(verified["pack_id"])
-        summaries.append({key: verified[key] for key in ("pack_id", "pack_version", "attack_version", "signer_key_id", "ability_count", "detection_binding_count")})
+        summaries.append({key: verified[key] for key in ("pack_id", "pack_version", "attack_version", "signer_key_id", "pack_sha256", "ability_count", "detection_binding_count")})
         for ability in verified["abilities"]:
             key = (ability["technique_id"], ability["platform"])
             existing = abilities.get(key)

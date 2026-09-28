@@ -307,7 +307,7 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
     post:
       summary: Create or append an immutable engagement plan revision
-      description: Validates an AdversaryFlow schema 2.0 or 3.0 plan and stores its pinned ATT&CK data version, revision, and canonical SHA-256 digest in the local SQLite engagement store. Omit engagement_id to create a new engagement.
+      description: Validates an AdversaryFlow schema 2.0 or 3.0 plan and stores its pinned ATT&CK data version, revision, canonical plan digest, and verified content-pack set digest in the local SQLite engagement store. Omit engagement_id to create a new engagement.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
       requestBody:
@@ -330,11 +330,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [engagement_id, revision, plan_sha256, created_at]
+                required: [engagement_id, revision, plan_sha256, content_pack_sha256, content_packs, created_at]
                 properties:
                   engagement_id: { type: string, format: uuid }
                   revision: { type: integer, minimum: 1 }
                   plan_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                  content_pack_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                  content_packs: { type: array, items: { type: object } }
                   created_at: { type: string, format: date-time }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
@@ -484,7 +486,7 @@ components:
   schemas:
     EngagementSummary:
       type: object
-      required: [id, actor_id, actor_name, data_version, created_at, updated_at, revision, schema_version, plan_sha256]
+      required: [id, actor_id, actor_name, data_version, created_at, updated_at, revision, schema_version, plan_sha256, content_pack_sha256]
       properties:
         id: { type: string, format: uuid }
         actor_id: { type: string }
@@ -495,6 +497,7 @@ components:
         revision: { type: integer }
         schema_version: { type: string }
         plan_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        content_pack_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
     Actor:
       type: object
       required: [stix_id, attack_id, name, type, aliases, description, technique_count]

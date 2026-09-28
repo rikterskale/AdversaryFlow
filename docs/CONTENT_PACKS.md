@@ -74,8 +74,7 @@ are reported as a coverage gap.
 Ed25519 signatures prove that a holder of a configured private key signed the
 manifest. They do not prove the rule or ability is effective, safe in every
 environment, or independently reviewed. Keep private keys in the organization's
-signing system, protect public-key configuration as deployment policy, rotate
-key IDs deliberately, and retain the `.afpack` file and its manifest with the
-engagement record. The current local service reports the verified pack IDs and
-versions, but does not yet persist a pack-set digest with each engagement
-revision; that is a remaining audit/control-plane item.
+signing system, protect public-key configuration as deployment policy, and
+rotate key IDs deliberately. Each saved engagement revision now records the
+content-pack-set digest and exact pack IDs, versions, signer keys, and pack
+hashes, so later pack updates do not rewrite its recorded content provenance.
