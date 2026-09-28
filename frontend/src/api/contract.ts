@@ -6,6 +6,13 @@ export interface SessionResponse {
   version: string;
 }
 
+export interface EngagementSaveResponse {
+  engagement_id: string;
+  revision: number;
+  plan_sha256: string;
+  created_at: string;
+}
+
 export interface Actor {
   stix_id: string;
   attack_id: string;

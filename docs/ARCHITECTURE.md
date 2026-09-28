@@ -41,6 +41,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/attack_data.py` | Downloads, validates, hashes, caches, and indexes the official STIX bundles; derives live tactic order | Only the configured MITRE source is accepted |
 | `backend/intelligence_import.py` | Parses bounded CSV, ATT&CK Navigator layer, and STIX 2.1 input into provenance-hashed review candidates and computes technique diffs | Imports remain unaccepted; source URLs are recorded but never fetched |
 | `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
+| `backend/engagement_store.py` | Stores engagements and immutable plan revisions in SQLite with pinned ATT&CK data version and canonical plan digest | Local single-install store; digest detects changes but is not a digital signature |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
 | `backend/lab_exercises.py` | Portable bounded synthetic exercise families and digest-protected receipts | Runs only when an operator invokes the exported script on a lab host |
@@ -87,6 +88,14 @@ the previous workflow, scope, and evidence as a restorable snapshot. The active
 workflow is also saved so a feed outage does not prevent reviewing existing
 work or downloading JSON. Imported command trust is tracked separately from
 the operator's guardrails.
+
+When an operator saves an engagement, the service stores its plan on the server
+in SQLite. Revisions are append-only, actor identity cannot change within an
+engagement, and each revision records the source ATT&CK data version, schema
+version, timestamp, and SHA-256 digest. The browser remembers the engagement
+ID to append later revisions. The current store is shared by all users of one
+service installation; project isolation and identity-backed roles remain future
+control-plane work.
 
 ## Core request and data flows
 
@@ -157,6 +166,13 @@ report model. The HTML/PDF source-plan digest is calculated from this input.
 integrity-bound ZIP. The kit is moved offline to the disposable host. Its
 PowerShell or Bash runner shows the exact step and safety metadata, then asks
 the operator to run, edit, skip, or abort. It never calls the web service.
+
+`POST /api/engagements` creates a server engagement or appends an immutable
+revision. The read-only list, engagement, and revision routes expose the stored
+record and digest for retrieval. Saving is an explicit export-screen action;
+regular browser evidence autosave remains local. Each persisted plan pins the
+ATT&CK feed version that produced it, so refreshing the feed does not rewrite
+prior revisions.
 
 ## Trust boundaries and controls
 

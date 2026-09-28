@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adversaryflow.local/schemas/adversaryflow-engagement.schema.json",
+  "title": "AdversaryFlow Engagement Record",
+  "description": "Server-persisted engagement metadata and immutable plan revision history.",
+  "type": "object",
+  "required": ["id", "actor_id", "actor_name", "data_version", "created_at", "updated_at", "revisions", "latest_plan"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "actor_name": { "type": "string", "minLength": 1 },
+    "data_version": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "revisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/revisionSummary" }
+    },
+    "latest_plan": { "$ref": "adversaryflow-plan.schema.json" }
+  },
+  "$defs": {
+    "revisionSummary": {
+      "type": "object",
+      "required": ["revision", "schema_version", "plan_sha256", "created_at"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 1 },
+        "schema_version": { "type": "string" },
+        "plan_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -32,6 +32,8 @@ interface WizardState {
   importedWorkflow: WorkflowResponse | null;
   savedWorkflow: WorkflowResponse | null;
   evidenceArchive: Record<string, EvidenceSnapshot>;
+  engagementId: string | null;
+  engagementRevision: number | null;
   setStep: (step: WizardStep) => void;
   setDomains: (domains: AttackDomain[]) => void;
   selectActor: (actor: Actor | null) => void;
@@ -43,6 +45,7 @@ interface WizardState {
   importPlan: (plan: PlanExport) => void;
   resetAfterRefresh: () => void;
   restart: () => void;
+  setEngagementRecord: (id: string | null, revision: number | null) => void;
 }
 
 let storageWriteFailed = false;
@@ -65,7 +68,7 @@ export function consumeStorageWriteFailure(): boolean {
   return failed;
 }
 
-function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains" | "selectedActor" | "scope" | "scopeInitializedFor" | "evidenceKey" | "records" | "importedWorkflow" | "savedWorkflow" | "evidenceArchive"> {
+function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains" | "selectedActor" | "scope" | "scopeInitializedFor" | "evidenceKey" | "records" | "importedWorkflow" | "savedWorkflow" | "evidenceArchive" | "engagementId" | "engagementRevision"> {
   return {
     currentStep: 0,
     maxStep: 0,
@@ -78,6 +81,8 @@ function initialState(): Pick<WizardState, "currentStep" | "maxStep" | "domains"
     importedWorkflow: null,
     savedWorkflow: null,
     evidenceArchive: {},
+    engagementId: null,
+    engagementRevision: null,
   };
 }
 
@@ -113,6 +118,8 @@ export const useWizardStore = create<WizardState>()(
           importedWorkflow: null,
           savedWorkflow: null,
           evidenceArchive: {},
+          engagementId: null,
+          engagementRevision: null,
         } : {}),
       })),
       initializeScope: (actorId, tactics) => set((state) => state.scopeInitializedFor === actorId
@@ -135,6 +142,7 @@ export const useWizardStore = create<WizardState>()(
           ...switchEvidence(state, key), selectedActor: snapshot.actor, domains: snapshot.domains,
           scope: snapshot.scope, scopeInitializedFor: snapshot.actor.stix_id,
           importedWorkflow: snapshot.workflow, savedWorkflow: snapshot.workflow, currentStep: 3, maxStep: 4,
+          engagementId: null, engagementRevision: null,
         };
       }),
       updateEvidence: (techniqueId, patch) => set((state) => {
@@ -164,6 +172,8 @@ export const useWizardStore = create<WizardState>()(
           importedWorkflow: workflowFromImportedPlan(plan),
           savedWorkflow: workflowFromImportedPlan(plan),
           evidenceArchive: {},
+          engagementId: null,
+          engagementRevision: null,
         });
       },
       resetAfterRefresh: () => set((state) => ({
@@ -177,8 +187,11 @@ export const useWizardStore = create<WizardState>()(
         importedWorkflow: null,
         savedWorkflow: null,
         evidenceArchive: {},
+        engagementId: null,
+        engagementRevision: null,
       })),
       restart: () => set(initialState()),
+      setEngagementRecord: (engagementId, engagementRevision) => set({ engagementId, engagementRevision }),
     }),
     {
       name: "adversaryflow-wizard-v3",
@@ -194,6 +207,8 @@ export const useWizardStore = create<WizardState>()(
         importedWorkflow: state.importedWorkflow,
         savedWorkflow: state.savedWorkflow,
         evidenceArchive: state.evidenceArchive,
+        engagementId: state.engagementId,
+        engagementRevision: state.engagementRevision,
       }),
       storage: createJSONStorage(() => resilientStorage),
     },

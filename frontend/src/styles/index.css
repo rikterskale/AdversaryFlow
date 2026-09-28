@@ -561,6 +561,12 @@ main { width: 100%; }
 .export-validation > svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--danger); }
 .export-validation strong { display: block; color: var(--danger); font-size: 11px; }
 .export-validation p { margin: 2px 0 0; color: var(--text-muted); font-size: 10px; }
+.engagement-save-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(980px, 100%); margin: 0 auto 24px; border: 1px solid color-mix(in srgb, var(--primary) 27%, var(--border)); border-radius: 11px; padding: 13px 16px; background: color-mix(in srgb, var(--primary) 4%, var(--surface)); }
+.engagement-save-bar > div { min-width: 0; }
+.engagement-save-bar strong, .engagement-save-bar span { display: block; }
+.engagement-save-bar strong { font-size: 11px; }
+.engagement-save-bar span { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
+.engagement-save-bar button { flex: 0 0 auto; }
 .export-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: min(780px, 100%); margin: 31px auto 37px; }
 .statbox { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px; background: color-mix(in srgb, var(--surface-elevated) 88%, transparent); text-align: left; }
 .statbox strong { display: block; color: var(--text); font-family: ui-monospace, "Cascadia Code", monospace; font-size: 25px; line-height: 1; }
@@ -767,6 +773,7 @@ main { width: 100%; }
   .cmd__cleanup { align-items: stretch; flex-direction: column; }
   .review-actionbar > .button:first-child { width: auto; align-self: flex-start; }
   .export-stats { grid-template-columns: 1fr 1fr; }
+  .engagement-save-bar { align-items: flex-start; flex-direction: column; }
   .export-section-heading, .handoff-guide__head { align-items: flex-start; flex-direction: column; }
   .kit-card { grid-template-columns: 1fr; }
   .kit-card__action { grid-column: 1; }

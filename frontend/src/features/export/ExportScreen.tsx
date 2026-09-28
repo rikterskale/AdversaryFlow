@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { apiFetch, responseJson } from "../../api/client";
-import type { Actor, AttackDomain, WorkflowResponse } from "../../api/contract";
+import type { Actor, AttackDomain, EngagementSaveResponse, WorkflowResponse } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
@@ -52,8 +52,12 @@ function contentDispositionFilename(value: string | null, fallback: string): str
 
 export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNotice, onRestart }: ExportScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
+  const engagementId = useWizardStore((state) => state.engagementId);
+  const engagementRevision = useWizardStore((state) => state.engagementRevision);
+  const setEngagementRecord = useWizardStore((state) => state.setEngagementRecord);
   const records = useWorkspaceEvidence(actor, workflow);
   const [kitLoading, setKitLoading] = useState(false);
+  const [engagementLoading, setEngagementLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState<ReportFormat | null>(null);
   const [reportPreview, setReportPreview] = useState<ReportPreviewState>({ status: "empty" });
   const [reportDownloadError, setReportDownloadError] = useState<string | null>(null);
@@ -113,6 +117,25 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       onNotice(error instanceof Error ? error.message : "Execution kit generation failed. Check service health and try again.");
     } finally {
       setKitLoading(false);
+    }
+  };
+
+  const saveEngagement = async (): Promise<void> => {
+    if (engagementLoading || validationError || !csrfToken) return;
+    setEngagementLoading(true);
+    try {
+      const response = await apiFetch("/api/engagements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
+        body: JSON.stringify({ plan: bundle.plan, ...(engagementId ? { engagement_id: engagementId } : {}) }),
+      });
+      const saved = await responseJson(response) as EngagementSaveResponse;
+      setEngagementRecord(saved.engagement_id, saved.revision);
+      onNotice(`Engagement saved · revision ${saved.revision} · SHA-256 ${saved.plan_sha256.slice(0, 12)}`);
+    } catch (error: unknown) {
+      onNotice(error instanceof Error ? `Engagement save failed: ${error.message}` : "The engagement could not be saved.");
+    } finally {
+      setEngagementLoading(false);
     }
   };
 
@@ -190,6 +213,13 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       </header>
 
       {validationError ? <div className="export-validation" role="alert"><Icon name="shield" /><div><strong>Export is paused</strong><p>{validationError} Return to review or scope, correct the plan, then try again.</p></div></div> : null}
+
+      <div className="engagement-save-bar">
+        <div><strong>{engagementId ? `Server engagement · revision ${engagementRevision}` : "Save an auditable server record"}</strong><span>Stores this plan revision, its ATT&amp;CK data version, and a SHA-256 digest on this service.</span></div>
+        <Button disabled={!exportReady || engagementLoading || !csrfToken} onClick={() => { void saveEngagement(); }} variant="secondary">
+          <Icon className="button-icon" name="save" /> {engagementLoading ? "Saving…" : engagementId ? "Save new revision" : "Save engagement"}
+        </Button>
+      </div>
 
       <div aria-label="Plan summary" className="export-stats">
         <div className="statbox"><strong>{bundle.preview.total}</strong><span>Techniques</span></div>

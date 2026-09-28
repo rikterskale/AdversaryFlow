@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, ability_model, attack_data, command_catalog, diagnostics, execution_kit, intelligence_import, reporting
+from . import __version__, ability_model, attack_data, command_catalog, diagnostics, engagement_store, execution_kit, intelligence_import, reporting
 
 
 def _frontend_dir() -> str:
@@ -92,6 +92,8 @@ def begin_request() -> None:
     if request.path == "/api/intelligence/import":
         request.max_content_length = intelligence_import.MAX_IMPORT_BYTES
     if request.path == "/api/execution-kit" or request.path.startswith("/api/report/"):
+        request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
+    if request.path == "/api/engagements" or request.path.startswith("/api/engagements/"):
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
         supplied = request.headers.get("Authorization", "")
@@ -421,6 +423,52 @@ def intelligence_import_preview():
         "comparison": comparison,
         "candidates": enriched_candidates,
     })
+
+
+@app.route("/api/engagements", methods=["GET", "POST"])
+def engagements():
+    """Persist immutable plan revisions and list saved engagement records."""
+    if request.method == "GET":
+        try:
+            limit = int(request.args.get("limit", "50"))
+            return jsonify({"engagements": engagement_store.list_engagements(limit)})
+        except (ValueError, engagement_store.EngagementStoreError) as exc:
+            abort(400, description=str(exc))
+
+    _require_csrf()
+    document = request.get_json(silent=True)
+    if not isinstance(document, dict) or not isinstance(document.get("plan"), dict):
+        abort(400, description="A JSON plan object is required")
+    try:
+        # Reuse the execution-kit validator to enforce the published 2.0
+        # contract without requiring that the plan contain a runnable step.
+        execution_kit.normalize_plan(document["plan"], require_executable=False)
+        saved = engagement_store.save_revision(document["plan"], document.get("engagement_id"))
+    except (execution_kit.ExecutionKitError, engagement_store.EngagementStoreError) as exc:
+        abort(400, description=str(exc))
+    _log_event("engagement_revision_saved", engagement_id=saved["engagement_id"],
+               revision=saved["revision"], plan_sha256=saved["plan_sha256"])
+    return jsonify(saved), 201
+
+
+@app.route("/api/engagements/<engagement_id>")
+def engagement_detail(engagement_id: str):
+    if not REQUEST_ID_PATTERN.fullmatch(engagement_id):
+        abort(400, description="Invalid engagement ID")
+    result = engagement_store.get_engagement(engagement_id)
+    if result is None:
+        abort(404, description="Engagement was not found")
+    return jsonify(result)
+
+
+@app.route("/api/engagements/<engagement_id>/revisions/<int:revision>")
+def engagement_revision(engagement_id: str, revision: int):
+    if not REQUEST_ID_PATTERN.fullmatch(engagement_id) or revision < 1:
+        abort(400, description="Invalid engagement revision")
+    result = engagement_store.get_revision(engagement_id, revision)
+    if result is None:
+        abort(404, description="Engagement revision was not found")
+    return jsonify(result)
 
 
 @app.route("/api/execution-kit", methods=["POST"])

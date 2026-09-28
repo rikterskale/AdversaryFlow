@@ -200,6 +200,88 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
+  /api/engagements:
+    get:
+      summary: List saved engagement records
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Latest revision metadata for each saved engagement
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [engagements]
+                properties:
+                  engagements: { type: array, items: { $ref: "#/components/schemas/EngagementSummary" } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create or append an immutable engagement plan revision
+      description: Validates an AdversaryFlow schema 2.0 plan and stores its pinned ATT&CK data version, revision, and canonical SHA-256 digest in the local SQLite engagement store. Omit engagement_id to create a new engagement.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties:
+                engagement_id: { type: string, format: uuid }
+                plan: { type: object, description: AdversaryFlow schema 2.0 plan }
+      responses:
+        "201":
+          description: Stored immutable plan revision
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [engagement_id, revision, plan_sha256, created_at]
+                properties:
+                  engagement_id: { type: string, format: uuid }
+                  revision: { type: integer, minimum: 1 }
+                  plan_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+                  created_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+  /api/engagements/{engagement_id}:
+    get:
+      summary: Retrieve an engagement and its revision history
+      parameters:
+        - { name: engagement_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Engagement metadata, revision digests, and the latest plan
+          content:
+            application/json:
+              schema: { $ref: "../schemas/adversaryflow-engagement.schema.json" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/engagements/{engagement_id}/revisions/{revision}:
+    get:
+      summary: Retrieve a specific immutable plan revision
+      parameters:
+        - { name: engagement_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: revision, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: The plan, schema version, creation time, and canonical digest
+          content:
+            application/json:
+              schema: { type: object, required: [engagement_id, revision, schema_version, plan_sha256, created_at, plan] }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/report/{report_format}:
     post:
       summary: Generate a purple-team engagement report artifact
@@ -290,6 +372,19 @@ components:
         default: enterprise
         examples: [enterprise, "enterprise,ics,mobile"]
   schemas:
+    EngagementSummary:
+      type: object
+      required: [id, actor_id, actor_name, data_version, created_at, updated_at, revision, schema_version, plan_sha256]
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string }
+        actor_name: { type: string }
+        data_version: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        revision: { type: integer }
+        schema_version: { type: string }
+        plan_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
     Actor:
       type: object
       required: [stix_id, attack_id, name, type, aliases, description, technique_count]
