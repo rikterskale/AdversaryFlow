@@ -27,7 +27,6 @@ class EngagementReportingTests(unittest.TestCase):
         self.assertEqual(report.coverage.attack_detection_mapped, 1)
         self.assertEqual(report.coverage.sigma_mapped, 0)
         self.assertEqual(Counter(gap.category for gap in report.gaps), {
-            "Sigma mapping": 2,
             "Catalog fidelity": 1,
             "Execution coverage": 1,
             "Detection validation": 1,
@@ -84,7 +83,7 @@ class EngagementReportingTests(unittest.TestCase):
         }
 
         report = build_report(document)
-        self.assertEqual({gap.category for gap in report.gaps}, {"Sigma mapping"})
+        self.assertEqual({gap.category for gap in report.gaps}, set())
         self.assertEqual(report.recorded, 1)
         self.assertEqual(report.detection_assessed, 1)
         self.assertEqual(report.alerted, 1)

@@ -113,9 +113,10 @@ or `json`. HTML and PDF contain:
 | Outcomes and evidence | The technique's schema 2.0 `execution` record |
 | Coverage gaps | Deterministic counts and findings computed from the fields above |
 
-The current catalog does not declare a Sigma-reference field. Reports
-therefore emit no Sigma links and mark **Sigma mapping** as a gap. This is not a
-claim that a community rule does not exist. Adding such a link requires an
+The current catalog does not declare a Sigma-reference field. Reports emit no
+Sigma links and make no per-technique Sigma coverage claim; the missing field
+is an active-catalog limitation, not a generated gap for every technique. This
+is not a claim that a community rule does not exist. Adding a link requires an
 explicit reviewed catalog field; report generation never searches for rules or
 contacts the network.
 

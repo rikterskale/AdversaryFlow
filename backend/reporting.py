@@ -329,9 +329,9 @@ def _coverage_gaps(techniques: Iterable[ReportTechnique]) -> Tuple[CoverageGap, 
         if not item.detection_guidance:
             gaps.append(CoverageGap("ATT&CK detection mapping", item.technique_id, item.technique_name,
                                     "The exported ATT&CK record does not contain detection guidance."))
-        if not item.sigma_references:
-            gaps.append(CoverageGap("Sigma mapping", item.technique_id, item.technique_name,
-                                    "The catalog does not carry a Sigma rule reference for this technique."))
+        # An absent field in the active catalog is a product capability limit,
+        # not a technique-specific detection gap. Report explicit references
+        # when present, but do not manufacture one gap row per technique.
     return tuple(gaps)
 
 
