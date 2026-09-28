@@ -27,7 +27,7 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, attack_data, command_catalog, diagnostics, execution_kit, reporting
+from . import __version__, ability_model, attack_data, command_catalog, diagnostics, execution_kit, intelligence_import, reporting
 
 
 def _frontend_dir() -> str:
@@ -89,6 +89,8 @@ def begin_request() -> None:
     # Complete actor plans can contain hundreds of command records. Flask 3.1
     # supports a route-specific request cap, so unrelated endpoints retain the
     # much smaller global body limit.
+    if request.path == "/api/intelligence/import":
+        request.max_content_length = intelligence_import.MAX_IMPORT_BYTES
     if request.path == "/api/execution-kit" or request.path.startswith("/api/report/"):
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
@@ -326,6 +328,98 @@ def workflow(stix_id: str):
             "data_version": idx.data_version,
             "version": __version__,
         },
+    })
+
+
+@app.route("/api/intelligence/import", methods=["POST"])
+def intelligence_import_preview():
+    """Parse a structured ATT&CK source and compare it with an actor mapping.
+
+    Imported entries remain review candidates. This endpoint does not persist
+    an engagement, accept mappings, or execute/generate commands.
+    """
+    _require_csrf()
+    actor_stix_id = request.args.get("actor_stix_id", "").strip()
+    source_kind = request.args.get("source_kind", "").strip().lower()
+    if not actor_stix_id:
+        abort(400, description="Select an ATT&CK actor or campaign to compare")
+    try:
+        imported = intelligence_import.import_structured_source(
+            request.get_data(cache=False), source_kind,
+            request.args.get("source_name", ""), request.args.get("source_url"),
+        )
+    except intelligence_import.IntelligenceImportError as exc:
+        abort(400, description=str(exc))
+
+    domains = _domains_from_request()
+    if _runtime["loading"]:
+        abort(503, description="ATT&CK data is still loading; poll /api/bootstrap")
+    idx = attack_data.get_index(domains)
+    actor = idx.get_actor(actor_stix_id)
+    if not actor:
+        abort(404, description="The selected ATT&CK actor or campaign was not found")
+
+    attack_patterns: Dict[str, Dict[str, Any]] = {}
+    for obj in idx.objects_by_id.values():
+        if obj.get("type") != "attack-pattern":
+            continue
+        technique = idx.technique(obj.get("id", ""))
+        if technique and technique.get("attack_id"):
+            attack_patterns[technique["attack_id"]] = technique
+
+    actor_techniques = idx.actor_techniques(actor["id"])
+    comparison = intelligence_import.compare_techniques(
+        (item["technique_id"] for item in imported["candidates"]),
+        (item["attack_id"] for item in actor_techniques),
+    )
+    enriched_candidates = []
+    for candidate in imported["candidates"]:
+        technique = attack_patterns.get(candidate["technique_id"])
+        catalog = command_catalog.get_commands(
+            candidate["technique_id"],
+            technique["name"] if technique else candidate.get("technique_name", "Unknown technique"),
+            technique["tactics"] if technique else candidate.get("tactics", []),
+        )
+        abilities = [ability_model.catalog_ability(candidate["technique_id"], command)
+                     for command in catalog["commands"]] if technique else []
+        enriched_candidates.append({
+            **candidate,
+            "technique_name": technique["name"] if technique else candidate.get("technique_name", "Unknown technique"),
+            "tactics": technique["tactics"] if technique else candidate.get("tactics", []),
+            "platforms": technique["platforms"] if technique else candidate.get("platforms", []),
+            "technique_url": technique["url"] if technique else None,
+            "technique_known": technique is not None,
+            "catalog_source": catalog["source"] if technique else "unsupported",
+            "abilities": [{
+                "ability_id": ability.ability_id,
+                "platform": ability.platform,
+                "executor": ability.executor,
+                "fidelity": ability.fidelity,
+                "safety_class": ability.safety_class,
+                "content_source": ability.content_source,
+                "review_status": ability.review_status,
+                "content_sha256": ability.content_sha256,
+                "requires_admin": ability.requires_admin,
+                "requires_network": ability.requires_network,
+                "cleanup_available": bool(ability.cleanup),
+            } for ability in abilities],
+        })
+
+    _mark_ready()
+    _log_event("structured_intelligence_import_previewed", source_kind=imported["source"]["kind"],
+               candidate_count=len(enriched_candidates), actor=actor_stix_id)
+    return jsonify({
+        "schema_version": imported["schema_version"],
+        "source": imported["source"],
+        "actor": {
+            "stix_id": actor["id"],
+            "attack_id": attack_data.AttackIndex._attack_id(actor),
+            "name": actor.get("name", "Unknown"),
+            "type": "group" if actor.get("type") == "intrusion-set" else "campaign",
+        },
+        "data_version": idx.data_version,
+        "comparison": comparison,
+        "candidates": enriched_candidates,
     })
 
 

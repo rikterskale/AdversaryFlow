@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-ability.schema.json",
+  "title": "AdversaryFlow format-neutral ability",
+  "type": "object",
+  "required": ["ability_id", "technique_id", "platform", "executor", "command_template", "requirements", "cleanup", "rollback", "fidelity", "safety_class", "requires_admin", "requires_network", "network_targets", "side_effects", "timeout_seconds", "content_source", "review_status", "content_sha256"],
+  "properties": {
+    "ability_id": { "type": "string", "pattern": "^[a-f0-9]{24}$" },
+    "technique_id": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+    "platform": { "enum": ["windows", "linux", "macos"] },
+    "executor": { "enum": ["cmd", "powershell", "bash"] },
+    "command_template": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "requirements": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "cleanup": { "type": "string", "maxLength": 10000 },
+    "rollback": { "type": "string", "maxLength": 10000 },
+    "fidelity": { "enum": ["direct", "bounded_synthetic", "lab_proxy"] },
+    "safety_class": { "enum": ["none", "low", "medium", "high"] },
+    "requires_admin": { "type": "boolean" },
+    "requires_network": { "type": "boolean" },
+    "network_targets": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "side_effects": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "timeout_seconds": { "type": "integer", "minimum": 0, "maximum": 3600 },
+    "content_source": { "type": "string", "minLength": 1 },
+    "review_status": { "enum": ["unassessed", "draft", "reviewed", "retired"] },
+    "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

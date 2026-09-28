@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, AUTH_REQUIRED_EVENT, getActors, getHealth, getSession, getWorkflow, prepareService, refreshAttackData, setApiToken } from "../api/client";
+import { ApiError, AUTH_REQUIRED_EVENT, getActors, getHealth, getSession, getWorkflow, prepareService, previewIntelligenceImport, refreshAttackData, setApiToken } from "../api/client";
 import type { Actor, AttackDomain, SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { Dialog } from "../components/Dialog";
@@ -212,7 +212,7 @@ export function App(): React.JSX.Element {
   let content: React.JSX.Element;
   let focusKey = "welcome";
   if (startupPhase === "failed" && !canUseSavedPlan) {
-    content = <Welcome onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
+    content = <Welcome actors={actorsQuery.data?.actors ?? []} csrfToken={session?.csrf_token ?? ""} domains={domains} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
   } else if (startupPhase !== "ready" && !canUseSavedPlan) {
     content = (
       <section className="screen setup-screen">
@@ -223,7 +223,7 @@ export function App(): React.JSX.Element {
       </section>
     );
   } else if (currentStep === 0) {
-    content = <Welcome catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} onBegin={beginPlan} onImport={loadPlanFile} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
+    content = <Welcome actors={actorsQuery.data?.actors ?? []} catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} csrfToken={session?.csrf_token ?? ""} domains={domains} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
   } else if (currentStep === 1 || !selectedActor) {
     focusKey = "actors";
     content = (

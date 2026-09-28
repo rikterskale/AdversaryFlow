@@ -39,6 +39,8 @@ Official MITRE ATT&CK STIX 2.1 feed
 | --- | --- | --- |
 | `backend/app.py` | Flask routes, static frontend, startup lifecycle, request IDs, response hardening, CSRF and bearer enforcement | Never launches catalog commands |
 | `backend/attack_data.py` | Downloads, validates, hashes, caches, and indexes the official STIX bundles; derives live tactic order | Only the configured MITRE source is accepted |
+| `backend/intelligence_import.py` | Parses bounded CSV, ATT&CK Navigator layer, and STIX 2.1 input into provenance-hashed review candidates and computes technique diffs | Imports remain unaccepted; source URLs are recorded but never fetched |
+| `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
 | `backend/lab_exercises.py` | Portable bounded synthetic exercise families and digest-protected receipts | Runs only when an operator invokes the exported script on a lab host |
@@ -117,6 +119,23 @@ the operator's guardrails.
 5. Command outcome and detection result are independent evidence fields and
    autosave locally.
 
+### Structured intelligence comparison
+
+1. The operator supplies a CSV, ATT&CK Navigator layer, or STIX 2.1 bundle and
+   selects the actor/campaign to compare.
+2. `intelligence_import.py` validates the bounded input, records its SHA-256,
+   normalizes technique IDs, and creates `needs_review` candidates.
+3. The service resolves IDs against the pinned in-memory ATT&CK bundle and
+   returns the report-only, ATT&CK-only, and shared sets plus current catalog
+   source metadata.
+4. The operator may accept or reject each mapping and download a versioned
+   review record. The service does not persist the record or attach it to an
+   engagement plan yet.
+
+Navigator scores are not treated as mapping confidence. STIX technique
+descriptions and actor relationships are not represented as report quotations.
+CSV can carry a procedure, quotation, confidence, platform, and source URL.
+
 ### Export and handoff
 
 The browser builds the strict schema 2.0 plan record. On the Export step,
@@ -160,6 +179,8 @@ the operator to run, edit, skip, or abort. It never calls the web service.
   are applied centrally.
 - **Resource limits:** ordinary JSON requests use the small global body cap;
   complete plan artifact endpoints have a 5 MiB cap and a 4,000-step limit.
+  Structured intelligence imports have a 16 MiB raw-file cap and a 4,000
+  candidate limit.
 - **Secrets:** no secret is checked in. Compose generates a per-start token
   unless an operator supplies `ADVERSARYFLOW_API_TOKEN` at runtime.
 

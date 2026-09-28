@@ -211,6 +211,7 @@ offline use, upgrades, and health behavior. Use the dedicated
 | --- | --- |
 | `GET /api/actors` | List groups & campaigns that have techniques mapped |
 | `GET /api/workflow/<stix_id>` | Full kill-chain workflow + lab commands |
+| `POST /api/intelligence/import` | Preview a CSV, ATT&CK Navigator layer, or STIX bundle against an actor and return a provenance-hashed technique diff |
 | `POST /api/refresh` | Force re-download of the live STIX feed |
 | `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
 | `GET /api/doctor` | Structured host self-test used by the GUI health panel |
@@ -226,6 +227,9 @@ AdversaryFlow-native and do not claim direct VECTR or Caldera compatibility.
 The human report's field provenance, detection-mapping rules, coverage-gap
 math, and receipt-correlation limitation are documented in
 [Export formats](docs/EXPORTS.md).
+Structured intelligence imports remain analyst-review candidates; they do not
+alter or execute an engagement plan. See
+[Structured intelligence import](docs/INTELLIGENCE_IMPORT.md).
 
 ### The `domains` parameter (ATT&CK domain toggle)
 

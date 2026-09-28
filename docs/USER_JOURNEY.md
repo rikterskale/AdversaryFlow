@@ -50,6 +50,12 @@ engagement report, or as Markdown, schema-versioned JSON, and a commented text
 runbook. A JSON export can be loaded back in later to resume exactly where you
 left off.
 
+The welcome screen can also compare a bounded CSV, ATT&CK Navigator layer, or
+STIX 2.1 bundle against a selected actor. Each imported candidate starts in
+review, carries the source file digest, and can be accepted or rejected by a
+named reviewer. The downloadable review record is separate from an engagement
+plan; it does not add candidates to an execution kit.
+
 ---
 
 ## 2. Personas
@@ -59,6 +65,7 @@ left off.
 | **Detection engineer** — owns EDR/SIEM rules and needs evidence about a specific adversary | Review one actor's mapped exercises, run suitable commands in a lab, and record which detections fired | `./run.sh` → browser opens at `http://127.0.0.1:5000` |
 | **Purple-team lead** — plans and reports on a scheduled exercise | Scope an exercise to a platform and a set of kill-chain stages, then hand the team a runbook and keep an evidence record | Welcome screen → **Begin emulation plan** → **Export** |
 | **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume saved plan** or **Resume JSON plan** |
+| **Threat intelligence reviewer** — compares a structured technique list with ATT&CK actor mappings | Review report-only, ATT&CK-only, and shared techniques with source provenance | Welcome screen → **Import and compare** |
 | **Automation / platform engineer** — feeds plans into other tooling | Pull the workflow as JSON without touching the UI | `curl http://127.0.0.1:5000/api/workflow/<stix_id>` |
 | **Lab operator** — runs the service for a team, or on an air-gapped host | Keep the service healthy, control where ATT&CK data comes from, and gate remote access | `adversaryflow doctor`, `cache-status`, `--offline`, `--allow-remote --api-token` |
 

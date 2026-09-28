@@ -85,6 +85,53 @@ export interface WorkflowResponse {
   };
 }
 
+export type ProcedureReviewStatus = "needs_review" | "accepted" | "rejected";
+
+export interface ProcedureCandidate {
+  candidate_id: string;
+  technique_id: string;
+  technique_name: string;
+  tactics: string[];
+  platforms: string[];
+  source_kind: "csv" | "navigator_layer" | "stix2_bundle";
+  source_name: string;
+  source_url: string | null;
+  source_sha256: string;
+  evidence_quote: string;
+  procedure: string;
+  confidence: number | null;
+  review_status: ProcedureReviewStatus;
+  reviewed_by: string;
+  reviewed_at: string;
+  accepted_by: string;
+  accepted_at: string;
+  technique_url: string | null;
+  technique_known: boolean;
+  catalog_source: "curated" | "fallback" | "unsupported";
+  abilities: {
+    ability_id: string;
+    platform: string;
+    executor: string;
+    fidelity: "direct" | "bounded_synthetic" | "lab_proxy";
+    safety_class: CommandRisk;
+    content_source: string;
+    review_status: "unassessed" | "draft" | "reviewed" | "retired";
+    content_sha256: string;
+    requires_admin: boolean;
+    requires_network: boolean;
+    cleanup_available: boolean;
+  }[];
+}
+
+export interface IntelligenceImportResponse {
+  schema_version: "1.0";
+  source: { kind: ProcedureCandidate["source_kind"]; name: string; url: string | null; sha256: string };
+  actor: Pick<Actor, "stix_id" | "attack_id" | "name" | "type">;
+  data_version: string;
+  comparison: { report_only: string[]; attack_only: string[]; both: string[] };
+  candidates: ProcedureCandidate[];
+}
+
 export type HealthPhase = "not_started" | "loading" | "refreshing" | "ready" | "failed";
 
 export interface HealthResponse {

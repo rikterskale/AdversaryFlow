@@ -125,6 +125,51 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
+  /api/intelligence/import:
+    post:
+      summary: Preview structured ATT&CK mappings against an actor
+      description: Accepts a bounded raw CSV, ATT&CK Navigator layer JSON, or STIX 2.1 bundle. Returns provenance-hashed review candidates and report-only/ATT&CK-only/shared technique sets. No candidate is accepted, persisted, or executed.
+      parameters:
+        - name: domains
+          in: query
+          required: true
+          schema: { type: string, example: enterprise }
+        - name: actor_stix_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: source_kind
+          in: query
+          required: true
+          schema: { enum: [csv, json] }
+        - name: source_name
+          in: query
+          required: true
+          schema: { type: string, maxLength: 300 }
+        - name: source_url
+          in: query
+          required: false
+          schema: { type: string, format: uri }
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string, x-maxBytes: 16777216 }
+          application/json:
+            schema: { type: object, x-maxBytes: 16777216 }
+      responses:
+        "200":
+          description: Provenance-preserving review candidates and technique-set comparison
+          content:
+            application/json:
+              schema: { $ref: "../schemas/adversaryflow-intelligence.schema.json" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /api/execution-kit:
     post:
       summary: Generate an offline CSV and PowerShell/Bash operator handoff

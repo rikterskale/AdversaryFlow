@@ -10,6 +10,8 @@ import type {
   Technique,
   WorkflowResponse,
   WorkflowStage,
+  IntelligenceImportResponse,
+  ProcedureCandidate,
 } from "./contract";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -138,6 +140,51 @@ export function parseWorkflow(value: unknown): WorkflowResponse {
       version: value.metadata.version,
     },
   };
+}
+
+export function parseIntelligenceImport(value: unknown): IntelligenceImportResponse {
+  if (!isRecord(value) || value.schema_version !== "1.0" || !isRecord(value.source)
+    || !["csv", "navigator_layer", "stix2_bundle"].includes(String(value.source.kind))
+    || typeof value.source.name !== "string"
+    || !(typeof value.source.url === "string" || value.source.url === null)
+    || typeof value.source.sha256 !== "string"
+    || !isRecord(value.actor)
+    || typeof value.actor.stix_id !== "string" || typeof value.actor.attack_id !== "string"
+    || typeof value.actor.name !== "string" || !["group", "campaign"].includes(String(value.actor.type))
+    || typeof value.data_version !== "string" || !isRecord(value.comparison)
+    || !isStringArray(value.comparison.report_only) || !isStringArray(value.comparison.attack_only)
+    || !isStringArray(value.comparison.both) || !Array.isArray(value.candidates)) {
+    throw new Error("The service returned an invalid intelligence comparison.");
+  }
+  const candidateKeys = ["candidate_id", "technique_id", "technique_name", "tactics", "platforms", "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure", "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at", "technique_url", "technique_known", "catalog_source", "abilities"];
+  const candidates = value.candidates;
+  if (!candidates.every((candidate): candidate is ProcedureCandidate => isRecord(candidate)
+    && candidateKeys.every((key) => key in candidate)
+    && typeof candidate.candidate_id === "string" && typeof candidate.technique_id === "string"
+    && typeof candidate.technique_name === "string" && isStringArray(candidate.tactics)
+    && isStringArray(candidate.platforms) && typeof candidate.source_kind === "string"
+    && typeof candidate.source_name === "string"
+    && (typeof candidate.source_url === "string" || candidate.source_url === null)
+    && typeof candidate.source_sha256 === "string" && typeof candidate.evidence_quote === "string"
+    && typeof candidate.procedure === "string"
+    && (typeof candidate.confidence === "number" || candidate.confidence === null)
+    && ["needs_review", "accepted", "rejected"].includes(String(candidate.review_status))
+    && typeof candidate.reviewed_by === "string" && typeof candidate.reviewed_at === "string"
+    && typeof candidate.accepted_by === "string" && typeof candidate.accepted_at === "string"
+    && (typeof candidate.technique_url === "string" || candidate.technique_url === null)
+    && typeof candidate.technique_known === "boolean"
+    && ["curated", "fallback", "unsupported"].includes(String(candidate.catalog_source))
+    && Array.isArray(candidate.abilities) && candidate.abilities.every((ability) => isRecord(ability)
+      && typeof ability.ability_id === "string" && typeof ability.platform === "string"
+      && typeof ability.executor === "string" && ["direct", "bounded_synthetic", "lab_proxy"].includes(String(ability.fidelity))
+      && ["none", "low", "medium", "high"].includes(String(ability.safety_class))
+      && typeof ability.content_source === "string"
+      && ["unassessed", "draft", "reviewed", "retired"].includes(String(ability.review_status))
+      && typeof ability.content_sha256 === "string" && typeof ability.requires_admin === "boolean"
+      && typeof ability.requires_network === "boolean" && typeof ability.cleanup_available === "boolean"))) {
+    throw new Error("The service returned invalid intelligence review candidates.");
+  }
+  return value as unknown as IntelligenceImportResponse;
 }
 
 const healthPhases = new Set<HealthPhase>([

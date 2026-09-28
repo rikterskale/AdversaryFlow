@@ -1,5 +1,5 @@
-import { isRecord, parseActors, parseBootstrap, parseDoctor, parseHealth, parseSession, parseWorkflow } from "./guards";
-import type { ActorsResponse, AttackDomain, BootstrapResponse, DoctorResponse, HealthResponse, SessionResponse, WorkflowResponse } from "./contract";
+import { isRecord, parseActors, parseBootstrap, parseDoctor, parseHealth, parseIntelligenceImport, parseSession, parseWorkflow } from "./guards";
+import type { ActorsResponse, AttackDomain, BootstrapResponse, DoctorResponse, HealthResponse, IntelligenceImportResponse, SessionResponse, WorkflowResponse } from "./contract";
 
 const TOKEN_KEY = "af_api_token";
 
@@ -117,6 +117,29 @@ export async function getDoctor(): Promise<DoctorResponse> {
 export async function getWorkflow(stixId: string, domains: AttackDomain[]): Promise<WorkflowResponse> {
   const query = new URLSearchParams({ domains: domains.join(",") });
   return parseWorkflow(await responseJson(await apiFetch(`/api/workflow/${encodeURIComponent(stixId)}?${query.toString()}`)));
+}
+
+export async function previewIntelligenceImport(args: {
+  file: File;
+  source_kind: "csv" | "json";
+  source_name: string;
+  source_url?: string;
+  actor_stix_id: string;
+  domains: AttackDomain[];
+  csrfToken: string;
+}): Promise<IntelligenceImportResponse> {
+  const query = new URLSearchParams({
+    domains: args.domains.join(","),
+    actor_stix_id: args.actor_stix_id,
+    source_kind: args.source_kind,
+    source_name: args.source_name,
+  });
+  if (args.source_url) query.set("source_url", args.source_url);
+  return parseIntelligenceImport(await responseJson(await apiFetch(`/api/intelligence/import?${query.toString()}`, {
+    method: "POST",
+    headers: { "Content-Type": args.source_kind === "csv" ? "text/csv; charset=utf-8" : "application/json", "X-AdversaryFlow-CSRF": args.csrfToken },
+    body: args.file,
+  })));
 }
 
 export async function refreshAttackData(domains: AttackDomain[], csrfToken: string): Promise<void> {
