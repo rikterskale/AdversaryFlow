@@ -11,8 +11,9 @@ interface PlanPreviewProps {
 }
 
 export function PlanPreview({ actor, commandPlatform, dataVersion, preview }: PlanPreviewProps): React.JSX.Element {
-  const curatedWidth = preview.total ? `${(preview.curated / preview.total) * 100}%` : "0%";
-  const fallbackWidth = preview.total ? `${(preview.fallback / preview.total) * 100}%` : "0%";
+  const directWidth = preview.total ? `${(preview.direct / preview.total) * 100}%` : "0%";
+  const boundedWidth = preview.total ? `${(preview.boundedSynthetic / preview.total) * 100}%` : "0%";
+  const proxyWidth = preview.total ? `${(preview.labProxy / preview.total) * 100}%` : "0%";
   const withheldReasons = [
     { key: "platform", label: `No exact ${titlePlatform(commandPlatform)} test`, count: preview.withheld.platform },
     { key: "network", label: "Network permission required", count: preview.withheld.network },
@@ -35,8 +36,9 @@ export function PlanPreview({ actor, commandPlatform, dataVersion, preview }: Pl
         <div><dt>Kill-chain stages</dt><dd>{preview.stages.length}</dd></div>
       </dl>
       <div className="coverage-summary">
-        <div aria-label={`${preview.curated} curated and ${preview.fallback} fallback techniques`} className="coverage-summary__bar" role="img"><span className="is-curated" style={{ width: curatedWidth }} /><span className="is-fallback" style={{ width: fallbackWidth }} /></div>
-        <div><span><i className="legend-dot legend-dot--curated" />{preview.curated} curated</span><span><i className="legend-dot legend-dot--fallback" />{preview.fallback} fallback</span></div>
+        <strong>Ability fidelity</strong>
+        <div aria-label={`${preview.direct} direct, ${preview.boundedSynthetic} bounded synthetic, ${preview.labProxy} lab proxy`} className="coverage-summary__bar" role="img"><span className="is-direct" style={{ width: directWidth }} /><span className="is-bounded" style={{ width: boundedWidth }} /><span className="is-proxy" style={{ width: proxyWidth }} /></div>
+        <div><span><i className="legend-dot legend-dot--direct" />{preview.direct} direct</span><span><i className="legend-dot legend-dot--bounded" />{preview.boundedSynthetic} bounded synthetic</span><span><i className="legend-dot legend-dot--proxy" />{preview.labProxy} lab proxy</span></div>
       </div>
       {withheldReasons.length || preview.filteredFallback ? (
         <div className="summary-withheld">

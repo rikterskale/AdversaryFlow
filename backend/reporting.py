@@ -133,6 +133,9 @@ class CoverageSummary:
     unsupported: int
     curated: int
     fallback: int
+    fidelity_direct: int
+    fidelity_bounded_synthetic: int
+    fidelity_lab_proxy: int
     outcome_not_run: int
     outcome_passed: int
     outcome_failed: int
@@ -340,6 +343,9 @@ def _coverage_summary(techniques: Sequence[ReportTechnique]) -> CoverageSummary:
         unsupported=sum(not item.supported for item in techniques),
         curated=sum(item.command_source == "curated" for item in techniques),
         fallback=sum(item.command_source == "fallback" for item in techniques),
+        fidelity_direct=sum(item.fidelity == "direct" for item in techniques),
+        fidelity_bounded_synthetic=sum(item.fidelity == "bounded_synthetic" for item in techniques),
+        fidelity_lab_proxy=sum(item.fidelity == "lab_proxy" for item in techniques),
         outcome_not_run=sum(item.outcome == "not_run" for item in techniques),
         outcome_passed=sum(item.outcome == "passed" for item in techniques),
         outcome_failed=sum(item.outcome == "failed" for item in techniques),
@@ -559,9 +565,9 @@ def render_html(report: EngagementReport) -> bytes:
     gap_summary = _gap_summary(report.gaps)
     cards = (
         ("Planned", len(report.techniques)),
-        ("Unique", report.unique_techniques),
-        ("Curated", report.coverage.curated),
-        ("Fallback", report.coverage.fallback),
+        ("Direct fidelity", report.coverage.fidelity_direct),
+        ("Bounded synthetic", report.coverage.fidelity_bounded_synthetic),
+        ("Lab proxy", report.coverage.fidelity_lab_proxy),
         ("Detected", report.coverage.detected),
         ("Open gaps", len(report.gaps)),
     )
@@ -584,7 +590,7 @@ def render_html(report: EngagementReport) -> bytes:
           <article class="technique">
             <div class="technique-head">
               <div><span class="sequence">{item.sequence:02d}</span><h3>{attack_id} · {_h(item.technique_name)}</h3><p>{_h(item.tactic_title)}</p></div>
-              <div class="badges"><span class="badge {_h(item.command_source)}">{_h(item.command_source)}</span><span class="badge outcome-{_h(item.outcome)}">{_h(_label(item.outcome))}</span><span class="badge detection-{_h(item.detection_result)}">{_h(_label(item.detection_result))}</span></div>
+              <div class="badges"><span class="badge fidelity-{_h(item.fidelity)}">{_h(_label(item.fidelity))} fidelity</span><span class="badge outcome-{_h(item.outcome)}">{_h(_label(item.outcome))}</span><span class="badge detection-{_h(item.detection_result)}">{_h(_label(item.detection_result))}</span></div>
             </div>
             <div class="technique-grid">
               <section><h4>Expected telemetry</h4><p>{_h(telemetry)}</p><small>ATT&amp;CK data sources: {_h(sources)}</small></section>
@@ -624,8 +630,11 @@ def render_html(report: EngagementReport) -> bytes:
         _fact("Observed execution completion", report.execution_completed_at),
     ))
     coverage_rows = (
-        ("Catalog", f"{report.coverage.curated} curated · {report.coverage.fallback} fallback · "
-                    f"{report.coverage.unsupported} unsupported"),
+        ("Ability fidelity", f"{report.coverage.fidelity_direct} direct · "
+                              f"{report.coverage.fidelity_bounded_synthetic} bounded synthetic · "
+                              f"{report.coverage.fidelity_lab_proxy} lab proxy"),
+        ("Catalog source", f"{report.coverage.curated} keyed catalog · {report.coverage.fallback} fallback · "
+                            f"{report.coverage.unsupported} unsupported"),
         ("Command outcomes", f"{report.coverage.outcome_passed} passed · {report.coverage.outcome_failed} failed · "
                              f"{report.coverage.outcome_skipped} skipped · {report.coverage.outcome_not_run} not run"),
         ("Detection outcomes", f"{report.coverage.detection_alerted} alerted · {report.coverage.detection_blocked} blocked · "
@@ -643,7 +652,7 @@ def render_html(report: EngagementReport) -> bytes:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <title>AdversaryFlow engagement report · {_h(report.actor_name)}</title>
 <style>
-:root{{--ink:#132039;--muted:#60708d;--line:#dce3ee;--surface:#f5f7fb;--navy:#101b33;--blue:#376cf6;--cyan:#12a8b4;--green:#16865b;--amber:#b86d13;--red:#bd3346}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);font:14px/1.55 Inter,Segoe UI,Arial,sans-serif;background:#fff}}main{{width:min(1120px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}}header{{position:relative;overflow:hidden;border-radius:22px;padding:42px;background:var(--navy);color:#fff;box-shadow:0 24px 70px #13203920}}header:after{{content:"";position:absolute;width:360px;height:360px;right:-170px;top:-220px;border:70px solid #376cf655;border-radius:50%}}.kicker{{color:#8eb6ff;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}}h1{{max-width:800px;margin:10px 0 7px;font-size:38px;line-height:1.05;letter-spacing:-.04em}}header p{{max-width:760px;margin:0;color:#c8d3e8}}.meta{{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0;padding:0;list-style:none}}.meta li,.badge{{border:1px solid #ffffff26;border-radius:999px;padding:5px 9px;font-size:11px}}.safety,.honesty{{margin:18px 0 0;border-left:3px solid #4f81ff;padding:12px 15px;background:#eef3ff;color:#31456c}}.honesty{{border-color:var(--amber);background:#fff8ee;color:#664318}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:24px 0}}.metric{{border:1px solid var(--line);border-radius:13px;padding:16px;background:#fff}}.metric strong{{display:block;font-size:25px}}.metric span{{color:var(--muted);font-size:11px}}h2{{margin:42px 0 12px;font-size:22px;letter-spacing:-.02em}}.overview-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}}.overview-grid>section{{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface)}}.overview-grid h2{{margin:0 0 10px;font-size:16px}}.facts{{margin:0;padding-left:18px;color:var(--muted)}}.facts strong{{color:var(--ink)}}.gap-chips{{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}}.gap-chips li{{display:flex;gap:8px;border:1px solid #f0cfaa;border-radius:10px;padding:8px 11px;background:#fff8ee}}.gap-chips span{{color:#795126}}.technique-list{{display:grid;gap:12px}}.technique{{border:1px solid var(--line);border-radius:15px;padding:18px;background:#fff;page-break-inside:avoid}}.technique-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}.technique-head>div:first-child{{display:grid;grid-template-columns:auto 1fr;column-gap:9px}}.sequence{{grid-row:1/3;display:grid;place-items:center;width:33px;height:33px;border-radius:8px;background:#edf2ff;color:var(--blue);font-weight:800}}h3{{margin:0;font-size:15px}}h3 a{{color:var(--blue)}}.technique-head p{{margin:2px 0 0;color:var(--muted);font-size:11px}}.badges{{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}}.badge{{border-color:var(--line);padding:3px 7px;background:var(--surface);color:var(--muted);font-weight:700;text-transform:capitalize}}.curated,.outcome-passed,.detection-alerted{{color:var(--green);background:#edf9f4;border-color:#b8e6d3}}.fallback,.outcome-skipped,.detection-not_assessed{{color:var(--amber);background:#fff8ee;border-color:#f0cfaa}}.outcome-failed,.detection-silent{{color:var(--red);background:#fff1f3;border-color:#f2c1ca}}.technique-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}}.technique-grid section{{border-radius:10px;padding:12px;background:var(--surface)}}h4{{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.technique-grid p{{margin:0 0 7px;font-size:12px}}.limitation{{color:#795126}}small{{color:var(--muted)}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:14px}}th,td{{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}}th{{background:var(--surface);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}}tr:last-child td{{border-bottom:0}}.coverage-table th{{width:180px}}.gap-category{{color:var(--amber);font-weight:700}}footer{{margin-top:44px;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:10px}}code{{font-family:Consolas,monospace;overflow-wrap:anywhere}}.empty{{color:var(--muted)}}@media(max-width:850px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.technique-grid,.overview-grid{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{width:min(100% - 24px,1120px);padding-top:12px}}header{{padding:26px}}h1{{font-size:29px}}.metrics{{grid-template-columns:repeat(2,1fr)}}.technique-head{{display:block}}.badges{{justify-content:flex-start;margin-top:10px}}}}@media print{{main{{width:100%;padding:0}}header{{box-shadow:none}}.technique{{break-inside:avoid}}}}
+:root{{--ink:#132039;--muted:#60708d;--line:#dce3ee;--surface:#f5f7fb;--navy:#101b33;--blue:#376cf6;--cyan:#12a8b4;--green:#16865b;--amber:#b86d13;--red:#bd3346}}*{{box-sizing:border-box}}body{{margin:0;color:var(--ink);font:14px/1.55 Inter,Segoe UI,Arial,sans-serif;background:#fff}}main{{width:min(1120px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}}header{{position:relative;overflow:hidden;border-radius:22px;padding:42px;background:var(--navy);color:#fff;box-shadow:0 24px 70px #13203920}}header:after{{content:"";position:absolute;width:360px;height:360px;right:-170px;top:-220px;border:70px solid #376cf655;border-radius:50%}}.kicker{{color:#8eb6ff;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}}h1{{max-width:800px;margin:10px 0 7px;font-size:38px;line-height:1.05;letter-spacing:-.04em}}header p{{max-width:760px;margin:0;color:#c8d3e8}}.meta{{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0;padding:0;list-style:none}}.meta li,.badge{{border:1px solid #ffffff26;border-radius:999px;padding:5px 9px;font-size:11px}}.safety,.honesty{{margin:18px 0 0;border-left:3px solid #4f81ff;padding:12px 15px;background:#eef3ff;color:#31456c}}.honesty{{border-color:var(--amber);background:#fff8ee;color:#664318}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:24px 0}}.metric{{border:1px solid var(--line);border-radius:13px;padding:16px;background:#fff}}.metric strong{{display:block;font-size:25px}}.metric span{{color:var(--muted);font-size:11px}}h2{{margin:42px 0 12px;font-size:22px;letter-spacing:-.02em}}.overview-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}}.overview-grid>section{{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--surface)}}.overview-grid h2{{margin:0 0 10px;font-size:16px}}.facts{{margin:0;padding-left:18px;color:var(--muted)}}.facts strong{{color:var(--ink)}}.gap-chips{{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}}.gap-chips li{{display:flex;gap:8px;border:1px solid #f0cfaa;border-radius:10px;padding:8px 11px;background:#fff8ee}}.gap-chips span{{color:#795126}}.technique-list{{display:grid;gap:12px}}.technique{{border:1px solid var(--line);border-radius:15px;padding:18px;background:#fff;page-break-inside:avoid}}.technique-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}.technique-head>div:first-child{{display:grid;grid-template-columns:auto 1fr;column-gap:9px}}.sequence{{grid-row:1/3;display:grid;place-items:center;width:33px;height:33px;border-radius:8px;background:#edf2ff;color:var(--blue);font-weight:800}}h3{{margin:0;font-size:15px}}h3 a{{color:var(--blue)}}.technique-head p{{margin:2px 0 0;color:var(--muted);font-size:11px}}.badges{{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}}.badge{{border-color:var(--line);padding:3px 7px;background:var(--surface);color:var(--muted);font-weight:700;text-transform:capitalize}}.fidelity-direct,.outcome-passed,.detection-alerted{{color:var(--green);background:#edf9f4;border-color:#b8e6d3}}.fidelity-bounded_synthetic,.fallback,.outcome-skipped,.detection-not_assessed{{color:var(--amber);background:#fff8ee;border-color:#f0cfaa}}.fidelity-lab_proxy,.outcome-failed,.detection-silent{{color:var(--red);background:#fff1f3;border-color:#f2c1ca}}.technique-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}}.technique-grid section{{border-radius:10px;padding:12px;background:var(--surface)}}h4{{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}}.technique-grid p{{margin:0 0 7px;font-size:12px}}.limitation{{color:#795126}}small{{color:var(--muted)}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:14px}}th,td{{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}}th{{background:var(--surface);color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}}tr:last-child td{{border-bottom:0}}.coverage-table th{{width:180px}}.gap-category{{color:var(--amber);font-weight:700}}footer{{margin-top:44px;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:10px}}code{{font-family:Consolas,monospace;overflow-wrap:anywhere}}.empty{{color:var(--muted)}}@media(max-width:850px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.technique-grid,.overview-grid{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{width:min(100% - 24px,1120px);padding-top:12px}}header{{padding:26px}}h1{{font-size:29px}}.metrics{{grid-template-columns:repeat(2,1fr)}}.technique-head{{display:block}}.badges{{justify-content:flex-start;margin-top:10px}}}}@media print{{main{{width:100%;padding:0}}header{{box-shadow:none}}.technique{{break-inside:avoid}}}}
 </style></head><body><main>
 <header><div class="kicker">AdversaryFlow · Purple-team engagement report</div><h1>{_h(report.actor_name)} <small>({_h(report.actor_id)})</small></h1><p>Authorized adversary-emulation coverage and detection validation for a disposable lab.</p><ul class="meta"><li>{_h(report.platform.title())}</li><li>Operator: {_h(report.operator or 'Not recorded')}</li><li>Target: {_h(report.target or 'Not recorded')}</li><li>Plan: {_h(report.generated)}</li></ul></header>
 <p class="safety"><strong>Planner boundary:</strong> AdversaryFlow generated this report from a catalog-rebound plan. The service did not execute commands, connect to a target, or include runnable commands in this report.</p>
@@ -777,8 +786,10 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
     layout.y -= 9
     layout.heading("Engagement overview")
     metrics = [
-        ("Planned occurrences", len(report.techniques)), ("Unique techniques", report.unique_techniques),
-        ("Recorded outcomes", report.recorded), ("Detection assessed", report.detection_assessed),
+        ("Planned occurrences", len(report.techniques)),
+        ("Direct fidelity", report.coverage.fidelity_direct),
+        ("Bounded synthetic", report.coverage.fidelity_bounded_synthetic),
+        ("Lab proxy", report.coverage.fidelity_lab_proxy),
         ("Detection alerted", report.alerted), ("Open gap findings", len(report.gaps)),
     ]
     card_width = (layout.right - layout.left - 12) / 3
@@ -813,7 +824,7 @@ def _layout_pdf(report: EngagementReport) -> List[List[str]]:
         telemetry_references = "; ".join(item.telemetry_references) or "Not recorded"
         title_lines = _wrap_pdf(f"{item.sequence:02d}  {item.technique_id} - {item.technique_name}", 11, layout.right - layout.left)
         status_lines = _wrap_pdf(
-            f"{item.tactic_title} | {item.command_source} | outcome: {_label(item.outcome)} | detection: {_label(item.detection_result)}",
+            f"{item.tactic_title} | fidelity: {_label(item.fidelity)} | outcome: {_label(item.outcome)} | detection: {_label(item.detection_result)}",
             8, layout.right - layout.left,
         )
         block_lines = (

@@ -29,6 +29,9 @@ export interface PlanPreview {
   unsupported: number;
   curated: number;
   fallback: number;
+  direct: number;
+  boundedSynthetic: number;
+  labProxy: number;
   filteredFallback: number;
   withheld: {
     platform: number;
@@ -129,6 +132,7 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
   const techniqueIds = new Set<string>();
   const runnableIds = new Set<string>();
   const curatedIds = new Set<string>();
+  const fidelityIds = { direct: new Set<string>(), boundedSynthetic: new Set<string>(), labProxy: new Set<string>() };
   const filteredFallbackIds = new Set<string>();
   const platformIds = new Set<string>();
   const networkIds = new Set<string>();
@@ -165,6 +169,10 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
       techniqueIds.add(technique.attack_id);
       if (!technique.selectedCommand.unsupported) runnableIds.add(technique.attack_id);
       if (technique.command_source === "curated") curatedIds.add(technique.attack_id);
+      const fidelity = technique.selectedCommand.fidelity ?? "direct";
+      if (fidelity === "bounded_synthetic") fidelityIds.boundedSynthetic.add(technique.attack_id);
+      else if (fidelity === "lab_proxy") fidelityIds.labProxy.add(technique.attack_id);
+      else fidelityIds.direct.add(technique.attack_id);
     }
     stages.push({ ...stage, techniques });
   }
@@ -176,6 +184,9 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
     unsupported: techniqueIds.size - runnableIds.size,
     curated: curatedIds.size,
     fallback: techniqueIds.size - curatedIds.size,
+    direct: fidelityIds.direct.size,
+    boundedSynthetic: fidelityIds.boundedSynthetic.size,
+    labProxy: fidelityIds.labProxy.size,
     filteredFallback: filteredFallbackIds.size,
     withheld: {
       platform: platformIds.size,

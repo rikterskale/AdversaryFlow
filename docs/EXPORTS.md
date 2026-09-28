@@ -89,8 +89,9 @@ or `json`. HTML and PDF contain:
 - actor identity and aliases, domains, platform, authorized scope, plan time,
   operator, target, and the observed execution window;
 - the ordered technique occurrences with ATT&CK IDs and tactics;
-- curated/fallback/support counts plus exact command-outcome and detection-
-  outcome counts;
+- per-technique and plan-level fidelity counts (`direct`, `bounded_synthetic`,
+  and `lab_proxy`), with keyed-catalog/fallback provenance shown separately;
+- exact command-outcome and detection-outcome counts;
 - expected telemetry and any bounded-exercise telemetry-acceptance contract;
 - ATT&CK data-source and detection guidance carried by the plan's STIX-derived
   technique records;
@@ -106,7 +107,7 @@ or `json`. HTML and PDF contain:
 | Report field | Source |
 | --- | --- |
 | ATT&CK ID, tactic, actor, domains, platform, scope, operator, target | Existing schema 2.0 plan export |
-| Expected telemetry, fidelity, curated/fallback status, telemetry acceptance | Server-side command catalog after catalog rebinding |
+| Expected telemetry, fidelity, keyed-catalog/fallback status, telemetry acceptance | Server-side command catalog after catalog rebinding |
 | ATT&CK data sources and detection guidance | `data_sources` and `detection` already exported from the loaded STIX technique (`x_mitre_data_sources` and `x_mitre_detection`) |
 | Sigma/detection-rule references | Only an explicit catalog reference; none is inferred from a technique ID or detection paragraph |
 | Outcomes and evidence | The technique's schema 2.0 `execution` record |

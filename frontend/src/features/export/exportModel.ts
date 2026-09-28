@@ -121,6 +121,11 @@ export function buildExportBundle(
       stages: preview.stages.length,
       curated: preview.curated,
       fallback: preview.fallback,
+      fidelity_mix: {
+        direct: preview.direct,
+        bounded_synthetic: preview.boundedSynthetic,
+        lab_proxy: preview.labProxy,
+      },
       marked_run: markedRun,
     },
     stages: preview.stages.map((stage) => ({
@@ -176,7 +181,7 @@ export function toMarkdown(bundle: ExportBundle): string {
   }
   if (plan.actor.aliases.length) output += `*Aliases: ${plan.actor.aliases.join(", ")}*\n\n`;
   if (plan.actor.description) output += `${plainText(plan.actor.description)}\n\n`;
-  output += `**${preview.total} techniques · ${preview.runnable} runnable · ${preview.unsupported} unsupported · ${preview.stages.length} stages · commands target ${titlePlatform(plan.scope.command_platform)}** (${preview.curated} curated / ${preview.fallback} fallback)\n\n`;
+  output += `**${preview.total} techniques · ${preview.runnable} runnable · ${preview.unsupported} unsupported · ${preview.stages.length} stages · ${preview.direct} direct / ${preview.boundedSynthetic} bounded synthetic / ${preview.labProxy} lab proxy · commands target ${titlePlatform(plan.scope.command_platform)}**\n\n`;
   plan.stages.forEach((stage, stageIndex) => {
     output += `## ${stageIndex + 1}. ${stage.title}\n\n_${tacticDescriptions[stage.tactic] ?? "Mapped ATT&CK tactic."}_\n\n`;
     stage.techniques.forEach((technique) => {
@@ -245,7 +250,9 @@ export function toRunbook(bundle: ExportBundle): string {
 export function executiveSummary(bundle: ExportBundle): string {
   const { plan } = bundle;
   const assessed = plan.stages.flatMap((stage) => stage.techniques).filter((technique) => technique.execution.detection_result && technique.execution.detection_result !== "not_assessed").length;
-  return `${plan.actor.name} (${plan.actor.attack_id}) — ${plan.summary.techniques} techniques across ${plan.summary.stages} stages; ${plan.summary.runnable} runnable, ${plan.summary.marked_run.length} recorded, ${assessed} detection results assessed. Authorized disposable-lab plan; AdversaryFlow did not execute commands.`;
+  const fidelity = plan.summary.fidelity_mix;
+  const fidelitySummary = fidelity ? `${fidelity.direct} direct, ${fidelity.bounded_synthetic} bounded synthetic, ${fidelity.lab_proxy} lab proxy` : "fidelity not recorded";
+  return `${plan.actor.name} (${plan.actor.attack_id}) — ${plan.summary.techniques} techniques across ${plan.summary.stages} stages; ${plan.summary.runnable} runnable, ${plan.summary.marked_run.length} recorded, ${assessed} detection results assessed; fidelity: ${fidelitySummary}. Authorized disposable-lab plan; AdversaryFlow did not execute commands.`;
 }
 
 export function platformLabel(platform: string): string {

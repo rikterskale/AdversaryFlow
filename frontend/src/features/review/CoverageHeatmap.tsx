@@ -33,10 +33,10 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
   return (
     <section className="heatmap-panel" aria-labelledby="heatmap-title">
       <div className="heatmap-heading">
-        <div><p className="eyebrow">ATT&amp;CK coverage</p><h2 id="heatmap-title">Technique matrix</h2><p>Coverage source forms the cell color; execution and detection evidence adds the status marker.</p></div>
+        <div><p className="eyebrow">ATT&amp;CK coverage</p><h2 id="heatmap-title">Technique matrix</h2><p>Catalog source forms the cell color; ability fidelity is shown in the plan preview. Execution and detection evidence adds the status marker.</p></div>
         <div className="heatmap-legend" aria-label="Coverage legend">
-          <span><i className="legend-square is-curated" />Curated</span>
-          <span><i className="legend-square is-fallback" />Fallback</span>
+          <span><i className="legend-square is-curated" />Keyed catalog</span>
+          <span><i className="legend-square is-fallback" />Fallback catalog</span>
           <span><i className="legend-ring is-planned" />Planned</span>
           <span><i className="legend-ring is-ran" />Ran</span>
           <span><i className="legend-ring is-detected" />Detected</span>

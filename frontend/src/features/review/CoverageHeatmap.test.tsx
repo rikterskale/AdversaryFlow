@@ -21,7 +21,7 @@ const plan: PlanPreview = {
     { tactic: "execution", title: "Execution", techniques: [scopedTechnique("T1059", "curated")] },
     { tactic: "discovery", title: "Discovery", techniques: [scopedTechnique("T1033", "fallback")] },
   ],
-  total: 2, runnable: 2, unsupported: 0, curated: 1, fallback: 1, filteredFallback: 0,
+  total: 2, runnable: 2, unsupported: 0, curated: 1, fallback: 1, direct: 2, boundedSynthetic: 0, labProxy: 0, filteredFallback: 0,
   withheld: { platform: 0, network: 0, admin: 0, highRisk: 0, catalog: 0 },
 };
 

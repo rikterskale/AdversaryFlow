@@ -19,6 +19,7 @@ export interface PlanSummary {
   stages: number;
   curated: number;
   fallback: number;
+  fidelity_mix?: { direct: number; bounded_synthetic: number; lab_proxy: number };
   marked_run: string[];
 }
 
@@ -204,9 +205,12 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
 
   const summaryKeys = ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"];
   const summary = data.summary;
-  if (!onlyKeys(summary, summaryKeys)
+  const fidelityMix = isRecord(summary) ? summary.fidelity_mix : undefined;
+  if (!onlyKeys(summary, summaryKeys, ["fidelity_mix"])
     || summaryKeys.slice(0, 6).some((key) => !nonNegativeInteger(summary[key]))
-    || !uniqueStrings(summary.marked_run)) throw new Error("Plan summary is invalid");
+    || !uniqueStrings(summary.marked_run)
+    || (fidelityMix !== undefined && (!isRecord(fidelityMix) || !onlyKeys(fidelityMix, ["direct", "bounded_synthetic", "lab_proxy"])
+      || ["direct", "bounded_synthetic", "lab_proxy"].some((key) => !nonNegativeInteger(fidelityMix[key]))))) throw new Error("Plan summary is invalid");
 
   if (!Array.isArray(data.stages) || !data.stages.length || data.stages.length > 32) throw new Error("Plan stage count is invalid");
   let totalTechniqueRecords = 0;

@@ -65,6 +65,16 @@
         "stages": { "type": "integer", "minimum": 0 },
         "curated": { "type": "integer", "minimum": 0 },
         "fallback": { "type": "integer", "minimum": 0 },
+        "fidelity_mix": {
+          "type": "object",
+          "required": ["direct", "bounded_synthetic", "lab_proxy"],
+          "properties": {
+            "direct": { "type": "integer", "minimum": 0 },
+            "bounded_synthetic": { "type": "integer", "minimum": 0 },
+            "lab_proxy": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
         "marked_run": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       },
       "additionalProperties": false
