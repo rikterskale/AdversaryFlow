@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-audit-event.schema.json",
+  "title": "AdversaryFlow append-only audit event",
+  "type": "object",
+  "required": ["sequence", "event_id", "occurred_at", "event_type", "principal", "entity_type", "entity_id", "revision", "payload", "previous_digest", "event_digest"],
+  "properties": {
+    "sequence": { "type": "integer", "minimum": 1 },
+    "event_id": { "type": "string", "format": "uuid" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "event_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+    "principal": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "entity_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+    "entity_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "revision": { "type": ["integer", "null"], "minimum": 1 },
+    "payload": { "type": "object" },
+    "previous_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "event_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false
+}

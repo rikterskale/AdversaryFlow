@@ -43,7 +43,7 @@ Official MITRE ATT&CK STIX 2.1 feed
 | `backend/ability_model.py` | Normalizes code-backed catalog records into a format-neutral ability shape with fidelity, safety, digest, and explicit unassessed review status | Legacy catalog presence is not treated as content approval |
 | `backend/content_pack.py` | Verifies Ed25519-signed versioned ability and detection-binding packs against installation trust roots; the Atomic adapter and reports consume verified records | Optional `cryptography` extra; invalid signatures, payload digests, or conflicting records fail closed |
 | `backend/atomic_adapter.py` | Converts reviewed internal abilities into Atomic Red Team YAML and writes structured gap rows for the rest | Only `review_status: reviewed` abilities become Atomic tests; the service never runs them |
-| `backend/engagement_store.py` | Stores engagements, immutable plan revisions, run groups, receipts, telemetry references, and ability backlog in SQLite | Local single-install store; digests detect changes but are not digital signatures |
+| `backend/engagement_store.py` | Stores engagements, immutable plan revisions, run groups, receipts, telemetry references, ability backlog, and a verified hash-chained audit stream in SQLite | Local single-install store; hashes are tamper-evident, not digital signatures |
 | `backend/command_catalog.py` and `ext_part*.py` | Curated technique/platform records and bounded fallback selection | Public ATT&CK IDs and reviewed, bounded exercises only |
 | `backend/command_safety.py` | Normalizes risk, privilege, network, prerequisite, telemetry, and rollback metadata | Safety metadata travels with every command record |
 | `backend/lab_exercises.py` | Portable bounded synthetic exercise families and digest-protected receipts | Runs only when an operator invokes the exported script on a lab host |
@@ -108,6 +108,12 @@ set digest, technique outcomes, detection results, and telemetry references.
 revision. Receipt digests establish content integrity only; receipts remain
 self-reported, and telemetry references do not imply the referenced event was
 independently verified by this service.
+
+The local audit stream records saved revisions, exported artifacts, and
+backlog changes. `GET /api/audit-events` verifies the complete chain before
+returning a page. Principal labels come from the plan's operator field or are
+`unknown`; they are not authenticated until the identity and role control
+plane is implemented. See [Audit log](AUDIT.md).
 
 ## Core request and data flows
 

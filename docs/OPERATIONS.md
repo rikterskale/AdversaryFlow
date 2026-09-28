@@ -94,6 +94,12 @@ claim when those packs provide none. Imported commands are marked
 unverified and require acknowledgment before copying; saved guardrails remain
 unchanged. **Save JSON plan** is also available independently of the service.
 
+Saved revisions, successful exports, and backlog updates are recorded in the
+local append-only audit stream. GET `/api/audit-events` verifies the complete
+hash chain and pages records; a failed verification returns HTTP 503. Until
+identity-provider roles are configured, principal labels are operator text or
+`unknown`, not authenticated users. See [Audit log](AUDIT.md).
+
 Do not put secrets in execution notes or exports.
 
 ## Diagnostics

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -15,6 +17,7 @@ from . import attack_data, content_pack
 
 MAX_STORED_ENGAGEMENTS = 10_000
 MAX_REVISIONS_PER_ENGAGEMENT = 2_000
+MAX_AUDIT_EVENTS = 200_000
 
 
 class EngagementStoreError(ValueError):
@@ -109,6 +112,20 @@ def initialize() -> None:
             FOREIGN KEY (engagement_id, revision) REFERENCES plan_revisions(engagement_id, revision) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS run_records_run_idx ON run_records(run_id);
+        CREATE TABLE IF NOT EXISTS audit_events (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL UNIQUE,
+            occurred_at TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            principal TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            revision INTEGER,
+            payload_json TEXT NOT NULL,
+            previous_digest TEXT NOT NULL,
+            event_digest TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS audit_events_type_idx ON audit_events(event_type, sequence DESC);
         """)
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(plan_revisions)").fetchall()}
         if "content_pack_sha256" not in columns:
@@ -187,6 +204,18 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
             (key, revision, schema_version, digest, content_pack_sha256, content_packs_json, plan_json, now),
         )
         _persist_run_records(connection, key, revision, plan, now)
+        execution_context = plan.get("execution_context")
+        principal = str(execution_context.get("operator", "")).strip()[:120] if isinstance(execution_context, Mapping) else ""
+        scope = plan.get("scope") if isinstance(plan.get("scope"), Mapping) else {}
+        _, scope_digest = _canonical(scope)
+        stages = plan.get("stages")
+        technique_count = sum(len(stage.get("techniques", [])) for stage in stages
+                              if isinstance(stage, Mapping) and isinstance(stage.get("techniques"), list)) if isinstance(stages, list) else 0
+        _insert_audit_event(connection, event_type="engagement_revision_saved", principal=principal or "unknown",
+                             entity_type="engagement", entity_id=key, revision=revision,
+                             payload={"plan_sha256": digest, "content_pack_sha256": content_pack_sha256,
+                                      "data_version": data_version, "scope_sha256": scope_digest,
+                                      "technique_count": technique_count})
         connection.execute("COMMIT")
     except Exception:
         if connection.in_transaction:
@@ -349,6 +378,130 @@ def list_run_records(engagement_id: str, revision: Optional[int] = None, limit: 
     return [_run_record(row) for row in rows]
 
 
+def _insert_audit_event(connection: sqlite3.Connection, *, event_type: str, principal: str,
+                        entity_type: str, entity_id: str, revision: Optional[int],
+                        payload: Mapping[str, Any]) -> Dict[str, Any]:
+    sequence_tip = connection.execute("SELECT COALESCE(MAX(sequence), 0) AS n FROM audit_events").fetchone()["n"]
+    if sequence_tip >= MAX_AUDIT_EVENTS:
+        raise EngagementStoreError("The audit log reached its configured capacity")
+    previous = connection.execute("SELECT * FROM audit_events ORDER BY sequence DESC LIMIT 1").fetchone()
+    if previous is not None:
+        previous_payload = json.loads(previous["payload_json"])
+        previous_record = {
+            "sequence": previous["sequence"],
+            "event_id": previous["event_id"], "occurred_at": previous["occurred_at"],
+            "event_type": previous["event_type"], "principal": previous["principal"],
+            "entity_type": previous["entity_type"], "entity_id": previous["entity_id"],
+            "revision": previous["revision"], "payload": previous_payload,
+            "previous_digest": previous["previous_digest"],
+        }
+        _, previous_expected = _canonical(previous_record)
+        predecessor = connection.execute("SELECT event_digest FROM audit_events WHERE sequence < ? ORDER BY sequence DESC LIMIT 1",
+                                         (previous["sequence"],)).fetchone()
+        expected_link = predecessor["event_digest"] if predecessor else "0" * 64
+        if previous["previous_digest"] != expected_link or not hmac.compare_digest(previous["event_digest"], previous_expected):
+            raise EngagementStoreError(f"Audit log hash chain verification failed at sequence {previous['sequence']}")
+    previous_digest = previous["event_digest"] if previous else "0" * 64
+    now = _utc_now()
+    event_id = str(uuid.uuid4())
+    sequence = sequence_tip + 1
+    payload_json, _ = _canonical(payload)
+    record = {
+        "sequence": sequence,
+        "event_id": event_id, "occurred_at": now, "event_type": event_type,
+        "principal": principal, "entity_type": entity_type, "entity_id": entity_id,
+        "revision": revision, "payload": json.loads(payload_json), "previous_digest": previous_digest,
+    }
+    _, event_digest = _canonical(record)
+    connection.execute("""
+        INSERT INTO audit_events
+        (sequence, event_id, occurred_at, event_type, principal, entity_type, entity_id, revision,
+         payload_json, previous_digest, event_digest)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (sequence, event_id, now, event_type, principal, entity_type, entity_id, revision,
+          payload_json, previous_digest, event_digest))
+    return {**record, "event_digest": event_digest}
+
+
+def _verify_audit_chain(connection: sqlite3.Connection) -> int:
+    rows = connection.execute("SELECT * FROM audit_events ORDER BY sequence")
+    previous = "0" * 64
+    count = 0
+    for row in rows:
+        count += 1
+        if count > MAX_AUDIT_EVENTS:
+            raise EngagementStoreError("The audit log exceeds its verification limit")
+        payload = json.loads(row["payload_json"])
+        record = {
+            "sequence": row["sequence"],
+            "event_id": row["event_id"], "occurred_at": row["occurred_at"],
+            "event_type": row["event_type"], "principal": row["principal"],
+            "entity_type": row["entity_type"], "entity_id": row["entity_id"],
+            "revision": row["revision"], "payload": payload,
+            "previous_digest": row["previous_digest"],
+        }
+        _, expected = _canonical(record)
+        if row["previous_digest"] != previous or not hmac.compare_digest(row["event_digest"], expected):
+            raise EngagementStoreError(f"Audit log hash chain verification failed at sequence {row['sequence']}")
+        previous = row["event_digest"]
+    return count
+
+
+def append_audit_event(*, event_type: str, principal: str = "unknown", entity_type: str,
+                       entity_id: str, revision: Optional[int] = None,
+                       payload: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    """Append a bounded, hash-chained audit event in its own transaction."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", event_type):
+        raise EngagementStoreError("Audit event type is invalid")
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", entity_type):
+        raise EngagementStoreError("Audit entity type is invalid")
+    if not isinstance(entity_id, str) or not entity_id or len(entity_id) > 128:
+        raise EngagementStoreError("Audit entity ID is invalid")
+    if not isinstance(principal, str) or not principal.strip() or len(principal) > 120:
+        raise EngagementStoreError("Audit principal is invalid")
+    if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
+        raise EngagementStoreError("Audit revision is invalid")
+    event_payload = {} if payload is None else payload
+    if not isinstance(event_payload, Mapping):
+        raise EngagementStoreError("Audit payload must be a JSON object")
+    payload_json, _ = _canonical(event_payload)
+    if len(payload_json.encode("utf-8")) > 8_192:
+        raise EngagementStoreError("Audit payload exceeds 8 KiB")
+    _ensure_initialized()
+    with _connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            record = _insert_audit_event(connection, event_type=event_type, principal=principal.strip(),
+                                         entity_type=entity_type, entity_id=entity_id, revision=revision,
+                                         payload=event_payload)
+            connection.execute("COMMIT")
+            return record
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+
+def list_audit_events(limit: int = 100, after_sequence: int = 0) -> Dict[str, Any]:
+    """Verify the full chain and return a bounded audit-log page."""
+    _ensure_initialized()
+    if (not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1_000
+            or not isinstance(after_sequence, int) or isinstance(after_sequence, bool) or after_sequence < 0):
+        raise EngagementStoreError("Audit event page values are invalid")
+    with _connect() as connection:
+        count = _verify_audit_chain(connection)
+        rows = connection.execute("SELECT * FROM audit_events WHERE sequence > ? ORDER BY sequence LIMIT ?",
+                                  (after_sequence, limit)).fetchall()
+        tip = connection.execute("SELECT event_digest FROM audit_events ORDER BY sequence DESC LIMIT 1").fetchone()
+    events = []
+    for row in rows:
+        item = dict(row)
+        item["payload"] = json.loads(item.pop("payload_json"))
+        events.append(item)
+    return {"events": events, "chain_valid": True, "event_count": count,
+            "chain_tip": tip["event_digest"] if tip else "0" * 64}
+
+
 def upsert_ability_gaps(gaps: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     """Persist generated gap rows without overwriting existing ownership/status."""
     _ensure_initialized()
@@ -383,6 +536,14 @@ def upsert_ability_gaps(gaps: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
                                    (str(gap.get("reason", ""))[:1000], now, item_id))
             saved = connection.execute("SELECT * FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
             results.append(_backlog_record(saved))
+        if results:
+            backlog_ids_digest = hashlib.sha256(
+                "\n".join(sorted(item["id"] for item in results)).encode("utf-8")
+            ).hexdigest()
+            _insert_audit_event(connection, event_type="ability_backlog_generated", principal="unknown",
+                                entity_type="ability_backlog", entity_id=f"sha256:{backlog_ids_digest}",
+                                revision=None, payload={"item_count": len(results),
+                                                        "backlog_ids_sha256": backlog_ids_digest})
         connection.execute("COMMIT")
     except Exception:
         if connection.in_transaction:
@@ -424,9 +585,25 @@ def update_ability_gap(item_id: str, *, owner: Optional[str], status: str) -> Op
         owner = owner.strip() or None
     now = _utc_now()
     with _connect() as connection:
-        cursor = connection.execute("UPDATE ability_backlog SET owner = ?, status = ?, updated_at = ? WHERE id = ?",
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            previous = connection.execute("SELECT owner, status FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
+            if previous is None:
+                connection.execute("ROLLBACK")
+                return None
+            cursor = connection.execute("UPDATE ability_backlog SET owner = ?, status = ?, updated_at = ? WHERE id = ?",
                                     (owner, status, now, item_id))
-        if cursor.rowcount != 1:
-            return None
-        row = connection.execute("SELECT * FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
+            if cursor.rowcount != 1:
+                connection.execute("ROLLBACK")
+                return None
+            row = connection.execute("SELECT * FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()
+            _insert_audit_event(connection, event_type="ability_backlog_updated", principal="unknown",
+                                entity_type="ability_gap", entity_id=item_id, revision=None,
+                                payload={"previous_owner": previous["owner"], "previous_status": previous["status"],
+                                         "owner": owner, "status": status})
+            connection.execute("COMMIT")
+        except Exception:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
     return _backlog_record(row)

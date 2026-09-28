@@ -494,6 +494,21 @@ def engagement_runs(engagement_id: str):
         abort(400, description=str(exc))
 
 
+@app.route("/api/audit-events", methods=["GET"])
+def audit_events_list():
+    try:
+        limit = int(request.args.get("limit", "100"))
+        after_sequence = int(request.args.get("after_sequence", "0"))
+    except ValueError:
+        abort(400, description="Audit limit and after_sequence must be integers")
+    if not 1 <= limit <= 1_000 or after_sequence < 0:
+        abort(400, description="Audit limit must be 1-1000 and after_sequence must be non-negative")
+    try:
+        return jsonify(engagement_store.list_audit_events(limit, after_sequence))
+    except engagement_store.EngagementStoreError as exc:
+        abort(503, description=str(exc))
+
+
 @app.route("/api/execution-kit", methods=["POST"])
 def execution_kit_download():
     """Build a portable CSV plus PowerShell/Bash runner without executing it."""
@@ -505,6 +520,16 @@ def execution_kit_download():
         archive, filename = execution_kit.build_execution_kit(document)
     except execution_kit.ExecutionKitError as exc:
         abort(400, description=str(exc))
+    try:
+        plan_digest = execution_kit.normalize_plan(document, require_executable=False).plan_sha256
+        engagement_store.append_audit_event(
+            event_type="execution_kit_exported", principal=_audit_principal(document),
+            entity_type="plan_export", entity_id=f"sha256:{plan_digest}",
+            payload={"plan_sha256": plan_digest, "platform": document.get("scope", {}).get("command_platform"),
+                     "artifact_name": filename, "size_bytes": len(archive)},
+        )
+    except engagement_store.EngagementStoreError as exc:
+        abort(503, description=str(exc))
     _log_event("execution_kit_generated", platform=document.get("scope", {}).get("command_platform"),
                size_bytes=len(archive))
     response = send_file(
@@ -541,6 +566,16 @@ def engagement_report_download(report_format: str):
             mimetype = "application/json"
     except reporting.ReportError as exc:
         abort(400, description=str(exc))
+    try:
+        engagement_store.append_audit_event(
+            event_type="engagement_report_exported", principal=_audit_principal(document),
+            entity_type="plan_export", entity_id=f"sha256:{report.plan_sha256}",
+            payload={"plan_sha256": report.plan_sha256, "format": report_format,
+                     "data_version": report.data_version, "platform": report.platform,
+                     "size_bytes": len(content)},
+        )
+    except engagement_store.EngagementStoreError as exc:
+        abort(503, description=str(exc))
     _log_event("engagement_report_generated", format=report_format,
                platform=document.get("scope", {}).get("command_platform"), size_bytes=len(content))
     response = send_file(
@@ -568,6 +603,17 @@ def atomic_playbook_download():
         abort(400, description=str(exc))
     persisted_gaps = engagement_store.upsert_ability_gaps(manifest["gaps"])
     archive = atomic_adapter.add_backlog_records(archive, manifest, persisted_gaps)
+    try:
+        engagement_store.append_audit_event(
+            event_type="atomic_playbook_exported", principal=_audit_principal(document),
+            entity_type="plan_export", entity_id=f"sha256:{manifest['plan_sha256']}",
+            payload={"plan_sha256": manifest["plan_sha256"], "platform": manifest["platform"],
+                     "included_abilities": manifest["summary"]["included"],
+                     "backlog_items": manifest["summary"]["gaps"],
+                     "content_pack_count": len(manifest["content_packs"])},
+        )
+    except engagement_store.EngagementStoreError as exc:
+        abort(503, description=str(exc))
     _log_event("atomic_playbook_pack_generated", included=manifest["summary"]["included"],
                gaps=manifest["summary"]["gaps"], platform=manifest["platform"],
                plan_sha256=manifest["plan_sha256"])
@@ -714,6 +760,18 @@ def _log_event(event: str, level: str = "info", **fields: Any) -> None:
         return
     record = {"timestamp": time.time(), "level": level, "event": event, **fields}
     print(json.dumps(record, sort_keys=True), flush=True)
+
+
+def _audit_principal(document: Any) -> str:
+    context = document.get("execution_context") if isinstance(document, dict) else None
+    operator = context.get("operator") if isinstance(context, dict) else None
+    return operator.strip()[:120] if isinstance(operator, str) and operator.strip() else "unknown"
+
+
+def _audit_principal(document: Any) -> str:
+    context = document.get("execution_context") if isinstance(document, dict) else None
+    operator = context.get("operator") if isinstance(context, dict) else None
+    return operator.strip()[:120] if isinstance(operator, str) and operator.strip() else "unknown"
 
 
 @app.errorhandler(Exception)

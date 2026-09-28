@@ -70,6 +70,7 @@ version = { attr = "backend.__version__" }
   "schemas/adversaryflow-run.schema.json",
   "schemas/adversaryflow-content-pack.schema.json",
   "schemas/adversaryflow-detection-binding.schema.json",
+  "schemas/adversaryflow-audit-event.schema.json",
 ]
 
 [tool.ruff]

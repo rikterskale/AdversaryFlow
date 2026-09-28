@@ -263,6 +263,35 @@ paths:
                   verified_detection_binding_count: { type: integer, minimum: 0 }
         "401": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /api/audit-events:
+    get:
+      summary: Verify and page through the append-only audit log
+      description: Verifies the full SHA-256 hash chain on every request, then returns a bounded page. The principal is an operator label or unknown until identity-backed authentication is configured; the hash chain is tamper-evident, not a digital signature.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - name: after_sequence
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Audit event page and full-chain verification status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, chain_valid, event_count, chain_tip]
+                properties:
+                  events: { type: array, items: { $ref: "../schemas/adversaryflow-audit-event.schema.json" } }
+                  chain_valid: { const: true }
+                  event_count: { type: integer, minimum: 0 }
+                  chain_tip: { type: string, pattern: "^[a-f0-9]{64}$" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /api/ability-backlog/{item_id}:
     patch:
       summary: Assign an owner and update backlog status
