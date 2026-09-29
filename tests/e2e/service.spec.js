@@ -38,10 +38,18 @@ test.beforeEach(async ({ request }) => {
 });
 
 async function connect(page) {
-  // Wait for the response to start, then let the token dialog establish that
-  // the client rendered. Firefox can stall navigation lifecycle events under
-  // the full cross-browser suite even when the service is responsive.
-  await page.goto(baseURL, { waitUntil: "commit" });
+  // Firefox can occasionally stall before committing the document even
+  // though the fixture service is responsive. Retry that bounded navigation
+  // once so a transient browser stall does not make the whole suite flaky.
+  const navigate = () => page.goto(baseURL, { waitUntil: "commit", timeout: 20_000 });
+  try {
+    await navigate();
+  } catch (error) {
+    const browserName = page.context().browser()?.browserType().name();
+    if (browserName !== "firefox" || !String(error?.message ?? error).includes("Timeout")) throw error;
+    await page.goto("about:blank", { waitUntil: "commit", timeout: 5_000 });
+    await navigate();
+  }
   await page.getByLabel("API token").fill("browser-fixture-token");
   await page.getByRole("button", { name: "Connect securely" }).click();
 }
