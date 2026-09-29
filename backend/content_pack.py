@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import hmac
 import io
@@ -20,7 +21,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
-
 
 MAX_PACK_BYTES = 20 * 1024 * 1024
 MAX_PACK_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
@@ -138,9 +138,8 @@ def _normalize_ability(raw: Any, *, require_identity: bool) -> Dict[str, Any]:
     normalized["side_effects"] = sorted(raw["side_effects"])
     content_sha256 = _digest(_canonical(normalized))
     ability_id = _digest(f"{normalized['technique_id']}\0{normalized['platform']}\0{normalized['executor']}\0{content_sha256}".encode("utf-8"))[:24]
-    if require_identity:
-        if raw.get("content_sha256") != content_sha256 or raw.get("ability_id") != ability_id:
-            raise ContentPackError(f"Ability identity or content digest is invalid for {normalized['technique_id']}")
+    if require_identity and (raw.get("content_sha256") != content_sha256 or raw.get("ability_id") != ability_id):
+        raise ContentPackError(f"Ability identity or content digest is invalid for {normalized['technique_id']}")
     normalized["ability_id"] = ability_id
     normalized["content_sha256"] = content_sha256
     normalized["procedure_candidate_ids"] = sorted(set(procedure_ids))
@@ -377,10 +376,8 @@ def _keygen(private_path: str, public_path: str) -> int:
     if private.exists() or public.exists():
         raise ContentPackError("Refusing to overwrite an existing key file")
     private.write_bytes(private_bytes)
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(private, 0o600)
-    except OSError:
-        pass
     public.write_text(base64.b64encode(public_bytes).decode("ascii") + "\n", encoding="ascii")
     return 0
 

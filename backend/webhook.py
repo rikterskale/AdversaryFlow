@@ -14,7 +14,6 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-
 logger = logging.getLogger("adversaryflow.webhook")
 REQUEST_TIMEOUT_SECONDS = 5
 MAX_RESPONSE_BYTES = 2_048
@@ -48,14 +47,16 @@ def load_config() -> Optional[WebhookConfig]:
             or parsed.fragment or len(url) > 2_000):
         raise WebhookConfigurationError("RUN_WEBHOOK_URL must be an HTTPS URL without embedded credentials or a fragment")
     try:
-        parsed.port
+        port = parsed.port
     except ValueError as exc:
         raise WebhookConfigurationError("RUN_WEBHOOK_URL has an invalid port") from exc
+    if port == 0:
+        raise WebhookConfigurationError("RUN_WEBHOOK_URL has an invalid port")
     return WebhookConfig(url=url, secret=secret.encode("utf-8"))
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str):
+    def redirect_request(self, _req: Any, _fp: Any, _code: int, _msg: str, _headers: Any, _newurl: str):
         return None
 
 

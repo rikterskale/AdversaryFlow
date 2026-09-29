@@ -102,7 +102,7 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("accepts `html`, `pdf`,\nor `json`", self.exports)
         self.assertIn("Reports omit command bodies", self.exports)
         self.assertIn("Sigma rule labels and HTTPS references", self.exports)
-        self.assertIn("current catalog does not declare a Sigma-reference field", self.exports)
+        self.assertIn("The current command catalog does not declare a Sigma-reference field.", self.exports)
         self.assertIn("x_mitre_data_sources", self.exports)
         self.assertIn("x_mitre_detection", self.exports)
         self.assertIn("JSON remains the canonical machine-readable", self.exports)

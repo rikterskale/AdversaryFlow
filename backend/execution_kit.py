@@ -394,14 +394,14 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
             if not isinstance(entry, dict) or set(entry) != receipt_keys or not isinstance(entry.get("receipt"), dict):
                 raise ExecutionKitError("Schema 3.0 plan contains an invalid receipt record")
             receipt = entry["receipt"]
-            technique_id = entry.get("technique_id")
+            receipt_technique_id = entry.get("technique_id")
             run_id = entry.get("run_id")
             digest = entry.get("receipt_sha256")
-            if (not isinstance(technique_id, str) or not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id)
+            if (not isinstance(receipt_technique_id, str) or not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(receipt_technique_id)
                     or not isinstance(run_id, str) or not run_id or len(run_id) > 128
                     or not isinstance(digest, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", digest)
                     or receipt.get("schema_version") != "1.0"
-                    or receipt.get("technique_id") != technique_id or receipt.get("run_id") != run_id
+                    or receipt.get("technique_id") != receipt_technique_id or receipt.get("run_id") != run_id
                     or receipt.get("receipt_sha256") != digest
                     or not isinstance(receipt.get("status"), str) or receipt["status"] not in {"passed", "failed"}
                     or not isinstance(receipt.get("started_at"), str) or not isinstance(receipt.get("completed_at"), str)
@@ -417,10 +417,10 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 telemetry._time(receipt["completed_at"])
             except (TypeError, ValueError, OverflowError) as exc:
                 raise ExecutionKitError("Schema 3.0 plan receipt timestamps are invalid") from exc
-            planned = planned_runs.get((technique_id, run_id))
+            planned = planned_runs.get((receipt_technique_id, run_id))
             if not planned or planned.get("receipt_sha256") != digest or planned.get("receipt_verified") is not True:
                 raise ExecutionKitError("Receipt evidence must match a digest-verified plan execution record")
-            key = (technique_id, run_id)
+            key = (receipt_technique_id, run_id)
             if key in seen_receipts:
                 raise ExecutionKitError("Schema 3.0 plan contains duplicate run receipts")
             seen_receipts.add(key)

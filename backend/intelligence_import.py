@@ -14,7 +14,6 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
-
 MAX_IMPORT_BYTES = 16 * 1024 * 1024
 MAX_PROCEDURES = 4_000
 MAX_TEXT_LENGTH = 2_000
@@ -211,7 +210,7 @@ def _parse_csv(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]:
               for field, keys in aliases.items()}
     if mapped["technique_id"] is None:
         raise IntelligenceImportError("CSV needs a technique_id, attack_id, attack_technique, external_id, or id column")
-    rows = []
+    rows: List[Dict[str, Any]] = []
     try:
         for row in reader:
             if len(rows) >= MAX_PROCEDURES:
@@ -237,9 +236,10 @@ def _parse_json(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]
     # confidence because Navigator scores normally represent layer visualization.
     if isinstance(data.get("techniques"), list):
         layer_name = _bounded_text(data.get("name"), "layer name", 300) or source_name
-        metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+        metadata_value = data.get("metadata")
+        metadata: Mapping[str, Any] = metadata_value if isinstance(metadata_value, dict) else {}
         layer_url = metadata.get("url") or source_url
-        rows = []
+        rows: List[Dict[str, Any]] = []
         for entry in data["techniques"]:
             if not isinstance(entry, dict):
                 raise IntelligenceImportError("Navigator layer techniques must be objects")
@@ -297,7 +297,7 @@ def _parse_json(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]
                 "platforms": platforms,
                 "tactics": tactics,
             })
-        bundle_name = data.get("name") if isinstance(data.get("name"), str) else source_name
+        bundle_name = _bounded_text(data.get("name"), "bundle name", 300) or source_name
         return _finish("stix2_bundle", bundle_name, source_url, raw, rows)
 
     raise IntelligenceImportError("JSON must be an ATT&CK Navigator layer or STIX 2.1 bundle")

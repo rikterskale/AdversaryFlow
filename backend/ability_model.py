@@ -12,7 +12,6 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Mapping, Tuple
 
-
 FIDELITY_VALUES = {"direct", "bounded_synthetic", "lab_proxy"}
 SAFETY_CLASSES = {"none", "low", "medium", "high"}
 
@@ -61,24 +60,51 @@ def catalog_ability(technique_id: str, command: Mapping[str, Any]) -> Ability:
     prerequisites = command.get("prerequisites", [])
     targets = command.get("network_targets", [])
     side_effects = command.get("side_effects", [])
+    requirements = tuple(sorted({str(item) for item in prerequisites}))
+    cleanup = str(command.get("cleanup", ""))
+    rollback = str(command.get("rollback", command.get("cleanup", "")))
+    requires_admin = bool(command.get("requires_admin", False))
+    requires_network = bool(command.get("requires_network", False))
+    network_targets = tuple(sorted({str(item) for item in targets}))
+    side_effect_values = tuple(sorted({str(item) for item in side_effects}))
+    timeout_seconds = int(command.get("timeout_seconds", 60))
     normalized = {
         "technique_id": technique_id,
         "platform": platform,
         "executor": executor,
         "command_template": command_text,
-        "requirements": sorted({str(item) for item in prerequisites}),
-        "cleanup": str(command.get("cleanup", "")),
-        "rollback": str(command.get("rollback", command.get("cleanup", ""))),
+        "requirements": requirements,
+        "cleanup": cleanup,
+        "rollback": rollback,
         "fidelity": fidelity,
         "safety_class": safety_class,
-        "requires_admin": bool(command.get("requires_admin", False)),
-        "requires_network": bool(command.get("requires_network", False)),
-        "network_targets": sorted({str(item) for item in targets}),
-        "side_effects": sorted({str(item) for item in side_effects}),
-        "timeout_seconds": int(command.get("timeout_seconds", 60)),
+        "requires_admin": requires_admin,
+        "requires_network": requires_network,
+        "network_targets": network_targets,
+        "side_effects": side_effect_values,
+        "timeout_seconds": timeout_seconds,
         "content_source": "legacy_python_catalog",
         "review_status": "unassessed",
     }
     digest = hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     ability_id = hashlib.sha256(f"{technique_id}\0{platform}\0{executor}\0{digest}".encode("utf-8")).hexdigest()[:24]
-    return Ability(ability_id=ability_id, content_sha256=digest, **normalized)
+    return Ability(
+        ability_id=ability_id,
+        technique_id=technique_id,
+        platform=platform,
+        executor=executor,
+        command_template=command_text,
+        requirements=requirements,
+        cleanup=cleanup,
+        rollback=rollback,
+        fidelity=fidelity,
+        safety_class=safety_class,
+        requires_admin=requires_admin,
+        requires_network=requires_network,
+        network_targets=network_targets,
+        side_effects=side_effect_values,
+        timeout_seconds=timeout_seconds,
+        content_source="legacy_python_catalog",
+        review_status="unassessed",
+        content_sha256=digest,
+    )

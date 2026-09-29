@@ -38,9 +38,10 @@ test.beforeEach(async ({ request }) => {
 });
 
 async function connect(page) {
-  // The token dialog is the readiness boundary; Firefox can delay the window
-  // load notification even after this client-rendered form is interactive.
-  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  // Wait for the response to start, then let the token dialog establish that
+  // the client rendered. Firefox can stall navigation lifecycle events under
+  // the full cross-browser suite even when the service is responsive.
+  await page.goto(baseURL, { waitUntil: "commit" });
   await page.getByLabel("API token").fill("browser-fixture-token");
   await page.getByRole("button", { name: "Connect securely" }).click();
 }

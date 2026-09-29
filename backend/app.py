@@ -27,7 +27,20 @@ from typing import Any, Dict, List
 from flask import Flask, abort, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from . import __version__, ability_model, atomic_adapter, attack_data, command_catalog, content_pack, diagnostics, engagement_store, execution_kit, intelligence_import, reporting, webhook
+from . import (
+    __version__,
+    ability_model,
+    atomic_adapter,
+    attack_data,
+    command_catalog,
+    content_pack,
+    diagnostics,
+    engagement_store,
+    execution_kit,
+    intelligence_import,
+    reporting,
+    webhook,
+)
 
 
 def _frontend_dir() -> str:
@@ -775,12 +788,6 @@ def _log_event(event: str, level: str = "info", **fields: Any) -> None:
         return
     record = {"timestamp": time.time(), "level": level, "event": event, **fields}
     print(json.dumps(record, sort_keys=True), flush=True)
-
-
-def _audit_principal(document: Any) -> str:
-    context = document.get("execution_context") if isinstance(document, dict) else None
-    operator = context.get("operator") if isinstance(context, dict) else None
-    return operator.strip()[:120] if isinstance(operator, str) and operator.strip() else "unknown"
 
 
 def _audit_principal(document: Any) -> str:

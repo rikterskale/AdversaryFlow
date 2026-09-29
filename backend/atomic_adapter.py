@@ -10,7 +10,7 @@ import io
 import json
 import uuid
 import zipfile
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from . import ability_model, command_catalog, content_pack, execution_kit
 
@@ -185,7 +185,7 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
     return archive.getvalue(), manifest
 
 
-def add_backlog_records(archive: bytes, manifest: Dict[str, Any], records: List[Mapping[str, Any]]) -> bytes:
+def add_backlog_records(archive: bytes, manifest: Dict[str, Any], records: Sequence[Mapping[str, Any]]) -> bytes:
     """Bind persisted backlog IDs and current ownership/status into the ZIP manifest."""
     indexed = {
         (item.get("technique_id"), item.get("platform"), item.get("gap"), item.get("ability_id"),

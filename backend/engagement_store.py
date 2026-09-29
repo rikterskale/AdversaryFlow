@@ -10,10 +10,9 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from . import attack_data, content_pack, webhook
-
 
 MAX_STORED_ENGAGEMENTS = 10_000
 MAX_REVISIONS_PER_ENGAGEMENT = 2_000
@@ -225,7 +224,8 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
         _persist_run_records(connection, key, revision, plan, now)
         execution_context = plan.get("execution_context")
         principal = str(execution_context.get("operator", "")).strip()[:120] if isinstance(execution_context, Mapping) else ""
-        scope = plan.get("scope") if isinstance(plan.get("scope"), Mapping) else {}
+        raw_scope = plan.get("scope")
+        scope: Mapping[str, Any] = raw_scope if isinstance(raw_scope, Mapping) else {}
         _, scope_digest = _canonical(scope)
         stages = plan.get("stages")
         technique_count = sum(len(stage.get("techniques", [])) for stage in stages
@@ -365,7 +365,6 @@ def _persist_run_records(connection: sqlite3.Connection, engagement_id: str, rev
         outcomes = {item["outcome"] for item in evidence}
         result = "failed" if "failed" in outcomes else "passed" if "passed" in outcomes else "skipped" if outcomes == {"skipped"} else "recorded"
         receipts = [item["receipt"] for item in evidence if isinstance(item.get("receipt"), Mapping)]
-        receipt_digests = sorted(item["receipt_sha256"] for item in evidence if isinstance(item.get("receipt_sha256"), str))
         telemetry_refs = sorted({ref for item in evidence for ref in item.get("telemetry_refs", []) if isinstance(ref, str)})
         canonical_evidence = json.dumps(evidence, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
         receipt_hash = hashlib.sha256(json.dumps(receipts, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()

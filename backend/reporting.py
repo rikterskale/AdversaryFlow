@@ -459,7 +459,7 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
             step_index += 1
             command = technique.get("command")
             command = command if isinstance(command, dict) else {}
-            bindings = _detection_bindings(bindings_by_technique.get(step.technique_id, []))
+            detection_bindings = _detection_bindings(bindings_by_technique.get(step.technique_id, []))
             report_rows.append(ReportTechnique(
                 sequence=step.sequence,
                 tactic=step.tactic,
@@ -478,9 +478,9 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
                 detection_guidance=_text(technique.get("detection")),
                 sigma_references=tuple(
                     SigmaReference(label=f"{item.title} ({item.rule_id})", url=item.url)
-                    for item in bindings if item.provider == "sigma" and item.url
+                    for item in detection_bindings if item.provider == "sigma" and item.url
                 ),
-                detection_bindings=bindings,
+                detection_bindings=detection_bindings,
                 execution=_evidence(technique),
             ))
     techniques = tuple(report_rows)
