@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+requires = ["setuptools==84.0.0", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-content-packs = ["cryptography==50.0.0"]
+content-packs = ["cryptography==50.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/rikterskale/AdversaryFlow"
