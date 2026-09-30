@@ -77,7 +77,13 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
     included: List[Dict[str, Any]] = []
     files: List[Tuple[str, bytes]] = []
     gaps: List[Dict[str, Any]] = []
+    exported_techniques: set[str] = set()
     for step in normalized.steps:
+        # One Atomic definition per technique, even when ATT&CK places the
+        # technique in several tactics. Duplicate ZIP paths are ambiguous.
+        if step.technique_id in exported_techniques:
+            continue
+        exported_techniques.add(step.technique_id)
         catalog = command_catalog.get_commands(step.technique_id, step.technique_name, [step.tactic])
         candidates = [item for item in catalog["commands"]
                       if isinstance(item, dict) and item.get("platform") == platform]

@@ -150,6 +150,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const saveEngagement = async (): Promise<void> => {
     if (engagementLoading || validationError || !csrfToken) return;
+    const workspace = useWizardStore.getState();
     setEngagementLoading(true);
     try {
       const response = await apiFetch("/api/engagements", {
@@ -158,7 +159,11 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         body: JSON.stringify({ plan: bundle.plan, ...(engagementId ? { engagement_id: engagementId } : {}) }),
       });
       const saved = await responseJson(response) as EngagementSaveResponse;
-      setEngagementRecord(saved.engagement_id, saved.revision);
+      const current = useWizardStore.getState();
+      if (current.selectedActor?.stix_id === workspace.selectedActor?.stix_id
+          && current.evidenceKey === workspace.evidenceKey && current.engagementId === workspace.engagementId) {
+        setEngagementRecord(saved.engagement_id, saved.revision);
+      }
       const packPin = saved.content_pack_sha256 ? ` · pack set ${saved.content_pack_sha256.slice(0, 12)}` : "";
       onNotice(`Engagement saved · revision ${saved.revision} · plan SHA-256 ${saved.plan_sha256.slice(0, 12)}${packPin}`);
     } catch (error: unknown) {

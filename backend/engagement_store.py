@@ -8,9 +8,10 @@ import os
 import re
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 
 from . import attack_data, content_pack, webhook
 
@@ -35,11 +36,27 @@ def _connect() -> sqlite3.Connection:
     path = _database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(path), timeout=10, isolation_level=None)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA busy_timeout = 10000")
-    connection.execute("PRAGMA journal_mode = WAL")
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA busy_timeout = 10000")
+        connection.execute("PRAGMA journal_mode = WAL")
+    except Exception:
+        connection.close()
+        raise
     return connection
+
+
+@contextmanager
+def _session() -> Iterator[sqlite3.Connection]:
+    # SQLite's own context manager ends transactions but does not close the
+    # connection. Always release file handles, including on early returns.
+    connection = _connect()
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def _utc_now() -> str:
@@ -56,7 +73,7 @@ def _canonical(document: Mapping[str, Any]) -> tuple[str, str]:
 
 def initialize() -> None:
     """Create the local store schema if it does not already exist."""
-    with _connect() as connection:
+    with _session() as connection:
         connection.executescript("""
         CREATE TABLE IF NOT EXISTS engagements (
             id TEXT PRIMARY KEY,
@@ -251,7 +268,7 @@ def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
     _ensure_initialized()
     if not 1 <= limit <= 200:
         raise EngagementStoreError("Engagement list limit must be between 1 and 200")
-    with _connect() as connection:
+    with _session() as connection:
         rows = connection.execute("""
             SELECT e.id, e.actor_id, e.actor_name, e.data_version, e.created_at, e.updated_at,
                    r.revision, r.schema_version, r.plan_sha256, r.content_pack_sha256
@@ -266,7 +283,7 @@ def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
 
 def get_engagement(engagement_id: str) -> Optional[Dict[str, Any]]:
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         row = connection.execute("SELECT * FROM engagements WHERE id = ?", (engagement_id,)).fetchone()
         if row is None:
             return None
@@ -294,20 +311,20 @@ def get_engagement(engagement_id: str) -> Optional[Dict[str, Any]]:
 
 def engagement_exists(engagement_id: str) -> bool:
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         return connection.execute("SELECT 1 FROM engagements WHERE id = ?", (engagement_id,)).fetchone() is not None
 
 
 def revision_exists(engagement_id: str, revision: int) -> bool:
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         return connection.execute("SELECT 1 FROM plan_revisions WHERE engagement_id = ? AND revision = ?",
                                   (engagement_id, revision)).fetchone() is not None
 
 
 def get_revision(engagement_id: str, revision: int) -> Optional[Dict[str, Any]]:
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         row = connection.execute(
         "SELECT engagement_id, revision, schema_version, plan_sha256, content_pack_sha256, content_packs_json, plan_json, created_at FROM plan_revisions WHERE engagement_id = ? AND revision = ?",
             (engagement_id, revision),
@@ -389,7 +406,7 @@ def list_run_records(engagement_id: str, revision: Optional[int] = None, limit: 
     _ensure_initialized()
     if not 1 <= limit <= 4_000:
         raise EngagementStoreError("Run list limit must be between 1 and 4000")
-    with _connect() as connection:
+    with _session() as connection:
         if revision is None:
             rows = connection.execute("SELECT * FROM run_records WHERE engagement_id = ? ORDER BY revision DESC, started_at, run_id LIMIT ?", (engagement_id, limit)).fetchall()
         else:
@@ -517,7 +534,7 @@ def claim_webhook_deliveries(limit: int = 10) -> List[Dict[str, Any]]:
     now_text = now.isoformat(timespec="seconds").replace("+00:00", "Z")
     lease_text = (now + timedelta(seconds=60)).isoformat(timespec="seconds").replace("+00:00", "Z")
     claimed: List[Dict[str, Any]] = []
-    with _connect() as connection:
+    with _session() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
             rows = connection.execute("""
@@ -548,7 +565,7 @@ def complete_webhook_delivery(delivery_id: str, *, success: bool, error: str = "
                               max_attempts: int = 12) -> None:
     """Record delivery success or schedule bounded exponential retry."""
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         row = connection.execute("SELECT attempts FROM webhook_outbox WHERE delivery_id = ?", (delivery_id,)).fetchone()
         if row is None:
             raise EngagementStoreError("Webhook delivery was not found")
@@ -574,7 +591,7 @@ def list_webhook_deliveries(limit: int = 100) -> List[Dict[str, Any]]:
     _ensure_initialized()
     if not 1 <= limit <= 1_000:
         raise EngagementStoreError("Webhook delivery list limit must be 1-1000")
-    with _connect() as connection:
+    with _session() as connection:
         rows = connection.execute("""
             SELECT delivery_id, event_id, engagement_id, revision, run_id, status, attempts,
                    created_at, next_attempt_at, last_attempt_at, delivered_at, last_error
@@ -604,7 +621,7 @@ def append_audit_event(*, event_type: str, principal: str = "unknown", entity_ty
     if len(payload_json.encode("utf-8")) > 8_192:
         raise EngagementStoreError("Audit payload exceeds 8 KiB")
     _ensure_initialized()
-    with _connect() as connection:
+    with _session() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
             record = _insert_audit_event(connection, event_type=event_type, principal=principal.strip(),
@@ -624,7 +641,7 @@ def list_audit_events(limit: int = 100, after_sequence: int = 0) -> Dict[str, An
     if (not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1_000
             or not isinstance(after_sequence, int) or isinstance(after_sequence, bool) or after_sequence < 0):
         raise EngagementStoreError("Audit event page values are invalid")
-    with _connect() as connection:
+    with _session() as connection:
         count = _verify_audit_chain(connection)
         rows = connection.execute("SELECT * FROM audit_events WHERE sequence > ? ORDER BY sequence LIMIT ?",
                                   (after_sequence, limit)).fetchall()
@@ -703,7 +720,7 @@ def list_ability_gaps(limit: int = 100, status: Optional[str] = None) -> List[Di
         raise EngagementStoreError("Backlog limit must be between 1 and 200")
     if status is not None and status not in {"open", "in_progress", "accepted", "closed"}:
         raise EngagementStoreError("Invalid backlog status")
-    with _connect() as connection:
+    with _session() as connection:
         if status:
             rows = connection.execute("SELECT * FROM ability_backlog WHERE status = ? ORDER BY updated_at DESC LIMIT ?", (status, limit)).fetchall()
         else:
@@ -720,7 +737,7 @@ def update_ability_gap(item_id: str, *, owner: Optional[str], status: str) -> Op
             raise EngagementStoreError("Backlog owner must be at most 120 characters")
         owner = owner.strip() or None
     now = _utc_now()
-    with _connect() as connection:
+    with _session() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
             previous = connection.execute("SELECT owner, status FROM ability_backlog WHERE id = ?", (item_id,)).fetchone()

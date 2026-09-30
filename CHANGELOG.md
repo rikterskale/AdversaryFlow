@@ -4,6 +4,17 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Close SQLite connections deterministically, isolate API test databases, and
+  cover revision concurrency, rollback, audit integrity, and webhook leases.
+- Preserve the active plan identity when an engagement save finishes after
+  navigation. Generate one Atomic definition per technique across tactics.
+- Prefer explicit ATT&CK columns in CSV imports and reject malformed STIX
+  versions and signed content fields with validation errors.
+- Open the native UI during feed preparation and with `--no-preload`; validate
+  port arguments, format IPv6 URLs, and align the Vite API proxy with port 5000.
+- Update the transitive `fast-uri` dependency to 3.1.8 and document the
+  Enterprise scope of curated catalog coverage.
+
 - Validate Chromium, Firefox, and WebKit in CI, with a separate native macOS
   Safari workflow. Exercise the macOS kit under the system Bash and run clean
   Docker builds with isolated empty cache volumes.

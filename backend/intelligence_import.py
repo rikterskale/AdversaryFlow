@@ -195,15 +195,15 @@ def _parse_csv(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]:
     if not reader.fieldnames:
         raise IntelligenceImportError("CSV must contain a header row")
     aliases = {
-        "technique_id": {"technique_id", "attack_id", "attack_technique", "external_id", "id"},
-        "source_name": {"source_name", "source", "report", "document"},
-        "source_url": {"source_url", "url", "reference"},
-        "evidence_quote": {"evidence_quote", "quote", "evidence", "citation"},
-        "procedure": {"procedure", "behavior", "description", "procedure_description"},
-        "confidence": {"confidence"},
-        "platforms": {"platform", "platforms"},
-        "technique_name": {"technique_name", "name"},
-        "tactics": {"tactic", "tactics"},
+        "technique_id": ("technique_id", "attack_id", "attack_technique", "external_id", "id"),
+        "source_name": ("source_name", "source", "report", "document"),
+        "source_url": ("source_url", "url", "reference"),
+        "evidence_quote": ("evidence_quote", "quote", "evidence", "citation"),
+        "procedure": ("procedure", "behavior", "description", "procedure_description"),
+        "confidence": ("confidence",),
+        "platforms": ("platforms", "platform"),
+        "technique_name": ("technique_name", "name"),
+        "tactics": ("tactics", "tactic"),
     }
     normalized = {str(name).strip().lower(): name for name in reader.fieldnames}
     mapped = {field: next((normalized[key] for key in keys if key in normalized), None)
@@ -261,9 +261,7 @@ def _parse_json(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]
     if isinstance(objects, list):
         if data.get("type") != "bundle":
             raise IntelligenceImportError("STIX input must be a STIX 2.1 bundle")
-        object_versions = {obj.get("spec_version") for obj in objects
-                           if isinstance(obj, dict) and obj.get("spec_version") is not None}
-        if object_versions and object_versions != {"2.1"}:
+        if any(obj.get("spec_version") not in (None, "2.1") for obj in objects if isinstance(obj, dict)):
             raise IntelligenceImportError("STIX input contains objects outside STIX 2.1")
         rows = []
         for obj in objects:

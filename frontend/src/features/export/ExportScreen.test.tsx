@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Actor, Command, WorkflowResponse } from "../../api/contract";
@@ -129,5 +129,30 @@ describe("ExportScreen report generation", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Plan evidence is incomplete"));
     expect(screen.getByRole("button", { name: "Retry report generation" })).toBeEnabled();
     expect(screen.queryByTitle("Engagement report preview")).not.toBeInTheDocument();
+  });
+
+  it("does not attach a delayed engagement save to a different plan", async () => {
+    useWizardStore.getState().selectActor(actor);
+    useWizardStore.getState().updateScope({ commandPlatform: "windows", tactics: ["execution"] });
+    let resolveResponse: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise<Response>((resolve) => { resolveResponse = resolve; })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));
+    act(() => { useWizardStore.getState().selectActor({ ...actor, stix_id: "intrusion-set--other", attack_id: "G0002" }); });
+    resolveResponse?.(new Response(JSON.stringify({ engagement_id: "old-plan-id", revision: 1, plan_sha256: "a".repeat(64) }), {
+      headers: { "Content-Type": "application/json" }, status: 201,
+    }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save engagement" })).toBeInTheDocument());
+    expect(useWizardStore.getState().engagementId).toBeNull();
+  });
+
+  it("stores the engagement ID when the saved workspace is still active", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      engagement_id: "current-plan-id", revision: 1, plan_sha256: "a".repeat(64),
+    }), { headers: { "Content-Type": "application/json" }, status: 201 })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save new revision" })).toBeEnabled());
+    expect(useWizardStore.getState().engagementId).toBe("current-plan-id");
   });
 });

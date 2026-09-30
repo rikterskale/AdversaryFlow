@@ -106,14 +106,16 @@ def _normalize_ability(raw: Any, *, require_identity: bool) -> Dict[str, Any]:
         raise ContentPackError("Ability fields do not match the versioned internal ability contract")
     if not isinstance(raw["technique_id"], str) or not TECHNIQUE_PATTERN.fullmatch(raw["technique_id"]):
         raise ContentPackError("Ability technique_id is invalid")
-    if raw["platform"] not in PLATFORMS or raw["executor"] not in EXECUTORS:
+    if (not isinstance(raw["platform"], str) or raw["platform"] not in PLATFORMS
+            or not isinstance(raw["executor"], str) or raw["executor"] not in EXECUTORS):
         raise ContentPackError("Ability platform or executor is unsupported")
     if not isinstance(raw["command_template"], str) or not raw["command_template"] or len(raw["command_template"]) > 10_000:
         raise ContentPackError("Ability command_template must contain 1 to 10000 characters")
     for key in ("cleanup", "rollback", "content_source"):
         if not isinstance(raw[key], str) or len(raw[key]) > 10_000:
             raise ContentPackError(f"Ability {key} is invalid")
-    if raw["fidelity"] not in FIDELITIES or raw["safety_class"] not in SAFETY_CLASSES:
+    if (not isinstance(raw["fidelity"], str) or raw["fidelity"] not in FIDELITIES
+            or not isinstance(raw["safety_class"], str) or raw["safety_class"] not in SAFETY_CLASSES):
         raise ContentPackError("Ability fidelity or safety class is unsupported")
     if raw["review_status"] != "reviewed":
         raise ContentPackError("Only reviewed abilities can be included in a signed release pack")
@@ -152,7 +154,7 @@ def _validate_binding(raw: Any) -> Dict[str, Any]:
         raise ContentPackError("Detection binding fields do not match the signed binding contract")
     if not isinstance(raw["technique_id"], str) or not TECHNIQUE_PATTERN.fullmatch(raw["technique_id"]):
         raise ContentPackError("Detection binding technique_id is invalid")
-    if raw["provider"] not in DETECTION_PROVIDERS:
+    if not isinstance(raw["provider"], str) or raw["provider"] not in DETECTION_PROVIDERS:
         raise ContentPackError("Detection provider must be sigma, elastic, splunk, or kql")
     for key, maximum in (("rule_id", 200), ("title", 500), ("reviewed_by", 120), ("reviewed_at", 100)):
         if not isinstance(raw[key], str) or not raw[key].strip() or len(raw[key]) > maximum:

@@ -26,6 +26,10 @@ generated files differ from Git. Commit regenerated `frontend/index.html`,
 `frontend/styles.css`, `frontend/app.js`, and `frontend/favicon.svg` with the
 source change that produced them.
 
+For live frontend editing, start the backend with `adversaryflow` (port 5000),
+then run `npm run dev:frontend` in a second terminal. Open
+`http://127.0.0.1:5173`; Vite forwards API requests to the local backend.
+
 ```bash
 ./install.sh
 .venv/bin/python -m unittest discover --verbose

@@ -19,6 +19,7 @@ import sysconfig
 import threading
 import time
 import urllib.parse
+import urllib.request
 import uuid
 import webbrowser
 from pathlib import Path
@@ -168,7 +169,7 @@ def health():
 @app.route("/api/doctor")
 def doctor_report():
     """Run the same host self-test exposed by the doctor CLI command."""
-    host = request.host.split(":", 1)[0].strip("[]") or "127.0.0.1"
+    host = urllib.parse.urlsplit(request.host_url).hostname or "127.0.0.1"
     try:
         port = int(request.environ.get("SERVER_PORT", "5000"))
     except (TypeError, ValueError):
@@ -704,7 +705,10 @@ def ability_backlog_update(item_id: str):
 def _domains_from_request() -> List[str]:
     raw: Any = request.args.get("domains")
     if not raw and request.is_json:
-        raw = (request.get_json(silent=True) or {}).get("domains")
+        document = request.get_json(silent=True)
+        if not isinstance(document, dict):
+            abort(400, description="A JSON object is required")
+        raw = document.get("domains")
     if not raw:
         return ["enterprise"]
     values = raw if isinstance(raw, list) else str(raw).split(",")
@@ -832,7 +836,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("command", nargs="?", default="serve",
                         choices=["serve", "doctor", "cache-status", "cache-refresh", "cache-clear"])
     parser.add_argument("--host", default=os.environ.get("ADVERSARYFLOW_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("ADVERSARYFLOW_PORT", "5000")))
+    parser.add_argument("--port", type=_port_number, default=os.environ.get("ADVERSARYFLOW_PORT", "5000"))
     parser.add_argument("--cache-dir", default=os.environ.get("ADVERSARYFLOW_CACHE_DIR"))
     parser.add_argument("--offline", action="store_true", default=os.environ.get("ADVERSARYFLOW_OFFLINE", "").lower() in {"1", "true", "yes"}, help="use cached ATT&CK data without downloading")
     parser.add_argument("--no-preload", action="store_true", help="start before loading ATT&CK data")
@@ -904,6 +908,8 @@ def main(argv: List[str] | None = None) -> int:
     from waitress import serve
 
     url_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
+    if ":" in url_host and not url_host.startswith("["):
+        url_host = f"[{url_host}]"
     url = f"http://{url_host}:{args.port}"
     print(f"AdversaryFlow {__version__}: {url}")
     if not _is_loopback_host(args.host):
@@ -937,12 +943,32 @@ def _is_loopback_host(host: str) -> bool:
     return address.is_loopback
 
 
+def _port_number(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Port must be an integer between 1 and 65535") from exc
+    if not 1 <= port <= 65_535:
+        raise argparse.ArgumentTypeError("Port must be an integer between 1 and 65535")
+    return port
+
+
 def _open_when_ready(url: str) -> None:
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         if _runtime["ready"] or _runtime["phase"] == "failed":
             webbrowser.open(url)
             return
+        # The UI can show download progress and trigger bootstrap itself when
+        # --no-preload is used. Open once HTTP is serving instead of waiting
+        # for data that may require the browser to start loading.
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                if response.status == 200:
+                    webbrowser.open(url)
+                    return
+        except OSError:
+            pass
         time.sleep(0.2)
 
 

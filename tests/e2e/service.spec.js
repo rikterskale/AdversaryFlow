@@ -174,3 +174,24 @@ test("saved and imported plans remain usable when bootstrap fails", async ({ pag
   await page.locator("#importPlan").setInputFiles({ name: "plan.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(original)) });
   await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Windows evidence preserved");
 });
+
+test("engagement saves retain their server identity across browser reloads", async ({ page }) => {
+  await reviewPlan(page);
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await page.getByRole("button", { name: "Save engagement", exact: true }).click();
+  await expect(page.getByText("Server engagement · revision 1", { exact: true })).toBeVisible();
+  const key = await page.evaluate(() => JSON.parse(localStorage.getItem("adversaryflow-wizard-v3")).state.engagementId);
+  await page.reload();
+  await page.getByRole("button", { name: "Resume Zeta Group plan" }).click();
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await page.getByRole("button", { name: "Save new revision", exact: true }).click();
+  await expect(page.getByText("Server engagement · revision 2", { exact: true })).toBeVisible();
+  const response = await page.request.get(`${baseURL}/api/engagements/${key}`, {
+    headers: { Authorization: "Bearer browser-fixture-token" },
+  });
+  expect(response.status()).toBe(200);
+  const engagement = await response.json();
+  expect(engagement.revisions.map(item => item.revision)).toEqual([2, 1]);
+  expect(engagement.latest_plan.stages.flatMap(stage => stage.techniques)
+    .find(item => item.id === "T1059.001").execution.notes).toBe("Windows evidence preserved");
+});

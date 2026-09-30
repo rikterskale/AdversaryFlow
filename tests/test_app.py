@@ -46,6 +46,13 @@ class FakeIndex:
 
 class ApiContractTests(unittest.TestCase):
     def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        database = patch.dict(app_module.os.environ, {
+            "ADVERSARYFLOW_ENGAGEMENT_DB": str(Path(directory.name) / "engagements.sqlite3"),
+        })
+        database.start()
+        self.addCleanup(database.stop)
         app_module.app.config.update(TESTING=True)
         app_module.REMOTE_MODE = False
         app_module.API_TOKEN = ""
@@ -103,6 +110,43 @@ class ApiContractTests(unittest.TestCase):
     def test_invalid_domain_is_rejected(self):
         response = self.client.get("/api/actors?domains=unknown")
         self.assertEqual(response.status_code, 400)
+
+    def test_non_object_json_domains_are_rejected(self):
+        for document in (["enterprise"], "enterprise", 42, None):
+            with self.subTest(document=document), app_module.app.test_request_context(
+                data=json.dumps(document), content_type="application/json",
+            ):
+                with self.assertRaises(app_module.HTTPException) as error:
+                    app_module._domains_from_request()
+                self.assertEqual(error.exception.code, 400)
+
+    def test_engagement_save_round_trips_immutable_revisions(self):
+        document = plan_fixture("linux")
+        headers = {"X-AdversaryFlow-CSRF": app_module._csrf_token}
+        first = self.client.post("/api/engagements", json={"plan": document}, headers=headers)
+        self.assertEqual(first.status_code, 201)
+        key = first.get_json()["engagement_id"]
+        second = self.client.post("/api/engagements", json={"plan": document, "engagement_id": key}, headers=headers)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(second.get_json()["revision"], 2)
+        revision = self.client.get(f"/api/engagements/{key}/revisions/1")
+        self.assertEqual(revision.status_code, 200)
+        self.assertEqual(revision.get_json()["plan"], document)
+        self.assertEqual(self.client.get("/api/audit-events").get_json()["event_count"], 2)
+
+    def test_atomic_export_links_a_persisted_backlog(self):
+        response = self.client.post("/api/playbook/atomic", json=plan_fixture("linux", duplicate=True),
+                                    headers={"X-AdversaryFlow-CSRF": app_module._csrf_token})
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+            manifest = json.loads(archive.read("adversaryflow-atomic-manifest.json"))
+        self.assertEqual(len(manifest["gaps"]), 1)
+        item = self.client.get("/api/ability-backlog").get_json()["items"][0]
+        self.assertEqual(manifest["gaps"][0]["backlog_id"], item["id"])
+        updated = self.client.patch(f"/api/ability-backlog/{item['id']}", json={"owner": "Lab Team", "status": "in_progress"},
+                                    headers={"X-AdversaryFlow-CSRF": app_module._csrf_token})
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.get_json()["owner"], "Lab Team")
 
     def test_refresh_requires_same_origin_token(self):
         response = self.client.post("/api/refresh?domains=enterprise")
@@ -609,6 +653,13 @@ class BrowserLaunchTests(unittest.TestCase):
             app_module._open_when_ready("http://127.0.0.1:5000")
         opener.assert_called_once()
 
+    def test_no_preload_opens_the_serving_ui_to_start_setup(self):
+        app_module._runtime.update(ready=False, loading=False, phase="not_started")
+        with patch("backend.app.webbrowser.open") as opener, patch("backend.app.urllib.request.urlopen") as probe:
+            probe.return_value.__enter__.return_value.status = 200
+            app_module._open_when_ready("http://127.0.0.1:5000")
+        opener.assert_called_once_with("http://127.0.0.1:5000")
+
     def test_the_wait_gives_up_at_the_deadline_without_opening(self):
         app_module._runtime.update(ready=False, phase="loading")
         with patch("backend.app.webbrowser.open") as opener, \
@@ -634,6 +685,22 @@ class CommandLineTests(unittest.TestCase):
     def test_parser_rejects_an_unknown_command(self):
         with self.assertRaises(SystemExit):
             app_module._parser().parse_args(["teleport"])
+
+    def test_invalid_ports_are_reported_as_argument_errors(self):
+        for port in ("0", "-1", "65536", "not-a-port"):
+            with self.subTest(port=port), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                app_module._parser().parse_args(["--port", port])
+            self.assertEqual(error.exception.code, 2)
+        with patch.dict(app_module.os.environ, {"ADVERSARYFLOW_PORT": "invalid"}), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            app_module._parser().parse_args([])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_ipv6_launch_prints_a_usable_browser_url(self):
+        stream = io.StringIO()
+        with patch("waitress.serve"), patch("backend.app.webhook.start_worker"), contextlib.redirect_stdout(stream):
+            self.assertEqual(app_module.main(["--host", "::1", "--no-preload"]), 0)
+        self.assertIn("http://[::1]:5000", stream.getvalue())
 
     def test_doctor_reports_a_healthy_source_checkout(self):
         with tempfile.TemporaryDirectory() as directory:
