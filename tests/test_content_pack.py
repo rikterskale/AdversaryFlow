@@ -35,6 +35,11 @@ class ContentPackValidationTests(unittest.TestCase):
         with self.assertRaises(content_pack.ContentPackError):
             content_pack._validate_binding(binding)
 
+    def test_executor_must_match_the_destination_platform(self):
+        for platform, executor in (("windows", "bash"), ("linux", "powershell"), ("macos", "cmd")):
+            with self.subTest(platform=platform, executor=executor), self.assertRaisesRegex(content_pack.ContentPackError, "match its platform"):
+                content_pack._normalize_ability({**reviewed_ability(), "platform": platform, "executor": executor}, require_identity=False)
+
     def test_pack_rejects_paths_outside_the_payload_allowlist(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "hostile.afpack"
@@ -76,4 +81,16 @@ class SignedContentPackTests(unittest.TestCase):
                 data = original.read(name)
                 tampered.writestr(name, b"[]" if name == "abilities.json" else data)
         with self.assertRaisesRegex(content_pack.ContentPackError, "digest does not match"):
+            content_pack.verify_pack(self.pack, self.trust)
+
+    def test_non_ascii_payload_digest_is_refused_cleanly(self):
+        with zipfile.ZipFile(io.BytesIO(self.data)) as original, zipfile.ZipFile(self.pack, "w") as altered:
+            for name in original.namelist():
+                data = original.read(name)
+                if name == "manifest.json":
+                    manifest = json.loads(data)
+                    manifest["files"]["abilities.json"] = "é" * 64
+                    data = json.dumps(manifest).encode()
+                altered.writestr(name, data)
+        with self.assertRaises(content_pack.ContentPackError):
             content_pack.verify_pack(self.pack, self.trust)

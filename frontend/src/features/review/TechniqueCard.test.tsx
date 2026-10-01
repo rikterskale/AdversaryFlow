@@ -41,4 +41,14 @@ describe("TechniqueCard", () => {
     expect(onUpdate).toHaveBeenNthCalledWith(1, { outcome: "failed" });
     expect(onUpdate).toHaveBeenNthCalledWith(2, { detection_result: "silent" });
   });
+
+  it("lets an operator type telemetry references on separate lines", () => {
+    const onUpdate = vi.fn();
+    renderCard(onUpdate);
+    const field = screen.getByLabelText("Telemetry references");
+    fireEvent.change(field, { target: { value: "event-1\n" } });
+    expect(field).toHaveValue("event-1\n");
+    fireEvent.change(field, { target: { value: "event-1\nevent-2" } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ telemetry_refs: ["event-1", "event-2"] });
+  });
 });

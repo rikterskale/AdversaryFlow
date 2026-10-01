@@ -370,7 +370,8 @@ class AttackIndex:
         software_uses: Dict[str, List[str]] = {}
         actor_software: Dict[str, List[str]] = {}
         for obj in list(self.objects_by_id.values()):
-            if obj.get("type") != "relationship" or obj.get("relationship_type") != "uses":
+            if (obj.get("type") != "relationship" or obj.get("relationship_type") != "uses"
+                    or self._is_deprecated(obj)):
                 continue
             src = obj.get("source_ref", "")
             tgt = obj.get("target_ref", "")
@@ -458,7 +459,7 @@ class AttackIndex:
                     "type": "group" if obj["type"] == "intrusion-set" else "campaign",
                     "aliases": [a for a in obj.get("aliases", []) if a != obj.get("name")],
                     "description": (obj.get("description") or "").split("\n")[0][:400],
-                    "technique_count": len(set(self.actor_uses.get(obj["id"], []))),
+                    "technique_count": len(self.actor_techniques(obj["id"])),
                 }
             )
         # Only surface actors that actually have techniques mapped.

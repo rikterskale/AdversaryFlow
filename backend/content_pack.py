@@ -109,6 +109,9 @@ def _normalize_ability(raw: Any, *, require_identity: bool) -> Dict[str, Any]:
     if (not isinstance(raw["platform"], str) or raw["platform"] not in PLATFORMS
             or not isinstance(raw["executor"], str) or raw["executor"] not in EXECUTORS):
         raise ContentPackError("Ability platform or executor is unsupported")
+    allowed_executors = {"cmd", "powershell"} if raw["platform"] == "windows" else {"bash"}
+    if raw["executor"] not in allowed_executors:
+        raise ContentPackError("Ability executor must match its platform")
     if not isinstance(raw["command_template"], str) or not raw["command_template"] or len(raw["command_template"]) > 10_000:
         raise ContentPackError("Ability command_template must contain 1 to 10000 characters")
     for key in ("cleanup", "rollback", "content_source"):
@@ -230,7 +233,8 @@ def verify_pack(path: str | Path, trusted_keys: Optional[str] = None) -> Dict[st
     if not isinstance(file_digests, dict) or set(file_digests) != set(files) - {"manifest.json"}:
         raise ContentPackError("Content pack manifest file list does not match its payload")
     for filename, expected in file_digests.items():
-        if not isinstance(expected, str) or not hmac_compare(expected, _digest(files[filename])):
+        if (not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected)
+                or not hmac_compare(expected, _digest(files[filename]))):
             raise ContentPackError(f"Content pack payload digest does not match for {filename}")
 
     keys = _trusted_keys(trusted_keys)

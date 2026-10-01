@@ -90,4 +90,16 @@ describe("wizardStore", () => {
       scopeInitializedFor: null,
     });
   });
+
+  it("clears stale receipt verification when an operator edits run evidence", () => {
+    const store = useWizardStore.getState();
+    store.updateEvidence("T1033", { outcome: "passed", run_id: "receipt-run", receipt_sha256: "a".repeat(64),
+      receipt_verified: true, receipt_payload: { run_id: "receipt-run" }, evidence_source: "exercise_receipt" });
+    store.updateEvidence("T1033", { notes: "Correlated with endpoint logs", detection_result: "alerted" });
+    expect(useWizardStore.getState().records.T1033?.receipt_verified).toBe(true);
+    store.updateEvidence("T1033", { run_id: "operator-run" });
+    expect(useWizardStore.getState().records.T1033).toMatchObject({ run_id: "operator-run", receipt_verified: false, evidence_source: "operator_supplied" });
+    expect(useWizardStore.getState().records.T1033?.receipt_payload).toBeUndefined();
+    expect(useWizardStore.getState().records.T1033?.receipt_sha256).toBeUndefined();
+  });
 });

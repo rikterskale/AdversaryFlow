@@ -1,5 +1,4 @@
 import type { ExecutionEvidence } from "./evidence";
-import { isMarkedRun } from "./evidence";
 import type { PlanPreview, ScopedTechnique } from "../scope/scopeModel";
 
 interface CoverageHeatmapProps {
@@ -9,11 +8,12 @@ interface CoverageHeatmapProps {
   onSelect: (stageIndex: number, technique: ScopedTechnique) => void;
 }
 
-type CellStatus = "planned" | "ran" | "detected" | "blocked" | "silent" | "not-instrumented";
+type CellStatus = "planned" | "ran" | "skipped" | "detected" | "blocked" | "silent" | "not-instrumented";
 
 const statusLabels: Record<CellStatus, string> = {
   planned: "planned",
   ran: "ran",
+  skipped: "skipped",
   detected: "detected",
   blocked: "blocked",
   silent: "silent",
@@ -25,7 +25,8 @@ export function coverageStatus(evidence: ExecutionEvidence | undefined): CellSta
   if (evidence?.detection_result === "blocked") return "blocked";
   if (evidence?.detection_result === "silent") return "silent";
   if (evidence?.detection_result === "not_instrumented") return "not-instrumented";
-  if (isMarkedRun(evidence)) return "ran";
+  if (evidence?.outcome === "skipped") return "skipped";
+  if (evidence?.outcome === "passed" || evidence?.outcome === "failed") return "ran";
   return "planned";
 }
 
@@ -39,6 +40,7 @@ export function CoverageHeatmap({ plan, records, selectedTechniqueId, onSelect }
           <span><i className="legend-square is-fallback" />Fallback catalog</span>
           <span><i className="legend-ring is-planned" />Planned</span>
           <span><i className="legend-ring is-ran" />Ran</span>
+          <span><i className="legend-ring is-planned" />Skipped</span>
           <span><i className="legend-ring is-detected" />Detected</span>
           <span><i className="legend-ring is-blocked" />Blocked</span>
           <span><i className="legend-ring is-silent" />Silent</span>

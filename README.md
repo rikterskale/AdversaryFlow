@@ -206,6 +206,8 @@ See [Getting started](docs/GETTING_STARTED.md),
 [operations](docs/OPERATIONS.md) for supported platforms, cache locations,
 offline use, upgrades, and health behavior. Use the dedicated
 [troubleshooting matrix](docs/TROUBLESHOOTING.md) for symptom-to-fix guidance.
+The [October 1 repository review](docs/REVIEW_2026_10_01.md) records the latest
+local fixes, validation results, and remaining platform checks.
 
 ## API
 

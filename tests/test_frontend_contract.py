@@ -26,7 +26,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("unsupported: true", self.source)
 
     def test_run_state_is_versioned(self):
-        self.assertIn('name: "adversaryflow-wizard-v3"', self.source)
+        self.assertIn('"adversaryflow-wizard-v3"', self.source)
         self.assertIn("workflow.metadata.data_version", self.source)
         self.assertIn("scope.commandPlatform", self.source)
         self.assertIn("evidenceKey", self.source)

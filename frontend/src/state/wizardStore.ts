@@ -7,6 +7,7 @@ import { defaultScope, type ScopeSettings } from "../features/scope/scopeModel";
 import type { ExecutionEvidence } from "../features/review/evidence";
 
 export type WizardStep = 0 | 1 | 2 | 3 | 4;
+export const WIZARD_STORAGE_KEY = "adversaryflow-wizard-v3";
 
 export interface EvidenceSnapshot {
   actor: Actor | null;
@@ -162,6 +163,14 @@ export const useWizardStore = create<WizardState>()(
           operator: state.scope.operator,
           target: state.scope.target,
         };
+        const receiptFields = ["outcome", "run_id", "started_at", "completed_at", "exit_code", "cleanup_completed"] as const;
+        if (previous.receipt_verified && patch.receipt_payload === undefined
+            && receiptFields.some((field) => Object.prototype.hasOwnProperty.call(patch, field) && patch[field] !== previous[field])) {
+          next.receipt_verified = false;
+          delete next.receipt_payload;
+          delete next.receipt_sha256;
+          if (next.evidence_source === "exercise_receipt") next.evidence_source = "operator_supplied";
+        }
         return { records: { ...state.records, [techniqueId]: next } };
       }),
       importPlan: (plan) => {
@@ -207,7 +216,7 @@ export const useWizardStore = create<WizardState>()(
       }),
     }),
     {
-      name: "adversaryflow-wizard-v3",
+      name: WIZARD_STORAGE_KEY,
       partialize: (state) => ({
         currentStep: state.currentStep,
         maxStep: state.maxStep,

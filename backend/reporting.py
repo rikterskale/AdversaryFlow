@@ -234,7 +234,10 @@ def _text_list(value: Any, *, maximum_items: int = 100, maximum: int = 2_000) ->
 
 def _safe_https_url(value: Any) -> str:
     url = _text(value, maximum=2_000)
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return ""
     return url if parsed.scheme == "https" and bool(parsed.netloc) else ""
 
 

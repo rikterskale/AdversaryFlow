@@ -46,6 +46,11 @@ describe("CoverageHeatmap", () => {
     expect(coverageStatus({ outcome: "passed", detection_result: "alerted" })).toBe("detected");
   });
 
+  it("does not count a skipped step as executed", () => {
+    expect(coverageStatus({ outcome: "skipped" })).toBe("skipped");
+    expect(coverageStatus({ outcome: "failed" })).toBe("ran");
+  });
+
   it("marks scope-withheld cells without losing their coverage source", () => {
     const withheld: PlanPreview = {
       ...plan,

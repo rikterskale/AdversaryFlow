@@ -1,5 +1,5 @@
 import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
-import { isMarkedRun, type ExecutionEvidence } from "../review/evidence";
+import { isMarkedRun, validDateTime, type ExecutionEvidence } from "../review/evidence";
 import { buildPlanPreview, tacticDescriptions, type PlanPreview, type ScopeSettings } from "../scope/scopeModel";
 import type { PlanExport } from "./planContract";
 
@@ -14,10 +14,6 @@ function plainText(value: string): string {
     .replace(/\s*\(Citation:[^)]+\)/gi, "")
     .replace(/<[^>]*>/g, "")
     .trim();
-}
-
-function validDateTime(value: string | undefined): value is string {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(Date.parse(value)));
 }
 
 function compactEvidence(value: ExecutionEvidence | undefined): ExecutionEvidence {
@@ -147,9 +143,12 @@ export function buildExportBundle(
     })),
   };
   const acceptedProcedures = procedureEvidence.filter((item) => item.actor_stix_id === actor.stix_id && item.review_status === "accepted");
+  const scopedIds = new Set(preview.stages.flatMap((stage) => stage.techniques.map((technique) => technique.attack_id)));
   const receipts: ReceiptEvidence[] = Object.entries(records).flatMap(([techniqueId, record]) => {
+    if (!scopedIds.has(techniqueId) || !record.receipt_verified) return [];
     const receipt = record.receipt_payload;
-    if (!receipt || typeof receipt.run_id !== "string" || typeof receipt.receipt_sha256 !== "string") return [];
+    if (!receipt || typeof receipt.run_id !== "string" || typeof receipt.receipt_sha256 !== "string"
+        || receipt.technique_id !== techniqueId || receipt.run_id !== record.run_id || receipt.receipt_sha256 !== record.receipt_sha256) return [];
     return [{ technique_id: techniqueId, run_id: receipt.run_id, receipt_sha256: receipt.receipt_sha256, receipt }];
   });
   if (acceptedProcedures.length || receipts.length) {

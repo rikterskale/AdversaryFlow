@@ -43,3 +43,11 @@ class AtomicAdapterTests(unittest.TestCase):
             _, manifest = atomic_adapter.build_atomic_pack(plan)
         self.assertEqual(manifest["included"], [])
         self.assertEqual(manifest["gaps"][0]["gap"], "out_of_scope")
+
+    def test_signed_ability_cannot_reenable_a_withheld_plan_step(self):
+        plan = plan_fixture()
+        plan["stages"][0]["techniques"][0]["supported"] = False
+        with patch.object(content_pack, "installed_packs", return_value=([], {("T1059.004", "linux"): self.signed_ability()}, {})):
+            _, manifest = atomic_adapter.build_atomic_pack(plan)
+        self.assertEqual(manifest["included"], [])
+        self.assertEqual(manifest["gaps"][0]["gap"], "out_of_scope")

@@ -127,6 +127,21 @@ class DomainIndexTests(unittest.TestCase):
         self.assertFalse(status["ready"])
         self.assertEqual(status["domain_sets"], [])
 
+    def test_gallery_and_workflows_exclude_revoked_mappings_and_techniques(self):
+        actor = bundle("enterprise")["objects"][0]
+        technique = {"type": "attack-pattern", "id": "attack-pattern--fixture", "name": "Fixture",
+                     "external_references": [{"source_name": "mitre-attack", "external_id": "T1033"}]}
+        relationship = {"type": "relationship", "id": "relationship--fixture", "relationship_type": "uses",
+                        "source_ref": actor["id"], "target_ref": technique["id"]}
+        for revoked_object in (relationship, technique):
+            with self.subTest(revoked_object=revoked_object["type"]):
+                objects = [dict(actor), dict(technique), dict(relationship)]
+                next(item for item in objects if item["id"] == revoked_object["id"])["revoked"] = True
+                with patch.object(attack_data, "load_bundle", return_value={"id": "bundle--fixture", "objects": objects}):
+                    index = attack_data.AttackIndex(["enterprise"])
+                self.assertEqual(index.list_actors(), [])
+                self.assertEqual(index.actor_techniques(actor["id"]), [])
+
 
 class DefaultCacheLocationTests(unittest.TestCase):
     """The per-user cache must land outside the installation on every platform."""
@@ -299,7 +314,8 @@ class AttackIndexTests(unittest.TestCase):
         zeta = next(a for a in self.index.list_actors() if a["attack_id"] == "G0002")
         self.assertEqual(zeta["aliases"], ["Zed"])
         self.assertEqual(zeta["description"], "First line.")
-        self.assertEqual(zeta["technique_count"], 3)
+        self.assertEqual(zeta["technique_count"], 2)
+        self.assertEqual(zeta["technique_count"], len(self.index.actor_techniques(zeta["stix_id"])))
 
     def test_list_actors_excludes_actors_without_an_attack_id(self):
         self.assertNotIn("Unreferenced Group", [a["name"] for a in self.index.list_actors()])

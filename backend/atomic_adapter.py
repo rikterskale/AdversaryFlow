@@ -68,6 +68,10 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
     except content_pack.ContentPackError as exc:
         raise AtomicAdapterError(str(exc)) from exc
     procedures_by_technique: Dict[str, List[str]] = {}
+    withheld_ids = {
+        technique["id"] for stage in document["stages"] for technique in stage["techniques"]
+        if technique.get("supported") is False
+    }
     for item in procedures:
         if isinstance(item, dict) and isinstance(item.get("technique_id"), str):
             candidate_id = item.get("candidate_id")
@@ -113,7 +117,8 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
         signed_procedure_ids = signed.ability.get("procedure_candidate_ids", []) if signed is not None else []
         procedure_ids = accepted_procedure_ids
         out_of_scope = (
-            (ability.requires_admin and not scope.get("allow_admin", False))
+            step.technique_id in withheld_ids
+            or (ability.requires_admin and not scope.get("allow_admin", False))
             or (ability.requires_network and not scope.get("allow_network", False))
             or (ability.safety_class == "high" and not scope.get("allow_high_risk", False))
             or (scope.get("curated_only", False) and catalog["source"] == "fallback" and signed is None)

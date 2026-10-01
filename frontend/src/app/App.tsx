@@ -9,7 +9,7 @@ import { EvidenceSnapshots } from "../components/EvidenceSnapshots";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
 import { ExportScreen } from "../features/export/ExportScreen";
-import { validateImportedPlan } from "../features/export/planContract";
+import { validateImportedPlan, verifyImportedPlanReceipts } from "../features/export/planContract";
 import { ReviewScreen } from "../features/review/ReviewScreen";
 import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
@@ -192,6 +192,7 @@ export function App(): React.JSX.Element {
     try {
       const value = JSON.parse(await file.text()) as unknown;
       validateImportedPlan(value);
+      await verifyImportedPlanReceipts(value);
       importPlan(value);
       setNotice("Plan imported with its saved guardrails; verify commands and data version before use");
     } catch (error: unknown) {

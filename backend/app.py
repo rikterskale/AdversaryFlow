@@ -100,6 +100,13 @@ def begin_request() -> None:
     supplied_request_id = request.headers.get("X-Request-ID", "")
     g.request_id = supplied_request_id if REQUEST_ID_PATTERN.fullmatch(supplied_request_id) else uuid.uuid4().hex
     g.request_started = time.monotonic()
+    if not REMOTE_MODE:
+        try:
+            host = urllib.parse.urlsplit(request.host_url).hostname or ""
+        except ValueError:
+            abort(400, description="Invalid request host")
+        if not _is_loopback_host(host):
+            abort(403, description="Local mode accepts only localhost or loopback request hosts")
     # Complete actor plans can contain hundreds of command records. Flask 3.1
     # supports a route-specific request cap, so unrelated endpoints retain the
     # much smaller global body limit.
@@ -114,7 +121,7 @@ def begin_request() -> None:
     if REMOTE_MODE and request.path.startswith("/api/"):
         supplied = request.headers.get("Authorization", "")
         expected = f"Bearer {API_TOKEN}"
-        if not secrets.compare_digest(supplied, expected):
+        if not secrets.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
             abort(401, description="A valid bearer token is required for remote API access")
 
 
@@ -630,7 +637,10 @@ def atomic_playbook_download():
         archive, manifest = atomic_adapter.build_atomic_pack(document)
     except atomic_adapter.AtomicAdapterError as exc:
         abort(400, description=str(exc))
-    persisted_gaps = engagement_store.upsert_ability_gaps(manifest["gaps"])
+    try:
+        persisted_gaps = engagement_store.upsert_ability_gaps(manifest["gaps"])
+    except engagement_store.EngagementStoreError as exc:
+        abort(503, description=str(exc))
     archive = atomic_adapter.add_backlog_records(archive, manifest, persisted_gaps)
     try:
         engagement_store.append_audit_event(
@@ -760,7 +770,7 @@ def _require_csrf() -> None:
     origin = request.headers.get("Origin")
     if origin is not None and _canonical_origin(origin) != _canonical_origin(request.host_url):
         abort(403, description="Cross-origin request refused")
-    if not secrets.compare_digest(request.headers.get("X-AdversaryFlow-CSRF", ""), _csrf_token):
+    if not secrets.compare_digest(request.headers.get("X-AdversaryFlow-CSRF", "").encode("utf-8"), _csrf_token.encode("utf-8")):
         abort(403, description="Missing or invalid same-origin request token")
 
 

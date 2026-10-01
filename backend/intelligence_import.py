@@ -61,6 +61,10 @@ def _bounded_text(value: Any, field: str, maximum: int = MAX_TEXT_LENGTH) -> str
     text = value.strip()
     if len(text) > maximum:
         raise IntelligenceImportError(f"{field} exceeds {maximum} characters")
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise IntelligenceImportError(f"{field} contains invalid Unicode") from exc
     return text
 
 
@@ -273,7 +277,7 @@ def _parse_json(raw: bytes, source_name: str, source_url: Any) -> Dict[str, Any]
             if not isinstance(references, list):
                 references = []
             technique_id = next((ref.get("external_id") for ref in references
-                                 if isinstance(ref, dict) and ref.get("source_name") in {
+                                 if isinstance(ref, dict) and isinstance(ref.get("source_name"), str) and ref["source_name"] in {
                                      "mitre-attack", "mitre-mobile-attack", "mitre-ics-attack"
                                  } and isinstance(ref.get("external_id"), str)
                                  and ATTACK_ID.fullmatch(ref["external_id"])), None)

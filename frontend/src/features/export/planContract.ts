@@ -1,5 +1,5 @@
 import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
-import type { ExecutionEvidence } from "../review/evidence";
+import { validDateTime, validReceiptFields, verifyReceiptDigest, type ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
 
 export interface PlanScope {
@@ -93,7 +93,7 @@ function nonNegativeInteger(value: unknown): value is number {
 }
 
 function dateTime(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(Date.parse(value));
+  return validDateTime(value);
 }
 
 function uriOrNull(value: unknown): value is string | null {
@@ -115,12 +115,12 @@ function validateCommand(value: unknown, techniqueId: string): void {
   if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance", "interpreter"])
     || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every((key) => typeof value[key] === "string")
     || (value.command as string).length > 10_000
-    || !["none", "low", "medium", "high"].includes(String(value.risk))
+    || typeof value.risk !== "string" || !["none", "low", "medium", "high"].includes(value.risk)
     || !uniqueStrings(value.side_effects) || !uniqueStrings(value.network_targets) || !stringArray(value.prerequisites)
     || !["requires_admin", "requires_network", "cleanup_required", "acknowledgment_required"].every((key) => typeof value[key] === "boolean")
     || (value.unsupported !== undefined && typeof value.unsupported !== "boolean")
     || (value.restricted !== undefined && typeof value.restricted !== "boolean")
-    || (value.interpreter !== undefined && !(value.platform === "windows" ? ["cmd", "powershell"] : ["bash"]).includes(String(value.interpreter)))
+    || (value.interpreter !== undefined && (typeof value.interpreter !== "string" || !(value.platform === "windows" ? ["cmd", "powershell"] : ["bash"]).includes(value.interpreter)))
     || (value.exercise_kind !== undefined && value.exercise_kind !== "technique_relevant_bounded")
     || (value.fidelity !== undefined && (typeof value.fidelity !== "string" || !fidelityValues.has(value.fidelity)))
     || (value.evidence_source !== undefined && value.evidence_source !== "self_reported_receipt")
@@ -141,7 +141,7 @@ function validateCommand(value: unknown, techniqueId: string): void {
 
 function validateExecution(value: unknown): void {
   if (!onlyKeys(value, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source", "detection_result"])
-    || !["not_run", "passed", "failed", "skipped"].includes(String(value.outcome))
+    || typeof value.outcome !== "string" || !["not_run", "passed", "failed", "skipped"].includes(value.outcome)
     || (value.detection_result !== undefined && (typeof value.detection_result !== "string" || !detectionResults.has(value.detection_result)))
     || (value.updated_at !== undefined && !dateTime(value.updated_at))
     || (value.operator !== undefined && (typeof value.operator !== "string" || value.operator.length > 120))
@@ -171,10 +171,12 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
   if (data.schema_version === "3.0") {
     if (!Array.isArray(data.procedures) || data.procedures.length > 4_000) throw new Error("Plan procedure evidence is invalid");
     const sourceKinds = new Set(["csv", "navigator_layer", "stix2_bundle"]);
+    const candidateIds = new Set<string>();
     const actorRecord = data.actor as Record<string, unknown>;
     data.procedures.forEach((procedure) => {
       const keys = ["candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms", "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure", "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at"];
       if (!onlyKeys(procedure, keys) || !nonEmptyString(procedure.candidate_id) || procedure.candidate_id.length > 128
+        || candidateIds.has(procedure.candidate_id)
         || procedure.actor_stix_id !== actorRecord.stix_id || !nonEmptyString(procedure.mapping_data_version) || procedure.mapping_data_version.length > 500
         || typeof procedure.technique_id !== "string" || !/^T[0-9]{4}(?:\.[0-9]{3})?$/.test(procedure.technique_id)
         || !nonEmptyString(procedure.technique_name) || !stringArray(procedure.tactics) || !stringArray(procedure.platforms)
@@ -188,6 +190,7 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
         || !dateTime(procedure.reviewed_at) || !nonEmptyString(procedure.accepted_by) || procedure.accepted_by.length > 120 || !dateTime(procedure.accepted_at)) {
         throw new Error("Plan contains invalid or unaccepted procedure evidence");
       }
+      candidateIds.add(procedure.candidate_id);
     });
   }
   const allowedDomains = new Set(["enterprise", "ics", "mobile"]);
@@ -195,7 +198,7 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
 
   const scopeKeys = ["command_platform", "include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk", "stages"];
   const scope = data.scope;
-  if (!onlyKeys(scope, scopeKeys) || !["windows", "linux", "macos"].includes(String(scope.command_platform))
+  if (!onlyKeys(scope, scopeKeys) || typeof scope.command_platform !== "string" || !["windows", "linux", "macos"].includes(scope.command_platform)
     || !uniqueStrings(scope.stages)
     || ["include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk"].some((key) => typeof scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
 
@@ -247,13 +250,30 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
         || (entry.receipt.status !== "passed" && entry.receipt.status !== "failed")
         || !dateTime(entry.receipt.started_at) || !dateTime(entry.receipt.completed_at)
         || !Number.isInteger(entry.receipt.exit_code) || typeof entry.receipt.cleanup_verified !== "boolean"
-        || !Array.isArray(entry.receipt.events) || entry.receipt.events.length > 10_000 || !entry.receipt.events.every(isRecord)) {
+        || !Array.isArray(entry.receipt.events) || entry.receipt.events.length > 10_000 || !entry.receipt.events.every(isRecord)
+        || !validReceiptFields(entry.receipt, entry.technique_id)) {
         throw new Error("Plan contains invalid receipt evidence");
       }
       const key = `${entry.run_id}|${entry.technique_id}`;
       if (receipts.has(key)) throw new Error("Plan contains duplicate run receipts");
+      const stages = data.stages as unknown as PlanStage[];
+      const receipt = entry.receipt;
+      const matching = stages.flatMap((stage) => stage.techniques).filter((technique) => technique.id === entry.technique_id);
+      if (!matching.length || matching.some((technique) => technique.execution.run_id !== entry.run_id
+          || technique.execution.receipt_sha256 !== entry.receipt_sha256 || technique.execution.receipt_verified !== true
+          || technique.execution.outcome !== receipt.status || technique.execution.started_at !== receipt.started_at
+          || technique.execution.completed_at !== receipt.completed_at || technique.execution.exit_code !== receipt.exit_code
+          || technique.execution.cleanup_completed !== receipt.cleanup_verified)) {
+        throw new Error("Receipt evidence must match a digest-verified plan execution record");
+      }
       receipts.add(key);
     });
+  }
+}
+
+export async function verifyImportedPlanReceipts(plan: PlanExport): Promise<void> {
+  for (const entry of plan.receipts ?? []) {
+    if (!await verifyReceiptDigest(entry.receipt)) throw new Error(`Receipt digest for ${entry.technique_id} does not match its contents.`);
   }
 }
 

@@ -26,6 +26,8 @@ first, and verify cleanup. See [ACCEPTABLE_USE.md](ACCEPTABLE_USE.md).
 The local HTTP service binds to loopback by default. Remote binding requires
 the explicit --allow-remote option and is not recommended on untrusted
 networks.
+Local mode also restricts HTTP Host values to localhost or loopback addresses
+to prevent DNS rebinding. Use the printed loopback URL for local operation.
 
 ## Threat model (local planner)
 

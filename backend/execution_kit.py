@@ -13,6 +13,7 @@ import json
 import re
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
@@ -74,6 +75,10 @@ def _string(value: Any, field: str, *, maximum: int = 10_000, required: bool = F
         raise ExecutionKitError(f"{field} is invalid")
     if "\x00" in value:
         raise ExecutionKitError(f"{field} contains a null byte")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ExecutionKitError(f"{field} contains invalid Unicode") from exc
     return value
 
 
@@ -102,6 +107,47 @@ def _optional_bool(value: Any, field: str, default: bool = False) -> bool:
     if value is None:
         return default
     return _boolean(value, field)
+
+
+def _validate_execution(value: Any) -> None:
+    if not isinstance(value, dict):
+        raise ExecutionKitError("technique.execution must be an object")
+    enums = {
+        "outcome": {"not_run", "passed", "failed", "skipped"},
+        "detection_result": {"not_assessed", "alerted", "silent", "blocked", "not_instrumented"},
+        "evidence_source": {"operator_supplied", "exercise_receipt", "endpoint_verified", "siem_verified"},
+    }
+    if "outcome" not in value:
+        raise ExecutionKitError("execution.outcome is required")
+    for field, allowed in enums.items():
+        if field in value and (not isinstance(value[field], str) or value[field] not in allowed):
+            raise ExecutionKitError(f"execution.{field} is invalid")
+    for field, maximum in (("operator", 120), ("target", 200), ("notes", 500), ("run_id", 128)):
+        if field in value:
+            _string(value[field], f"execution.{field}", maximum=maximum, required=field == "run_id")
+    for field in ("updated_at", "started_at", "completed_at"):
+        if field in value:
+            text = _string(value[field], f"execution.{field}", maximum=100, required=True)
+            try:
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if "T" not in text or parsed.tzinfo is None:
+                    raise ValueError("timezone required")
+            except ValueError as exc:
+                raise ExecutionKitError(f"execution.{field} must be an ISO date-time with a timezone") from exc
+    for field in ("cleanup_completed", "receipt_verified"):
+        if field in value:
+            _boolean(value[field], f"execution.{field}")
+    if "exit_code" in value:
+        code = value["exit_code"]
+        if isinstance(code, bool) or not isinstance(code, int) or not -255 <= code <= 65_535:
+            raise ExecutionKitError("execution.exit_code is invalid")
+    for field in ("stdout_sha256", "stderr_sha256", "receipt_sha256"):
+        if field in value and (not isinstance(value[field], str) or not re.fullmatch(r"[a-fA-F0-9]{64}", value[field])):
+            raise ExecutionKitError(f"execution.{field} must be a SHA-256 digest")
+    if "telemetry_refs" in value:
+        references = _strings(value["telemetry_refs"], "execution.telemetry_refs", maximum_items=20)
+        if any(not ref or len(ref) > 500 for ref in references) or len(set(references)) != len(references):
+            raise ExecutionKitError("execution.telemetry_refs must contain unique references of 1-500 characters")
 
 
 def _exercise_technique_id(command: Mapping[str, Any]) -> str:
@@ -182,7 +228,10 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
     """
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
-    rebound = json.loads(json.dumps(document))
+    try:
+        rebound = json.loads(json.dumps(document, allow_nan=False))
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise ExecutionKitError("Plan must contain valid finite JSON values") from exc
     scope = rebound.get("scope")
     stages = rebound.get("stages")
     if not isinstance(scope, dict) or not isinstance(stages, list):
@@ -244,8 +293,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
     schema_version = document.get("schema_version")
-    if schema_version not in {"2.0", "3.0"} or document.get("tool") != "AdversaryFlow":
-        raise ExecutionKitError("Only AdversaryFlow schema 2.0 plans can produce execution kits")
+    if not isinstance(schema_version, str) or schema_version not in {"2.0", "3.0"} or document.get("tool") != "AdversaryFlow":
+        raise ExecutionKitError("Only AdversaryFlow schema 2.0 or 3.0 plans can produce execution kits")
 
     actor = document.get("actor")
     scope = document.get("scope")
@@ -279,7 +328,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                     or not isinstance(item.get("technique_name"), str) or not item["technique_name"].strip()
                     or not isinstance(item.get("tactics"), list) or not all(isinstance(value, str) for value in item["tactics"])
                     or not isinstance(item.get("platforms"), list) or not all(isinstance(value, str) for value in item["platforms"])
-                    or item.get("source_kind") not in {"csv", "navigator_layer", "stix2_bundle"}
+                    or not isinstance(item.get("source_kind"), str)
+                    or item["source_kind"] not in {"csv", "navigator_layer", "stix2_bundle"}
                     or not isinstance(item.get("source_name"), str) or len(item["source_name"]) > 300
                     or not item["source_name"].strip()
                     or (item["source_url"] is not None and (not isinstance(item["source_url"], str)
@@ -316,7 +366,7 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     generated = _string(document.get("generated"), "generated", maximum=100, required=True)
 
     rows: List[PlanStep] = []
-    planned_runs: Dict[Tuple[str, str], Mapping[str, Any]] = {}
+    planned_runs: Dict[Tuple[str, str], List[Mapping[str, Any]]] = {}
     for stage in stages:
         if (not isinstance(stage, dict) or not isinstance(stage.get("techniques"), list)
                 or not stage["techniques"]):
@@ -329,8 +379,9 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
             if not isinstance(technique, dict) or not isinstance(technique.get("command"), dict):
                 raise ExecutionKitError("Plan contains an invalid technique")
             execution = technique.get("execution")
+            _validate_execution(execution)
             if isinstance(execution, dict) and isinstance(execution.get("run_id"), str):
-                planned_runs[(str(technique.get("id", "")), execution["run_id"])] = execution
+                planned_runs.setdefault((str(technique.get("id", "")), execution["run_id"]), []).append(execution)
             command = technique["command"]
             technique_id = _string(technique.get("id"), "technique.id", maximum=64, required=True)
             if not ATTACK_TECHNIQUE_ID_PATTERN.fullmatch(technique_id):
@@ -417,8 +468,16 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 telemetry._time(receipt["completed_at"])
             except (TypeError, ValueError, OverflowError) as exc:
                 raise ExecutionKitError("Schema 3.0 plan receipt timestamps are invalid") from exc
-            planned = planned_runs.get((receipt_technique_id, run_id))
-            if not planned or planned.get("receipt_sha256") != digest or planned.get("receipt_verified") is not True:
+            planned = planned_runs.get((receipt_technique_id, run_id), [])
+            receipt_fields = {
+                "outcome": "status", "started_at": "started_at", "completed_at": "completed_at",
+                "exit_code": "exit_code", "cleanup_completed": "cleanup_verified",
+            }
+            if not planned or any(
+                record.get("receipt_sha256") != digest or record.get("receipt_verified") is not True
+                or any(record.get(field) != receipt[receipt_field] for field, receipt_field in receipt_fields.items())
+                for record in planned
+            ):
                 raise ExecutionKitError("Receipt evidence must match a digest-verified plan execution record")
             key = (receipt_technique_id, run_id)
             if key in seen_receipts:
@@ -427,7 +486,10 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
 
     if require_executable and not any(step.supported for step in rows):
         raise ExecutionKitError("Plan has no executable Windows, Linux, or macOS steps")
-    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    try:
+        canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise ExecutionKitError("Plan must contain valid UTF-8 JSON values") from exc
     return ExecutionPlan(
         actor_id=actor_id,
         actor_name=actor_name,
@@ -570,7 +632,7 @@ choice() {
   local prompt=$1 allowed=$2 answer
   while true; do
     printf '%s' "$prompt" >&2
-    IFS= read -r answer || answer=A
+    if ! IFS= read -r answer; then printf 'A'; return; fi
     answer=$(printf '%s' "$answer" | tr '[:lower:]' '[:upper:]')
     case " $allowed " in *" $answer "*) printf '%s' "$answer"; return;; esac
     printf 'Please enter one of the displayed choices.\n' >&2
@@ -704,11 +766,11 @@ for index in "${!STEP_IDS[@]}"; do
   indent_file "$effective_file"
   printf '\n'
   if [ "$supported" != true ]; then
-    printf 'This step is unsupported on Linux and was recorded as skipped.\n'
+    printf 'This step is unsupported on __PLATFORM_TITLE__ and was recorded as skipped.\n'
     event "step_skipped" "$step_id" "unsupported"
     append_csv "$seq" "$step_id" "$technique_id" "skip" "not_executed" "not_assessed" "false" "unsupported" "" "$(now_utc)" "" "$original_sha" "$original_sha" "" "" "not_applicable"
     printf '## %s. %s — %s\n\n- **Decision:** skipped (unsupported)\n\n' "$seq" "$technique_id" "$technique_name" >> "$REPORT"
-    printf '<section><h2>%s. %s — %s</h2><p class="warn"><b>Skipped:</b> unsupported on Linux</p></section>\n' "$seq" "$(printf '%s' "$technique_id" | html_escape)" "$(printf '%s' "$technique_name" | html_escape)" >> "$HTML_REPORT"
+    printf '<section><h2>%s. %s — %s</h2><p class="warn"><b>Skipped:</b> unsupported on __PLATFORM_TITLE__</p></section>\n' "$seq" "$(printf '%s' "$technique_id" | html_escape)" "$(printf '%s' "$technique_name" | html_escape)" >> "$HTML_REPORT"
     SKIPPED=$((SKIPPED + 1)); continue
   fi
 
@@ -731,7 +793,11 @@ for index in "${!STEP_IDS[@]}"; do
   if [ "$decision" = E ]; then
     editor=${EDITOR:-vi}
     "$editor" "$effective_file"
-    while [ -z "$reason" ]; do printf 'Modification reason (required): '; IFS= read -r reason || true; done
+    while [ -z "$reason" ]; do
+      printf 'Modification reason (required): '
+      if ! IFS= read -r reason; then ABORTED=true; break; fi
+    done
+    if $ABORTED; then event "session_aborted" "$step_id" "input closed before edit approval"; break; fi
     modified=true
     printf '\nEffective command after editing:\n'; indent_file "$effective_file"; printf '\n'
     reapprove=$(choice 'Approve this edited command? [R]un / [S]kip / [A]bort: ' 'R S A')
@@ -765,7 +831,7 @@ for index in "${!STEP_IDS[@]}"; do
   [ "$exit_code" -ne 0 ] || COMPLETED=$((COMPLETED + 1))
   printf 'Exit code: %s\nstdout: %s\nstderr: %s\n' "$exit_code" "$stdout_file" "$stderr_file"
   assessment_choice=$(choice 'Detection assessment: [Y] passed / [N] failed: ' 'Y N')
-  [ "$assessment_choice" = Y ] && assessment=passed || assessment=failed
+  case "$assessment_choice" in Y) assessment=passed;; N) assessment=failed;; *) assessment=not_assessed;; esac
   cleanup_status=not_applicable
   if [ -n "$cleanup_text" ]; then
     printf '\nCleanup command:\n    %s\n' "$cleanup_text"
@@ -866,9 +932,18 @@ $Steps = __STEPS__
 function ConvertFrom-AfBase64([string]$Value) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value)) }
 function ConvertTo-AfBase64([string]$Value) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value)) }
 function Get-AfTimestamp { [DateTime]::UtcNow.ToString('o') }
+function Read-AfInput([string]$Prompt) {
+    if ([Console]::IsInputRedirected) {
+        Write-Host "$Prompt`: " -NoNewline
+        return [Console]::ReadLine()
+    }
+    return Read-Host $Prompt
+}
 function Read-AfChoice([string]$Prompt, [string[]]$Allowed) {
     while ($true) {
-        $answer = (Read-Host $Prompt).Trim().ToUpperInvariant()
+        $inputValue = Read-AfInput $Prompt
+        if ($null -eq $inputValue) { return 'A' }
+        $answer = $inputValue.Trim().ToUpperInvariant()
         if ($Allowed -contains $answer) { return $answer }
         Write-Host "Please enter one of: $($Allowed -join ', ')" -ForegroundColor Yellow
     }
@@ -951,10 +1026,10 @@ Write-Host "Data version: $DataVersion`n"
 Write-Host 'This runner executes one lab step at a time. Nothing runs without approval.'
 Write-Host 'Every decision, edit, command hash, output hash, and exit code is recorded locally.'
 $operatorPrompt = if ($DefaultOperator) { $DefaultOperator } else { 'not set' }
-$Operator = Read-Host "Operator [$operatorPrompt]"
+$Operator = Read-AfInput "Operator [$operatorPrompt]"
 if ([string]::IsNullOrWhiteSpace($Operator)) { $Operator = $DefaultOperator }
 $targetPrompt = if ($DefaultTarget) { $DefaultTarget } else { 'not set' }
-$Target = Read-Host "Target [$targetPrompt]"
+$Target = Read-AfInput "Target [$targetPrompt]"
 if ([string]::IsNullOrWhiteSpace($Target)) { $Target = $DefaultTarget }
 $StartedAt = Get-AfTimestamp
 if ((Read-AfChoice 'Start this execution session? Y=yes / A=abort' @('Y','A')) -ne 'Y') { Write-Host 'No commands were executed.'; exit 0 }
@@ -1021,7 +1096,7 @@ try {
         $modified = $false; $reason = ''
         if ($decision -eq 'A') { Write-AfEvent 'session_aborted' $stepId 'aborted before step'; $aborted = $true; break }
         if ($decision -eq 'S') {
-            $reason = Read-Host 'Skip reason (optional)'
+            $reason = Read-AfInput 'Skip reason (optional)'
             Write-AfEvent 'step_skipped' $stepId $reason
             $Results.Add([pscustomobject]@{ sequence=$sequence; step_id=$stepId; technique_id=$step.TechniqueId; decision='skip'; execution_status='not_executed'; assessment='not_assessed'; modified=$false; modification_reason=$reason; started_at=''; completed_at=(Get-AfTimestamp); exit_code=''; original_command_sha256=$originalSha; effective_command_sha256=$originalSha; stdout_sha256=''; stderr_sha256=''; cleanup_status='not_applicable' })
             Save-AfResults; Add-Content -LiteralPath $ReportPath -Value "`n## $sequence. $($step.TechniqueId) — $($step.TechniqueName)`n`n- **Decision:** skipped`n- **Reason:** $reason`n" -Encoding UTF8
@@ -1031,7 +1106,11 @@ try {
         if ($decision -eq 'E') {
             $editor = if ($env:EDITOR) { $env:EDITOR } else { 'notepad.exe' }
             Start-Process -FilePath $editor -ArgumentList "`"$effectiveFile`"" -Wait
-            while ([string]::IsNullOrWhiteSpace($reason)) { $reason = Read-Host 'Modification reason (required)' }
+            while ([string]::IsNullOrWhiteSpace($reason)) {
+                $reason = Read-AfInput 'Modification reason (required)'
+                if ($null -eq $reason) { $aborted = $true; break }
+            }
+            if ($aborted) { Write-AfEvent 'session_aborted' $stepId 'input closed before edit approval'; break }
             $modified = $true
             Write-Host "`nEffective command after editing:"
             Get-Content -LiteralPath $effectiveFile | ForEach-Object { Write-Host "    $_" }
@@ -1064,7 +1143,8 @@ try {
         $stderrSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $stderrFile).Hash.ToLowerInvariant()
         if ($exitCode -eq 0) { $completed++ } else { $failed++ }
         Write-Host "Exit code: $exitCode`nstdout: $stdoutFile`nstderr: $stderrFile"
-        $assessment = if ((Read-AfChoice 'Detection assessment: Y=passed / N=failed' @('Y','N')) -eq 'Y') { 'passed' } else { 'failed' }
+        $assessmentChoice = Read-AfChoice 'Detection assessment: Y=passed / N=failed' @('Y','N')
+        $assessment = if ($assessmentChoice -eq 'Y') { 'passed' } elseif ($assessmentChoice -eq 'N') { 'failed' } else { 'not_assessed' }
         $cleanupStatus = 'not_applicable'
         if ($step.Cleanup) {
             Write-Host "`nCleanup command:`n    $($step.Cleanup)"
