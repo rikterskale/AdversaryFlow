@@ -161,5 +161,9 @@ does not enable OS auditing; a missing signal fails the gate. See
 - **Refresh conflict:** wait for bootstrap or the existing refresh to finish.
 - **Permission denied:** choose a writable per-user --cache-dir.
 
-Waitress handles normal process termination signals. The cache and JSON plan
-exports are the only persistent operational state; back them up if required.
+Waitress handles normal process termination signals. The ATT&CK cache,
+engagement database (including revisions, audit records, backlog, and webhook
+state), and JSON plan exports are persistent state; back them up if required.
+The default engagement database is `engagements.sqlite3` inside the cache
+directory. Docker's named cache volume therefore contains saved engagement
+records as well as downloaded ATT&CK data.

@@ -1,4 +1,4 @@
-"""Contracts for the Compose-first operator and architecture documentation."""
+"""Contracts for the beginner install route and architecture documentation."""
 
 import unittest
 from pathlib import Path
@@ -26,40 +26,40 @@ class DocumentationContractTests(unittest.TestCase):
         cls.exports = (ROOT / "docs" / "EXPORTS.md").read_text(encoding="utf-8")
         cls.troubleshooting = (ROOT / "docs" / "TROUBLESHOOTING.md").read_text(encoding="utf-8")
 
-    def test_readme_leads_with_the_supported_compose_path(self) -> None:
+    def test_readme_downloads_a_zip_before_starting_compose(self) -> None:
         commands = (
-            "git clone https://github.com/rikterskale/AdversaryFlow.git",
-            "cd AdversaryFlow",
-            "docker compose up",
+            "https://github.com/rikterskale/AdversaryFlow/archive/refs/heads/main.zip",
+            "\ndocker version\n",
+            "\ndocker compose version\n",
+            "\ndocker compose up --build\n",
         )
         positions = [self.readme.index(command) for command in commands]
         self.assertEqual(positions, sorted(positions))
-        self.assertLess(self.readme.index("## Five-minute quickstart"), self.readme.index("## What it does"))
-        quickstart = self.readme[
-            self.readme.index("## Five-minute quickstart"):self.readme.index("## What it does")
-        ]
-        self.assertIn("Do **not** select **Copy command**", quickstart)
-        self.assertIn("`0` outcomes recorded", quickstart)
+        self.assertLess(self.readme.index("## Install and open"), self.readme.index("## Create your first plan"))
+        install = self.readme[self.readme.index("## Install and open"):self.readme.index("## Create your first plan")]
+        self.assertNotIn("git clone", install)
+        self.assertIn("Connect securely", install)
+        for name in ("Dockerfile", "docker-compose.yml", "run.ps1"):
+            self.assertIn(name, install)
+            self.assertTrue((ROOT / name).is_file())
         self.assertIn("[Architecture](docs/ARCHITECTURE.md)", self.readme)
-        self.assertIn("under five minutes", self.readme)
 
-    def test_getting_started_has_a_no_execution_five_minute_path(self) -> None:
-        compose = self.getting_started.index("## Five-minute dry-run with Docker Compose")
-        native = self.getting_started.index("## 1. Check the machine for a native install")
-        self.assertLess(compose, native)
-        section = " ".join(self.getting_started[compose:native].split())
-        self.assertIn("docker compose up", section)
-        self.assertIn("not select **Copy command**", section)
+    def test_first_plan_exports_before_any_exercise_is_run(self) -> None:
+        section = " ".join(self.readme[self.readme.index("## Create your first plan"):self.readme.index("## Save and resume")].split())
+        self.assertIn("**Not run**", section)
+        self.assertIn("**Not assessed**", section)
+        self.assertIn("**Save JSON plan**", section)
         self.assertIn("**Generate report**", section)
-        self.assertIn("download **PDF**", section)
-        self.assertIn("**Schema-versioned JSON**", section)
+        self.assertIn("**PDF**", section)
         self.assertIn("`0` outcomes recorded", section)
 
-    def test_getting_started_command_cheat_sheet_matches_package_version(self) -> None:
+    def test_getting_started_native_example_matches_package_version(self) -> None:
         self.assertIn(
-            f"Verified against `adversaryflow --help` on {__version__}.",
+            f"AdversaryFlow {__version__}: http://127.0.0.1:5000",
             self.getting_started,
         )
+        self.assertIn("powershell -NoProfile -ExecutionPolicy Bypass -File .\\run.ps1", self.getting_started)
+        self.assertIn("chmod +x run.sh install.sh", self.getting_started)
 
     def test_install_reference_documents_compose_configuration_and_recovery(self) -> None:
         for setting in (

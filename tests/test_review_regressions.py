@@ -24,7 +24,9 @@ class PlanValidationReviewTests(unittest.TestCase):
         plan = plan_fixture("linux", duplicate=True)
         receipt = {"schema_version": "1.0", "technique_id": "T1059.004", "run_id": "fixture-run",
                    "status": "passed", "started_at": "2026-10-01T12:00:00Z", "completed_at": "2026-10-01T12:00:01Z",
-                   "exit_code": 0, "cleanup_verified": True, "events": []}
+                   "exit_code": 0, "cleanup_verified": True, "events": [], "scenario": "fixture",
+                   "exercise_summary": "Fixture exercise", "expected_telemetry": "Fixture telemetry",
+                   "duration_ms": 1000, "attestation": "Self-reported", "error": None}
         digest = hashlib.sha256(json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         receipt["receipt_sha256"] = digest
         plan.update(schema_version="3.0", procedures=[], receipts=[{
@@ -57,7 +59,8 @@ class PlanValidationReviewTests(unittest.TestCase):
     def test_malformed_report_url_does_not_crash_report_generation(self):
         plan = plan_fixture("linux")
         plan["stages"][0]["techniques"][0]["url"] = "https://[invalid"
-        self.assertEqual(build_report(plan).techniques[0].attack_url, "")
+        with self.assertRaisesRegex(ValueError, "url.*format"):
+            build_report(plan)
 
     def test_unhashable_schema_values_are_validation_errors(self):
         invalid_values: tuple[Any, ...] = ([], {})

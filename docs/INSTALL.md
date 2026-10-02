@@ -1,11 +1,11 @@
 # Installation
 
-AdversaryFlow supports Docker Compose as the zero-dependency application path,
+AdversaryFlow supports Docker Compose without a host Python or Node installation,
 plus Python 3.10 or newer on Linux, macOS, and Windows for native installs.
 All paths keep the planner local by default and never execute attack commands.
 
-If you are installing for the first time, use the copy/paste handbook
-[Getting started](GETTING_STARTED.md) instead of this page. This file is
+If you are installing for the first time, use the [README walkthrough](../README.md#install-and-open)
+or [Python alternative](GETTING_STARTED.md#native-installation-with-python). This file is
 the compact reference for the same commands.
 
 ## One-command Docker Compose install
@@ -115,12 +115,16 @@ Linux and macOS:
 Windows PowerShell:
 
 ~~~powershell
-.\run.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1
 ~~~
 
 The native launcher verifies Python 3.10+, creates .venv, installs the pinned runtime
 set, runs **adversaryflow doctor**, starts the service, and opens the browser
-when ATT&CK data is ready. Later launches reuse the environment.
+while ATT&CK data is preparing. Later launches reuse the environment.
+
+For a ZIP download on Linux/macOS, run `chmod +x run.sh install.sh` before
+the first launch. The Windows command's policy setting applies only to the
+launched process. See [Getting started](GETTING_STARTED.md) for Python setup.
 
 ## Isolated install from a wheel
 

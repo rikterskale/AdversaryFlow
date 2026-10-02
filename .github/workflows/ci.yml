@@ -33,6 +33,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --require-hashes --requirement requirements.lock
+      - run: python -m pip install --require-hashes --requirement requirements-test.lock
       - run: python -m pip install --require-hashes --requirement requirements-build.lock
       - run: python -m pip install --no-build-isolation --no-deps --editable .
       - run: python -m unittest discover --verbose
@@ -64,6 +65,31 @@ jobs:
       - run: python -m pip install --require-hashes --requirement requirements-dev.lock
       - run: ruff check .
       - run: mypy
+
+  coverage:
+    name: Backend branch coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --require-hashes --requirement requirements.lock --requirement requirements-test.lock --requirement requirements-build.lock
+      - run: python -m pip install --no-build-isolation --no-deps --editable .
+      - run: python -m coverage run -m unittest discover --verbose
+      - run: python -m coverage report
+      - if: always()
+        run: python -m coverage html --directory test-results/coverage
+      - if: always()
+        run: python -m coverage xml -o test-results/coverage.xml
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-coverage
+          path: |
+            test-results/coverage/
+            test-results/coverage.xml
 
   windows-launchers:
     name: Native Windows PowerShell launchers
@@ -178,6 +204,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -c "import glob,subprocess,sys; subprocess.check_call([sys.executable,'-m','pip','install',glob.glob('dist/*.whl')[0]])"
+      # Run outside a source checkout: all schema references must resolve from
+      # the wheel's installed share/adversaryflow/schemas directory.
+      - run: python -c "from backend.plan_schema import _validators; errors=list(_validators()['3.0'].iter_errors({'actor':{},'receipts':[{'receipt':{}}]})); assert any(list(e.absolute_path)==['actor'] for e in errors); assert any(list(e.absolute_path)==['receipts',0,'receipt'] for e in errors)"
       - run: adversaryflow --version
       - run: adversaryflow doctor
       - run: adversaryflow-telemetry criteria T1110

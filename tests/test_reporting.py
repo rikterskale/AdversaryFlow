@@ -96,16 +96,14 @@ class EngagementReportingTests(unittest.TestCase):
                 self.assertIn(b"SIEM-1042", body)
                 self.assertNotIn(b"COMMAND:", body)
 
-    def test_report_discards_client_supplied_sigma_metadata(self):
+    def test_report_rejects_client_supplied_sigma_metadata(self):
         document = plan_fixture("linux")
         document["stages"][0]["techniques"][0]["command"]["sigma_rules"] = [{
             "title": "Untrusted rule",
             "url": "https://evil.example/untrusted.yml",
         }]
-        report = build_report(document)
-        self.assertEqual(report.techniques[0].sigma_references, ())
-        self.assertNotIn("evil.example", render_html(report).decode("utf-8"))
-        self.assertNotIn(b"evil.example", render_pdf(report))
+        with self.assertRaisesRegex(ValueError, "additionalProperties"):
+            build_report(document)
 
     def test_report_never_emits_a_detection_reference_absent_from_the_catalog(self):
         reference_fields = {"sigma_rules", "sigma", "detection_rules", "detection_references"}

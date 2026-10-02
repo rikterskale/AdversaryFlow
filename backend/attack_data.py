@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -346,54 +346,68 @@ class AttackIndex:
         self._build_tactics()
 
     def _build(self) -> None:
+        domain_objects: List[Dict[str, Dict[str, Any]]] = []
         for domain in self.domains:
             bundle = load_bundle(domain)
             self.bundle_ids[domain] = str(bundle.get("id") or "unknown")
+            objects: Dict[str, Dict[str, Any]] = {}
             for obj in bundle.get("objects", []):
                 oid = obj.get("id")
                 if not oid:
                     continue
                 # Later domains should not clobber earlier identical ids; first wins.
                 self.objects_by_id.setdefault(oid, obj)
+                objects.setdefault(oid, obj)
+            domain_objects.append(objects)
 
-        self._index_uses()
+        for objects in domain_objects:
+            self._index_uses(objects)
 
-    def _index_uses(self) -> None:
+    def _index_uses(self, objects: Mapping[str, Dict[str, Any]]) -> None:
         """Map groups and campaigns to techniques they use.
 
         ATT&CK records some actors only as using malware or tools, not
         techniques directly. Those actors still belong in the gallery, so
         when an actor has no direct technique `uses` edges, techniques are
-        taken from the software they use. Actors that already have direct
-        technique mappings keep that ATT&CK-published set.
+        taken from the software they use. Prefer direct mappings within each
+        domain, then merge the domain sets so adding a domain cannot suppress
+        another domain's software-derived mappings.
         """
+        direct_uses: Dict[str, List[str]] = {}
         software_uses: Dict[str, List[str]] = {}
         actor_software: Dict[str, List[str]] = {}
-        for obj in list(self.objects_by_id.values()):
+        for obj in objects.values():
             if (obj.get("type") != "relationship" or obj.get("relationship_type") != "uses"
                     or self._is_deprecated(obj)):
                 continue
             src = obj.get("source_ref", "")
             tgt = obj.get("target_ref", "")
             if src.startswith(("intrusion-set--", "campaign--")) and tgt.startswith("attack-pattern--"):
-                self.actor_uses.setdefault(src, []).append(tgt)
+                direct_uses.setdefault(src, []).append(tgt)
             elif src.startswith(("intrusion-set--", "campaign--")) and tgt.startswith(("malware--", "tool--")):
                 actor_software.setdefault(src, []).append(tgt)
             elif src.startswith(("malware--", "tool--")) and tgt.startswith("attack-pattern--"):
                 software_uses.setdefault(src, []).append(tgt)
         for actor_id, software_ids in actor_software.items():
-            if self.actor_uses.get(actor_id):
+            if direct_uses.get(actor_id):
                 continue
             seen: set[str] = set()
             for software_id in software_ids:
-                software = self.objects_by_id.get(software_id) or {}
+                software = objects.get(software_id) or {}
                 if self._is_deprecated(software):
                     continue
                 for technique_id in software_uses.get(software_id, []):
                     if technique_id in seen:
                         continue
                     seen.add(technique_id)
-                    self.actor_uses.setdefault(actor_id, []).append(technique_id)
+                    direct_uses.setdefault(actor_id, []).append(technique_id)
+        for actor_id, technique_ids in direct_uses.items():
+            merged = self.actor_uses.setdefault(actor_id, [])
+            seen = set(merged)
+            for technique_id in technique_ids:
+                if technique_id not in seen:
+                    seen.add(technique_id)
+                    merged.append(technique_id)
 
     def _build_tactics(self) -> None:
         """Derive the ordered kill chain from the x-mitre-matrix / tactic objects.

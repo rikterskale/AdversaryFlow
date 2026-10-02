@@ -37,6 +37,23 @@ node --check frontend/app.js
 bash -n install.sh run.sh
 ```
 
+Install the test dependencies to exercise signed content packs and the local
+HTTPS webhook integration, then measure backend coverage:
+
+```bash
+.venv/bin/python -m pip install --require-hashes -r requirements-test.lock
+.venv/bin/python -m coverage run -m unittest discover --verbose
+.venv/bin/python -m coverage report
+.venv/bin/python -m coverage html --directory test-results/coverage
+```
+
+On Windows, use `.venv\Scripts\python.exe` for these commands. CI installs the
+test dependencies on every Python/OS test job. Its dedicated coverage job
+requires 80% combined statement and branch coverage of `backend` and publishes
+HTML and XML reports. This metric covers the backend test process; generated
+runners, CLI subprocesses, browser execution, and container startup have their
+own integration checks. It does not imply complete functional coverage.
+
 Browser coverage uses Playwright:
 
 ```bash
@@ -47,6 +64,11 @@ npm run test:e2e
 The browser suite includes a local Flask service with isolated fixture data, so
 install the Python dependencies first. It uses the repository's `.venv` when
 available, or `python` on PATH; set `ADVERSARYFLOW_TEST_PYTHON` to override it.
+
+The real-service cases include schema 3 intelligence review, Atomic drafts and
+backlog edits, saved engagement revisions, reports, and execution-kit downloads.
+The deterministic domain tests cover all domain combinations and orderings;
+they do not depend on live ATT&CK downloads.
 
 Playwright runs all three browser engines. To run one, use
 `npm run test:e2e -- --project=firefox` (or `chromium` / `webkit`). WebKit coverage

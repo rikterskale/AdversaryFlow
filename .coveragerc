@@ -1,0 +1,9 @@
+[run]
+branch = True
+source = backend
+
+[report]
+precision = 2
+fail_under = 80
+show_missing = True
+

@@ -11,7 +11,7 @@ Only the latest minor release receives routine fixes until a 1.0 support window 
 
 Before opening an issue:
 
-1. Follow the escalation checklist in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md#8-support-escalation).
+1. Follow [Ask for help](docs/TROUBLESHOOTING.md#ask-for-help) for installation-specific diagnostic commands and a simple support checklist.
 2. Run `adversaryflow --version`.
 3. Check `GET /api/health` and record its status, error, domain sets, and data version.
 4. Review `docs/INSTALL.md` and `docs/OPERATIONS.md`.

@@ -463,7 +463,7 @@ def engagements():
     if not isinstance(document, dict) or not isinstance(document.get("plan"), dict):
         abort(400, description="A JSON plan object is required")
     try:
-        # Reuse the execution-kit validator to enforce the published 2.0
+        # Reuse the execution-kit validator to enforce the published plan
         # contract without requiring that the plan contain a runnable step.
         execution_kit.normalize_plan(document["plan"], require_executable=False)
         saved = engagement_store.save_revision(document["plan"], document.get("engagement_id"))

@@ -165,13 +165,13 @@ class ExecutionPlanTests(unittest.TestCase):
     def test_security_booleans_cannot_be_smuggled_as_strings(self):
         document = plan_fixture("linux")
         document["stages"][0]["techniques"][0]["command"]["requires_admin"] = "false"
-        with self.assertRaisesRegex(ExecutionKitError, "must be true or false"):
+        with self.assertRaisesRegex(ExecutionKitError, "requires_admin.*type"):
             normalize_plan(document)
 
     def test_an_empty_stage_is_rejected(self):
         document = plan_fixture("linux")
         document["stages"][0]["techniques"] = []
-        with self.assertRaisesRegex(ExecutionKitError, "invalid stage"):
+        with self.assertRaisesRegex(ExecutionKitError, "techniques.*minItems"):
             normalize_plan(document)
 
     def test_no_executable_step_error_names_every_supported_platform(self):
@@ -446,7 +446,7 @@ class CatalogRebindTests(unittest.TestCase):
     def test_hostile_fallback_identifier_is_rejected_before_catalog_substitution(self):
         document = plan_fixture("windows")
         document["stages"][0]["techniques"][0]["id"] = 'T9999" & whoami & echo "'
-        with self.assertRaisesRegex(ExecutionKitError, "ATT&CK technique ID"):
+        with self.assertRaisesRegex(ExecutionKitError, "id.*pattern"):
             build_execution_kit(document)
 
     def test_client_command_text_is_replaced_with_the_catalog_record(self):

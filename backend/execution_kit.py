@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from . import command_catalog, telemetry
+from .plan_schema import validate_plan_document
 
 MAX_PLAN_STEPS = 4000
 MAX_COMMAND_LENGTH = 10_000
@@ -30,6 +31,13 @@ ATTACK_TECHNIQUE_ID_PATTERN = re.compile(r"T[0-9]{4}(?:\.[0-9]{3})?")
 
 class ExecutionKitError(ValueError):
     """The submitted browser plan cannot safely produce an execution kit."""
+
+
+def _validate_schema(document: Any) -> None:
+    try:
+        validate_plan_document(document)
+    except ValueError as exc:
+        raise ExecutionKitError(str(exc)) from exc
 
 
 @dataclass(frozen=True)
@@ -226,8 +234,7 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
     bodies, safety metadata, and fidelity always come from the catalog so an
     execution kit cannot carry an operator- or attacker-supplied payload.
     """
-    if not isinstance(document, dict):
-        raise ExecutionKitError("Plan must be a JSON object")
+    _validate_schema(document)
     try:
         rebound = json.loads(json.dumps(document, allow_nan=False))
     except (TypeError, ValueError, RecursionError) as exc:
@@ -277,7 +284,9 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
             technique["command"] = bound
             technique["command_source"] = "fallback" if source == "fallback" else "curated"
             technique["supported"] = not bool(bound.get("unsupported"))
-    return rebound
+    # Catalog telemetry metadata uses immutable tuples internally. The plan
+    # contract represents those values as JSON arrays, just like API clients.
+    return json.loads(json.dumps(rebound, allow_nan=False))
 
 
 def _exercise_runner_source() -> bytes:
@@ -290,6 +299,7 @@ def _plan_needs_exercise_runner(plan: ExecutionPlan) -> bool:
 
 def normalize_plan(document: Any, *, require_executable: bool = True) -> ExecutionPlan:
     """Validate the browser's plan export and assign stable occurrence IDs."""
+    _validate_schema(document)
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
     schema_version = document.get("schema_version")

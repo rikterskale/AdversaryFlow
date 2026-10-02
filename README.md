@@ -1,314 +1,257 @@
 # AdversaryFlow
 
-**Development-lab adversary-emulation workflow planner.** Pick a threat-actor
-campaign, and AdversaryFlow pulls its TTPs from the **live MITRE ATT&CK STIX
-feed**, orders them into an end-to-end kill-chain workflow, and attaches an
-ATT&CK-aligned lab command to every technique so detection teams can exercise
-and measure coverage.
+**Make a security exercise plan, follow it in a guided browser interface, and save your results.**
 
-> AdversaryFlow is designed for disposable development labs rather than
-> production deployment. The application never executes commands. It generates
-> a portable, operator-controlled execution kit for use on a separate lab host.
+Choose a threat group or campaign from MITRE ATT&CK, a public reference of
+attacker techniques. AdversaryFlow puts its activities in order and provides
+lab exercises, evidence notes, and reports. You do not need to write code to
+create a plan.
 
----
+The planner runs on your computer and opens in your web browser. **Creating a
+plan or report does not run an attack.** Running an exported exercise is a
+separate activity for someone who understands it and has an authorized,
+disposable test environment. See [Acceptable use](ACCEPTABLE_USE.md).
 
-## Five-minute quickstart
+**Start here:** [Install and open](#install-and-open) ·
+[Create your first plan](#create-your-first-plan) ·
+[Save and resume](#save-and-resume-your-work) ·
+[Stop and restart](#stop-and-restart) ·
+[Something went wrong](#something-went-wrong)
 
-You need Git, a running Docker Engine or Docker Desktop, and Docker Compose v2.
-No host Python or Node installation is required.
+## Install and open
 
-```bash
-git clone https://github.com/rikterskale/AdversaryFlow.git
-cd AdversaryFlow
+Use the Docker route below on Windows or macOS. Docker runs the application's
+required software for you; **you do not need Git, Python, Node.js, an API key,
+or a GitHub account for this route**. You need an internet connection for the
+initial installation and ATT&CK download. Allow several minutes or longer on
+a slow connection; the first start does more work than later starts.
+
+On Linux, or if Docker cannot be installed on your computer, use the
+[native installation guide](docs/GETTING_STARTED.md#native-installation-with-python)
+instead. It uses Python and the same browser interface.
+
+### 1. Install and start Docker
+
+| Your computer | What to do |
+| --- | --- |
+| **Windows** | Follow [Docker's Windows installer](https://docs.docker.com/desktop/setup/install/windows-install/). Keep its recommended WSL 2 option, follow any requested Windows setup/restart, then open **Docker Desktop** from Start. |
+| **Mac** | Open [Docker's Mac installer](https://docs.docker.com/desktop/setup/install/mac-install/). **Apple menu → About This Mac** shows whether you have an Apple chip or Intel processor; choose the matching download. Open the downloaded file, drag Docker to Applications, then open **Docker** from Applications. |
+| **Linux with Docker already installed** | Start Docker and check that `docker compose version` works. If it does not, use the native guide above or [Docker's Linux installation instructions](https://docs.docker.com/desktop/setup/install/linux/). |
+
+Wait until Docker Desktop says its engine is running. Leave it open. If your
+work computer requires permission to install software, ask your IT team to
+complete this step.
+
+### 2. Download and extract AdversaryFlow
+
+1. Click **[Download AdversaryFlow ZIP](https://github.com/rikterskale/AdversaryFlow/archive/refs/heads/main.zip)**.
+   Alternatively, on the [project page](https://github.com/rikterskale/AdversaryFlow),
+   choose the green **Code** button, then **Download ZIP**.
+2. Find the file in your **Downloads** folder. On Windows, right-click it and
+   choose **Extract All**, then **Extract**. On Mac, double-click it. On Linux,
+   use your file manager's **Extract** action.
+3. Open the extracted folder. You need the folder containing **README.md**,
+   **Dockerfile**, **docker-compose.yml**, and **run.ps1**. Its name is usually
+   **AdversaryFlow-main**. If you see another folder with that name, open it.
+4. Keep that folder somewhere you can find again, such as Documents. Run the
+   tool from the extracted folder, not from inside the ZIP.
+
+### 3. Open a command window in that folder
+
+A command window lets you paste the startup instruction. Choose your system:
+
+- **Windows:** in File Explorer, open the folder from step 2, click the
+  address bar at the top, type `powershell`, and press **Enter**. A PowerShell
+  window opens in that folder. Administrator mode is not needed to start the planner.
+- **Mac:** open **Terminal** using Spotlight (**Command+Space**, type
+  `Terminal`, press **Enter**). Type `cd` followed by a space, drag the
+  extracted folder from Finder into Terminal, then press **Enter**.
+- **Linux:** right-click inside the extracted folder and choose **Open in
+  Terminal**. If that option is absent, open Terminal, type `cd` followed by
+  a space, drag the folder into the window, then press **Enter**.
+
+Copy only the instructions inside a code box, not the box's label. Paste
+with **Ctrl+V** in PowerShell, **Command+V** on Mac, or **Ctrl+Shift+V** in a
+Linux terminal. Press **Enter** after pasting.
+
+Check Docker first:
+
+```text
+docker version
+docker compose version
+```
+
+Success shows Docker **Client** and **Server** version information and a
+**Docker Compose version v2...** line. If you see an error instead, use
+[Something went wrong](#something-went-wrong) below.
+
+### 4. Start the planner
+
+In that same window, paste:
+
+```text
+docker compose up --build
+```
+
+Leave the window open. Download and build messages are normal. The first
+start also downloads the Enterprise ATT&CK data, which is tens of megabytes.
+Look for **AdversaryFlow container configured successfully** and these lines:
+
+```text
+URL:       http://127.0.0.1:5000
+API token: a-long-random-value (generated for this container start)
+Next step: open the URL and enter this token when prompted.
+```
+
+`a-long-random-value` above is an example. Use the actual value in **your**
+window, stopping before the parenthesized note. This token is a temporary
+access code generated by the tool; you do not need to register for one. Keep
+it private. In Windows PowerShell, select
+the token with the mouse and press **Enter** to copy it. On Mac, select it
+and press **Command+C**. On Linux, select it and press **Ctrl+Shift+C**.
+
+Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your usual browser.
+This address means "this computer"; it is not a public website. Paste the
+token into **API token** and choose **Connect securely** if prompted. Wait
+for preparation to finish and **Begin emulation plan** to become available.
+If preparation fails, follow [Something went wrong](#something-went-wrong).
+
+**Installation worked when you can open the planner and choose a threat group.**
+
+## Create your first plan
+
+Your first session creates a report without running any exercise:
+
+1. Select **Begin emulation plan**.
+2. Choose a threat group or campaign. You can type a name in the search box.
+   Select **Continue to scope**.
+3. Keep the default **Enterprise** data and choose the platform you want the
+   plan to describe: Windows, Linux, or macOS. Leave **Allow network-active
+   commands**, **Allow administrator commands**, and **Allow high-risk
+   commands** off. Select **Build plan**.
+4. Read a technique card and its explanation. Leave command outcomes at
+   **Not run** and detection results at **Not assessed**. Those fields record
+   real observations; creating a plan does not make an exercise pass.
+5. Select **Finish & export**, then **Save JSON plan**. A `.json` file saves
+   the plan and any notes so you can resume later.
+6. Select **Generate report**. After the preview appears, choose **PDF** for
+   a printable report, or **HTML** for a report you can open in a browser.
+7. Find the files in your browser's Downloads list or your Downloads folder.
+   Open the PDF or HTML report to check it. Keep the JSON file as your backup;
+   you do not need to open or edit its contents.
+
+Success is a saved JSON plan and a readable report, with `0` outcomes recorded.
+**Copy command** only copies text; an execution-kit download only saves files.
+Run exercises only after reviewing their requirements and arranging a separate,
+authorized lab. The [execution-kit guide](docs/EXPORTS.md#operator-execution-kit)
+explains the operator-controlled runner.
+
+## Save and resume your work
+
+- **Keep a backup:** use **Finish & export → Save JSON plan** before stopping,
+  changing browsers, or clearing browser data. JSON files can contain private
+  notes and command text; store and share them appropriately.
+- **Continue in the same browser:** reopen the same address and choose
+  **Resume <actor> plan** on the welcome screen. Normal browser storage saves
+  progress automatically; private browsing or blocked storage may prevent it.
+- **Restore a backup:** on the welcome screen, choose **Resume JSON plan** and
+  select your downloaded `.json` file. Both schema 2.0 and 3.0 plans are
+  supported. Double-clicking the file does not resume the application.
+  Restored command text is flagged for review before use; this is expected.
+- **Save on this computer's service:** **Save engagement** creates a separate
+  saved revision. It is local storage, not an online backup. Keep your JSON
+  copy too. If the ATT&CK version or platform changes, use **Saved evidence
+  from other platforms or data versions** to recover the earlier snapshot.
+
+## Stop and restart
+
+**Stop:** save a JSON backup, click the command window running AdversaryFlow,
+then press **Ctrl+C**. Wait for the shutdown messages. Closing only the
+browser tab leaves the service running.
+
+**Start again:** open Docker Desktop, reopen a command window in the extracted
+folder as in step 3, then run:
+
+```text
 docker compose up
 ```
 
-Wait for this success banner:
+Reopen the printed browser address and use the token printed for this start.
+The token can change after restarting. Existing ATT&CK downloads and
+server-saved engagements remain in Docker's saved data volume. Avoid deleting
+that volume or resetting Docker Desktop when troubleshooting.
 
-```text
-============================================================
-  AdversaryFlow container configured successfully
-  URL:       http://127.0.0.1:5000
-  API token: <random per-start value> (generated for this container start)
-  Next step: open the URL and enter this token when prompted.
-  First start: ATT&CK data downloads into the cache volume.
-  Authorized disposable labs only; see ACCEPTABLE_USE.md.
-============================================================
-```
+**Update a ZIP installation:** save your JSON backup, stop the old service,
+download and extract the new ZIP, then repeat the startup steps using
+`docker compose up --build` in the new folder. Keep Docker's saved volume.
+For Git, Python, or wheel installations, use the [update instructions](docs/GETTING_STARTED.md#updating).
 
-Open the printed URL and enter the printed API token when the browser asks for
-it. The first start downloads and validates the ATT&CK bundle; later starts
-reuse the `adversaryflow-stix-cache` volume.
+## Something went wrong
 
-On a typical connected workstation, create a safe first dry-run
-in under five minutes entirely in the planner:
+Keep the command window open and read the last error. Start with the matching
+row below. These steps do not require deleting your saved work.
 
-1. Select **Begin emulation plan**, choose any actor or campaign, and continue.
-2. Keep the detected platform and all three Allow-* guardrails off, then select
-   **Build plan**.
-3. Review the coverage heatmap and the first technique's risk, privilege,
-   network, telemetry, and rollback preview.
-4. Do **not** select **Copy command**. Select **Finish & export** instead.
-5. Select **Generate report**, review the preview, then download **PDF** and
-   **Schema-versioned JSON**.
-
-Success is two downloaded planning artifacts and `0` outcomes recorded. The
-service has not executed a command or contacted a target. Stop with Ctrl+C;
-`docker compose up` is idempotent and reuses the validated cache on the next
-start. The detailed copy/paste walkthrough, detached mode, port selection, and
-recovery steps are in [Getting started](docs/GETTING_STARTED.md).
-
-## What it does
-
-AdversaryFlow is a **fully guided, 4-step wizard** — no dead ends, every screen
-tells you what to do next, with a progress stepper you can navigate freely once
-steps are reached:
-
-1. **Choose a threat actor** — a searchable, filterable gallery of every
-   ATT&CK group and named campaign mapped in the selected domains. Filter by
-   name / alias / ATT&CK ID. ICS and Mobile actors appear when those domains
-   are turned on.
-2. **Scope the engagement** — pick the command platform (Windows / Linux /
-   macOS), toggle kill-chain stages on/off, include or drop pre-compromise
-   tactics, and see a live plan preview update as you go.
-3. **Review & track the plan** — review structured risk, privilege, network,
-   expected-telemetry, prerequisites, rollback, and cleanup metadata before
-   copying a command. Record command result (ran / failed / skipped) separately
-   from detection result (alerted / silent / blocked / not instrumented), plus
-   evidence notes, run IDs, timestamps, exit codes, output hashes, receipt
-   digests, SIEM/endpoint references, target context, and cleanup verification.
-   Progress autosaves in this browser; `j` / `k` move between techniques and
-   `c` copies the focused command.
-4. **Export** — download a one-click **operator execution kit** containing a CSV
-   plan and self-contained PowerShell or Bash runner. Generate command-free
-   purple-team reports, review the sandboxed HTML preview, then download
-   **HTML**, **PDF**, or the canonical schema-versioned **JSON** evidence
-   record. Markdown and a commented runbook remain available separately.
-
-The execution kit is an offline handoff artifact. Direct catalog commands need
-no AdversaryFlow installation, Python, or network access. Bounded synthetic
-steps ship a portable exercise script that needs Python 3.10+ beside the kit.
-Every step requires explicit approval and offers run, edit, skip, or abort
-controls. The runner records
-command edits, timestamps, output hashes, exit codes, cleanup, and detection
-assessment, then produces HTML/Markdown reports and machine-readable evidence.
-
-Under the hood:
-
-* **Live TTP pull** — the actor's `uses` relationships are resolved from the
-  official ATT&CK STIX 2.1 bundle (auto-downloaded & cached, 7-day TTL).
-* **Kill-chain order is derived from the live STIX matrix**, not hardcoded, so
-  the tool stays correct as ATT&CK evolves its tactics — including the current
-  split of *Defense Evasion* into **Stealth** and **Defense Impairment**.
-* **Lab exercise per TTP** — a curated library of **540 technique keys and 856 platform records**
-  covers **every technique used by any of the 232 Enterprise actors**, so an Enterprise actor
-  workflow comes back 100% `curated` with 0 `fallback`. Entries use direct
-  technique-specific commands where the behaviour is safe; behaviours that
-  require targeting people, destructive actions, or external adversary
-  infrastructure use one of 25 bounded exercise families. These 146 exercises
-  create technique-relevant synthetic records, child-process activity,
-  temporary artifacts, or loopback-only protocol events and emit a
-  digest-protected JSON receipt. A receipt is self-reported execution evidence;
-  it must be correlated with endpoint or SIEM telemetry for independent proof.
-  A harmless marker child process carries the run ID into process telemetry,
-  and `adversaryflow-telemetry` applies the explicit per-technique pass gate to
-  normalized endpoint/SIEM exports. See
-  [Independent telemetry correlation](docs/TELEMETRY.md).
-  Every entry has structured safety, prerequisites, expected telemetry, notes,
-  and cleanup metadata; a tactic-aware
-  fallback covers any technique a future ATT&CK release
-  introduces before its curated test is written.
-  ICS and Mobile include their ATT&CK mappings with generic desktop lab proxies;
-  these domains do not provide industrial-device, Android, or iOS execution tests.
-
-## Architecture
-
-AdversaryFlow is a local Flask service plus a React/TypeScript SPA. Flask owns
-the safety boundary, live STIX cache, catalog rebinding, diagnostics, reports,
-and offline-kit serialization. The browser owns the guided workflow,
-autosaved evidence, heatmap, and pre-copy review experience. There is no web
-service execution path.
-
-```text
-React + TypeScript SPA
-  │ same-origin JSON + CSRF token
-  ▼
-Flask planner API ──► live ATT&CK STIX cache
-  │                 └► bounded catalog + safety metadata
-  ├──► command-free HTML/PDF reports
-  └──► operator-gated offline ZIP ──► disposable lab host
-```
-
-The full component map, data flows, trust boundaries, persistence model, and
-build pipeline are documented in [Architecture](docs/ARCHITECTURE.md).
-
-**Data source:** [`mitre-attack/attack-stix-data`](https://github.com/mitre-attack/attack-stix-data)
-(`master` tracks the latest ATT&CK release). Enterprise by default; ICS and
-Mobile domains are supported via `?domains=enterprise,ics,mobile`.
-
-## Installation alternatives
-
-Docker Compose is the recommended path above. Set `ADVERSARYFLOW_PORT` before
-startup to change the host and container port together. Set
-`ADVERSARYFLOW_OFFLINE=true` only after the named cache volume has been seeded,
-and set `ADVERSARYFLOW_API_TOKEN` when you need a stable container token. The
-host publishes on loopback even though bridge networking requires the service
-to listen on its container interface. Remote publication is off by default and
-is refused without an explicit token; see [Installation](docs/INSTALL.md).
-
-Native launchers remain supported alternatives:
-
-Linux and macOS:
-
-```bash
-./run.sh
-```
-
-Windows PowerShell:
-
-```powershell
-.\run.ps1
-```
-
-The native launcher opens <http://127.0.0.1:5000> when ready. The first enterprise
-launch downloads and validates approximately 54 MB of STIX data in the
-background while the UI reports progress. Later starts do not reinstall
-dependencies. Use **↻ Refresh feed** (or
-`POST /api/refresh`) to pull the newest ATT&CK release.
-
-To install an isolated copy from a [GitHub Release](https://github.com/rikterskale/AdversaryFlow/releases)
-wheel (or a wheel you built):
-
-```bash
-pipx install ./adversaryflow-0.5.3-py3-none-any.whl
-adversaryflow --open
-```
-
-Install that wheel file. Do not run `pipx install adversaryflow`.
-
-Manual setup, if you prefer:
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-python -m pip install --require-hashes --requirement requirements.lock
-python -m pip install --require-hashes --requirement requirements-build.lock
-python -m pip install --no-build-isolation --no-deps --editable .
-adversaryflow
-```
-
-The launcher accepts `--host`, `--port`, `--cache-dir`, `--offline`,
-`--no-preload`, `--open`, `--allow-remote`, `--api-token`, and `--version`.
-Non-loopback binds require both `--allow-remote` and a bearer token; see
-[Operations](docs/OPERATIONS.md). Maintenance
-commands include `doctor`, `cache-status`, `cache-refresh`, and `cache-clear`.
-See [Getting started](docs/GETTING_STARTED.md),
-[installation](docs/INSTALL.md), and
-[operations](docs/OPERATIONS.md) for supported platforms, cache locations,
-offline use, upgrades, and health behavior. Use the dedicated
-[troubleshooting matrix](docs/TROUBLESHOOTING.md) for symptom-to-fix guidance.
-
-## API
-
-| Endpoint | Purpose |
+| What you see | What to do next |
 | --- | --- |
-| `GET /api/actors` | List groups & campaigns that have techniques mapped |
-| `GET /api/workflow/<stix_id>` | Full kill-chain workflow + lab commands |
-| `POST /api/intelligence/import` | Preview a CSV, ATT&CK Navigator layer, or STIX bundle against an actor and return a provenance-hashed technique diff |
-| `POST /api/refresh` | Force re-download of the live STIX feed |
-| `GET /api/health` | Liveness, readiness, version, loaded domains, and data versions |
-| `GET /api/doctor` | Structured host self-test used by the GUI health panel |
-| `POST /api/execution-kit` | Catalog-rebound, operator-gated offline kit |
-| `POST /api/report/{format}` | Command-free HTML/PDF engagement report or canonical schema 2.0 JSON (`html`, `pdf`, `json`) |
+| `docker` is not recognized or `command not found` | Install Docker using step 1. Close and reopen the command window using step 3, then try the version checks again. |
+| `Cannot connect to the Docker daemon`, engine stopped, or a Docker connection error | Open Docker Desktop, wait for the engine to run, then retry `docker compose up`. If Docker asks for a WSL update or restart, complete its linked instructions first. |
+| `no configuration file provided` or `docker-compose.yml` cannot be found | You are in the wrong folder or still inside the ZIP. Repeat steps 2 and 3 using the folder that contains **docker-compose.yml**. |
+| `port is already allocated`, `address already in use`, or `WinError 10048` | Stop this startup with **Ctrl+C**, then follow [Use another port](docs/TROUBLESHOOTING.md#use-another-port). Open the new printed address. |
+| Browser says the site cannot be reached | Confirm the command window is still running and Docker is open. Use the **URL** printed by the service, including its port number. Reopen the address after startup finishes. |
+| The API token is rejected | Use the token from the current startup, with no label, quotes, or spaces. Recover it with `docker compose logs adversaryflow` in another command window opened in the same folder. |
+| Preparation fails, or downloads report a proxy/certificate/network error | Check your internet connection. Open the status button in the app's header, then **System health → Host self-test**. On a managed network, ask IT to permit the official download and dependency hosts listed in the [troubleshooting guide](docs/TROUBLESHOOTING.md#downloads-or-preparation-fail). |
+| A plan has no runnable steps | Try another actor or the correct destination platform. Keep the three Allow options off for your first session. Some techniques have no exercise for the selected platform. |
+| Notes disappeared or the browser cannot save progress | Return to the original browser and address, or restore your JSON file with **Resume JSON plan**. Changing the port, using private mode, or clearing browser data creates a different or empty browser workspace. |
+| A report or download fails | Use **Save JSON plan** first, check the inline error and **System health**, restore the service/token, then choose **Retry report generation** or retry the download. |
 
-Mutating endpoints require a same-origin request token, refreshes are
-serialized/rate-limited, and non-loopback binding requires explicit opt-in.
-The complete HTTP contract is checked in as [OpenAPI 3.1](docs/openapi.yaml).
-Schema 2.0 JSON exports conform to the
-[AdversaryFlow plan schema](schemas/adversaryflow-plan.schema.json); they are
-AdversaryFlow-native and do not claim direct VECTR or Caldera compatibility.
-The human report's field provenance, detection-mapping rules, coverage-gap
-math, and receipt-correlation limitation are documented in
-[Export formats](docs/EXPORTS.md).
-Structured intelligence imports remain analyst-review candidates; they do not
-alter or execute an engagement plan. See
-[Structured intelligence import](docs/INTELLIGENCE_IMPORT.md).
+For a deeper check, open a **second** command window in the same application
+folder while the container is running:
 
-### The `domains` parameter (ATT&CK domain toggle)
-
-MITRE splits ATT&CK into three **domains**, each its own STIX bundle:
-
-| Domain | What it covers | Example techniques |
-| --- | --- | --- |
-| `enterprise` (default) | Windows/Linux/macOS/cloud/containers/network | most named APT activity |
-| `ics` | Industrial Control Systems / OT | `T0836 Modify Parameter`, `T0831 Manipulation of Control` |
-| `mobile` | Android / iOS | `T1655 Masquerading`, mobile C2 |
-
-Passing `?domains=enterprise,ics,mobile` makes the backend download and index
-those bundles too, so the actor list and each workflow include ICS/Mobile
-groups and techniques (e.g. ICS-focused actors like Sandworm's OT activity).
-With only `enterprise` (the default) those actors/techniques are simply not in
-scope. The actor screen exposes the same domain choices and supports combined
-views. Each normalized domain set has an independent in-memory index and data
-version.
-
-## Extending the command library
-
-The lab command catalog lives in two places. Each entry declares a platform,
-command, operational note, and optional cleanup command:
-
-* `backend/command_catalog.py` — the hand-tuned **core** (`CURATED`) and the
-  tactic fallback. Core entries win on any ID collision.
-* `backend/ext_part1..14.py` — the **per-technique exercise expansion**, sliced
-  into reviewable files and auto-merged by `command_catalog_extended.py`.
-
-To add or refine a test, add the ATT&CK ID to `CURATED` (core) or the relevant
-`PART` dict with one or more `c(platform, command, note, cleanup)` entries.
-`ext_part*.py` files are pure data, so they can be reviewed technique-by-technique.
-Run the coverage check to confirm no actor technique falls back to a generic test:
-
-```bash
-python -c "from backend import attack_data as a, command_catalog as c; idx=a.get_index(['enterprise']); u={t['attack_id']:t for x in idx.list_actors() for t in idx.actor_techniques(x['stix_id'])}; print('fallback:', [k for k,t in u.items() if c.get_commands(t['attack_id'],t['name'],t['tactics'])['source']=='fallback'])"
+```text
+docker compose exec adversaryflow adversaryflow doctor
 ```
 
-## Where this sits
+Look for `"ok": true`. A failing required check includes a suggested fix.
+If you still need help, follow [Ask for help](docs/TROUBLESHOOTING.md#ask-for-help).
+Include your operating system, browser, what you tried, and the exact error.
+Remove API tokens and private notes from screenshots or logs before sharing.
 
-AdversaryFlow is a lightweight planner in the same space as **MITRE Caldera**,
-**Atomic Red Team**, and **VECTR** — focused specifically on turning a *named
-threat actor* into an *ordered, runnable lab workflow*. Its web service never
-executes commands; it produces plans and portable, operator-gated runners for
-use in a disposable test environment.
+## More you can do
 
-## Development and releases
+- Track what ran separately from what your monitoring detected, with notes,
+  timestamps, and evidence references.
+- Import a CSV, ATT&CK Navigator layer, or STIX bundle; review candidate
+  mappings and attach accepted procedures to a plan. See
+  [Structured intelligence import](docs/INTELLIGENCE_IMPORT.md).
+- Download an offline execution kit, an Atomic Red Team draft, a Markdown
+  report, or a commented runbook. See [Export formats](docs/EXPORTS.md).
+- Include ICS (industrial systems) and Mobile mappings. Their exercises are
+  desktop lab proxies, not tests for industrial devices, Android, or iOS.
+- Use cached ATT&CK data offline after one successful online start. See
+  [Offline use](docs/GETTING_STARTED.md#offline-use).
 
-Run the local verification suite with:
+## Technical reference
 
-```bash
-.venv/bin/python -m unittest discover --verbose
-bash -n install.sh run.sh
-npm ci --ignore-scripts
-npm run check:frontend
-npm run check:frontend-assets
-npm run test:e2e
-```
+The application is a React/TypeScript interface served by a local Flask API.
+It reads the official [MITRE ATT&CK data](https://github.com/mitre-attack/attack-stix-data),
+resolves each domain's actor mappings, and orders techniques using its published
+tactic matrix. The service validates plan schemas, rebinds execution-kit
+commands to its catalog, and never runs catalog commands itself.
 
-Lint and type checks (configured in `pyproject.toml`, tooling pinned in
-`requirements-dev.lock`):
+| Guide | Read it when you need to... |
+| --- | --- |
+| [Getting started](docs/GETTING_STARTED.md) | Use Python instead of Docker, update, or work offline |
+| [Installation reference](docs/INSTALL.md) | Configure ports, cache paths, Docker, or wheel installs |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Diagnose setup, downloads, reports, and browser recovery |
+| [Operations](docs/OPERATIONS.md) | Back up service data or configure deliberate remote access |
+| [Architecture](docs/ARCHITECTURE.md) | Understand components and data flow |
+| [OpenAPI contract](docs/openapi.yaml) | Integrate with the API |
+| [Contributing](CONTRIBUTING.md) | Develop, test, or extend the command catalog |
 
-```bash
-.venv/bin/python -m pip install --require-hashes --requirement requirements-dev.lock
-.venv/bin/ruff check .
-.venv/bin/mypy
-```
+JSON exports use [schema 2.0](schemas/adversaryflow-plan.schema.json), or
+[schema 3.0](schemas/adversaryflow-plan-v3.schema.json) when reviewed procedures
+or receipts are included. A bounded-exercise receipt reports what its runner
+observed; independent endpoint or monitoring evidence is needed to verify it.
 
-CI tests Python 3.10–3.14 across Linux, Windows, and macOS, runs TypeScript,
-Vitest, and Playwright checks, rejects stale generated browser assets, and
-builds wheel and source distributions from the verified SPA. It also enforces
-`ruff` and `mypy`, verifies packaged frontend bytes, smoke-tests the built wheel
-on all three platforms, scans with CodeQL, and produces checksums and a
-CycloneDX SBOM. See [CONTRIBUTING.md](CONTRIBUTING.md),
-[SUPPORT.md](SUPPORT.md), [GOVERNANCE.md](GOVERNANCE.md), and
-[the release guide](docs/RELEASING.md).
-
-AdversaryFlow is licensed under [Apache-2.0](LICENSE). Use it only in an
-authorized disposable lab; see [ACCEPTABLE_USE.md](ACCEPTABLE_USE.md). Report
-vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+Licensed under [Apache-2.0](LICENSE). See [Support](SUPPORT.md),
+[Governance](GOVERNANCE.md), and [Security](SECURITY.md).

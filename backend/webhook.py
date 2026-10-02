@@ -82,6 +82,7 @@ def _deliver(config: WebhookConfig, delivery: Dict[str, Any]) -> None:
                 raise RuntimeError(f"Webhook returned HTTP {response.status}")
             response.read(MAX_RESPONSE_BYTES)
     except urllib.error.HTTPError as exc:
+        exc.close()
         raise RuntimeError(f"Webhook returned HTTP {exc.code}") from exc
 
 

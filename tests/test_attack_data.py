@@ -3,6 +3,7 @@ from __future__ import annotations
 import email.message
 import hashlib
 import io
+import itertools
 import json
 import os
 import tempfile
@@ -381,6 +382,58 @@ class AttackIndexTests(unittest.TestCase):
         self.assertEqual(combined.data_version,
                          "enterprise:bundle--fixture|ics:bundle--fixture")
         self.assertEqual(combined.objects_by_id["intrusion-set--zeta"]["name"], "Zeta Group")
+
+    def test_domain_combinations_preserve_each_domains_actor_mappings(self):
+        bundles = {}
+        for domain, target, direct in (("enterprise", "ps", False), ("ics", "sysinfo", True), ("mobile", "screen", False)):
+            document = stix_bundle()
+            document["objects"] = [obj for obj in document["objects"] if obj.get("id") not in {"relationship--7", "relationship--8"}]
+            screen = dict(next(obj for obj in document["objects"] if obj.get("id") == "attack-pattern--ps"))
+            screen.update(id="attack-pattern--screen", external_references=[{"source_name": "mitre-attack", "external_id": "T1113"}])
+            document["objects"].append(screen)
+            for actor in ("intrusion-set--soft", "campaign--alpha"):
+                # The campaign shares the same direct-vs-software regression.
+                document["objects"] = [obj for obj in document["objects"] if obj.get("source_ref") != actor]
+                document["objects"].append({
+                    "id": f"relationship--{domain}-{actor}", "type": "relationship", "relationship_type": "uses",
+                    "source_ref": actor, "target_ref": f"attack-pattern--{target}" if direct else "malware--dropper",
+                })
+            if not direct:
+                document["objects"].append({
+                    "id": f"relationship--{domain}-software", "type": "relationship", "relationship_type": "uses",
+                    "source_ref": "malware--dropper", "target_ref": f"attack-pattern--{target}",
+                })
+            bundles[domain] = document
+        with patch("backend.attack_data.load_bundle", side_effect=bundles.__getitem__):
+            for size in range(1, 4):
+                for domains in itertools.permutations(bundles, size):
+                    with self.subTest(domains=domains):
+                        index = attack_data.AttackIndex(list(domains))
+                        expected = {"enterprise": "T1059.001", "ics": "T1082", "mobile": "T1113"}
+                        for actor in ("intrusion-set--soft", "campaign--alpha"):
+                            ids = [item["attack_id"] for item in index.actor_techniques(actor)]
+                            self.assertEqual(set(ids), {expected[domain] for domain in domains})
+                            self.assertEqual(len(index.actor_uses[actor]), len(ids))
+
+    def test_direct_edges_still_take_precedence_within_one_domain(self):
+        document = stix_bundle()
+        document["objects"].append({
+            "id": "relationship--direct-soft", "type": "relationship", "relationship_type": "uses",
+            "source_ref": "intrusion-set--soft", "target_ref": "attack-pattern--sysinfo",
+        })
+        with patch("backend.attack_data.load_bundle", return_value=document):
+            index = attack_data.AttackIndex(["enterprise"])
+        self.assertEqual([item["attack_id"] for item in index.actor_techniques("intrusion-set--soft")], ["T1082"])
+
+    def test_revoked_software_and_relationships_do_not_supply_fallback(self):
+        for kind in ("software", "relationship"):
+            document = stix_bundle()
+            for obj in document["objects"]:
+                if obj.get("id") == ("malware--dropper" if kind == "software" else "relationship--8"):
+                    obj["revoked"] = True
+            with self.subTest(kind=kind), patch("backend.attack_data.load_bundle", return_value=document):
+                index = attack_data.AttackIndex(["enterprise", "ics", "mobile"])
+                self.assertEqual(index.actor_techniques("intrusion-set--soft"), [])
 
     def test_tactic_order_falls_back_when_the_bundle_has_no_matrix(self):
         matrixless = stix_bundle()

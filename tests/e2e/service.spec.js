@@ -71,6 +71,68 @@ async function savePlan(page) {
   return JSON.parse(fs.readFileSync(await download(page, "Save JSON plan"), "utf8"));
 }
 
+test("real service Atomic export persists editable backlog ownership", async ({ page }) => {
+  await reviewPlan(page);
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  const zip = await download(page, "Atomic Red Team draft + gap backlog");
+  const manifest = JSON.parse(execFileSync(python, ["-c",
+    "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); print(z.read('adversaryflow-atomic-manifest.json').decode())", zip], { encoding: "utf8" }));
+  expect(manifest.summary.gaps).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Manage ability backlog" }).click();
+  const item = page.locator(".ability-backlog__item").first();
+  await item.getByLabel("Owner").fill("E2E team");
+  await item.getByLabel("Status").selectOption("in_progress");
+  await item.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /saved|updated/i })).toBeVisible();
+  await page.getByRole("button", { name: "Hide ability backlog" }).click();
+  await page.getByRole("button", { name: "Manage ability backlog" }).click();
+  const saved = page.locator(".ability-backlog__item").filter({ has: page.locator('input[value="E2E team"]') });
+  await expect(saved.getByLabel("Owner")).toHaveValue("E2E team");
+  await expect(saved.getByLabel("Status")).toHaveValue("in_progress");
+  const response = await page.request.get(`${baseURL}/api/audit-events`, { headers: { Authorization: "Bearer browser-fixture-token" } });
+  expect(response.status()).toBe(200);
+  expect((await response.json()).chain_valid).toBe(true);
+});
+
+test("real intelligence review preserves accepted procedures through schema 3 exports and save", async ({ page }) => {
+  await connect(page);
+  await page.getByRole("button", { name: "Import and compare" }).click();
+  await page.getByLabel("Compare against actor or campaign").selectOption("intrusion-set--zeta");
+  await page.getByLabel("Structured source").setInputFiles({ name: "review.csv", mimeType: "text/csv",
+    buffer: Buffer.from("technique_id,procedure,evidence_quote\nT1059.001,Reviewed procedure,Reviewed quotation\nT9999,Unknown technique,Unknown quotation\n") });
+  await page.getByRole("button", { name: "Compare mappings" }).click();
+  await expect(page.locator(".intelligence-candidate")).toHaveCount(2);
+  await page.getByLabel("Reviewer name").fill("E2E reviewer");
+  await page.locator(".intelligence-candidate").filter({ hasText: "T1059.001" }).getByRole("button", { name: "Accept mapping" }).click();
+  const unknown = page.locator(".intelligence-candidate").filter({ hasText: "T9999" });
+  await expect(unknown.getByRole("button", { name: "Accept mapping" })).toBeDisabled();
+  await unknown.getByRole("button", { name: "Reject", exact: true }).click();
+  const reviewed = JSON.parse(fs.readFileSync(await download(page, "Download reviewed mapping record"), "utf8"));
+  expect(reviewed.candidates.map(candidate => candidate.review_status).sort()).toEqual(["accepted", "rejected"]);
+  await page.getByRole("button", { name: "Attach accepted procedures to planning workspace" }).click();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  await page.getByRole("button", { name: /Zeta Group/ }).click();
+  await page.getByRole("button", { name: /^Continue/ }).click();
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  const plan = await savePlan(page);
+  expect(plan.schema_version).toBe("3.0");
+  expect(plan.procedures).toHaveLength(1);
+  expect(plan.procedures[0].reviewed_by).toBe("E2E reviewer");
+  const validator = new Ajv2020({ strict: false, validateFormats: false });
+  for (const schema of ["adversaryflow-plan.schema.json", "adversaryflow-receipt.schema.json"]) {
+    validator.addSchema(JSON.parse(fs.readFileSync(`schemas/${schema}`, "utf8")));
+  }
+  const validate = validator.compile(JSON.parse(fs.readFileSync("schemas/adversaryflow-plan-v3.schema.json", "utf8")));
+  expect(validate(plan), JSON.stringify(validate.errors)).toBe(true);
+  await page.getByRole("button", { name: "Generate report", exact: true }).click();
+  await expect(page.frameLocator("iframe").getByRole("heading", { name: /Zeta Group/ })).toBeVisible();
+  await page.getByRole("button", { name: "Save engagement", exact: true }).click();
+  await expect(page.getByText("Server engagement · revision 1", { exact: true })).toBeVisible();
+  const evidence = JSON.parse(fs.readFileSync(await download(page, "Download Schema-versioned JSON"), "utf8"));
+  expect(evidence.procedures).toEqual(plan.procedures);
+});
+
 test("real service exports reports and keeps imported high-risk steps withheld", async ({ page }) => {
   await reviewPlan(page);
   await page.getByRole("button", { name: "Finish & export" }).click();
