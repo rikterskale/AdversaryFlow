@@ -1,46 +1,69 @@
 name: Auto-merge
 
-# Turns on auto-merge for the maintainer's own pull requests so they land only
-# after every required check passes. Admin enforcement is off on main, so this
-# is a guardrail rather than a gate: it makes the verified path the effortless
-# one without removing the ability to override by hand.
-#
-# This workflow deliberately does not delete merged branches, and a job that
-# tries will not work. GitHub does not start a workflow run from an event
-# generated with GITHUB_TOKEN, so the merge queued here produces neither a
-# "closed" pull-request run nor a push run on main - a cleanup job triggered by
-# "closed" never fires. The repository's delete_branch_on_merge setting also
-# left these branches in place. Remove one with:
-#
-#     git push origin --delete <branch>
-#
-# The same rule means merge commits created this way carry no check run of
-# their own. Verification still happens, on the pull request: required checks
-# run there, and strict mode forces the branch up to date first, so a rebase
-# merge lands the exact tree that passed.
-#
-# pull_request_target always runs the workflow from the base branch, so changes
-# here only take effect once merged to main.
+# Use only the trusted base workflow: never check out PR code with this token.
+# Explicitly wait for CI and CodeQL even when branch protection is unavailable.
 on:
   pull_request_target:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
 
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   enable:
-    name: Enable auto-merge
-    # Only the maintainer's own pull requests. Without this gate an outside
-    # contributor's branch would be queued to merge itself.
-    if: github.event.pull_request.user.login == 'rikterskale'
+    name: Merge after CI and CodeQL
+    if: github.event.pull_request.user.login == 'rikterskale' && !github.event.pull_request.draft
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      # pull_request_target runs with write permissions against the base repo,
-      # so this job deliberately checks out nothing and only calls the API.
-      # --rebase because main requires linear history.
-      - run: gh pr merge --auto --rebase "$PR_URL"
+      - run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+
+          def gh_json(*args):
+              return json.loads(subprocess.check_output(["gh", *args], text=True))
+
+          def wait_and_merge(repo, pr_url, head, attempts=40):
+              for attempt in range(attempts):
+                  pr = gh_json("pr", "view", pr_url, "--json", "state,isDraft,headRefOid,baseRefName")
+                  if (pr["state"] != "OPEN" or pr["isDraft"] or pr["headRefOid"] != head
+                          or pr["baseRefName"] != "main"):
+                      print("PR closed, drafted, or updated; leaving it unmerged.")
+                      return
+                  ready = True
+                  for workflow in ("ci.yml", "codeql.yml"):
+                      runs = gh_json("api", f"repos/{repo}/actions/workflows/{workflow}/runs"
+                                     f"?event=pull_request&head_sha={head}&per_page=1")["workflow_runs"]
+                      if not runs or runs[0]["status"] != "completed":
+                          ready = False
+                      elif runs[0]["conclusion"] != "success":
+                          raise SystemExit(f"{workflow} did not succeed; refusing to merge.")
+                  if ready:
+                      base = gh_json("api", f"repos/{repo}/commits/main")["sha"]
+                      comparison = gh_json("api", f"repos/{repo}/compare/{base}...{head}")
+                      if comparison["merge_base_commit"]["sha"] != base:
+                          raise SystemExit("Update the PR from its base and rerun checks before merging.")
+                      subprocess.run(["gh", "pr", "merge", "--rebase", "--match-head-commit", head,
+                                      pr_url], check=True)
+                      return
+                  if attempt + 1 < attempts:
+                      time.sleep(30)
+              raise SystemExit("Timed out waiting for CI and CodeQL; leaving the PR unmerged.")
+
+          if __name__ == "__main__":
+              wait_and_merge(os.environ["REPO"], os.environ["PR_URL"], os.environ["PR_HEAD"])
+          PY
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
