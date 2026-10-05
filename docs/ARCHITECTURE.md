@@ -250,12 +250,16 @@ boundaries remain separate control-plane work.
 | Data | Location | Lifecycle |
 | --- | --- | --- |
 | STIX bundles and provenance | Per-user cache or `adversaryflow-stix-cache` volume | Seven-day freshness; explicit refresh/clear commands |
+| Saved engagements, plan revisions, run evidence and receipts, audit records, ability backlog, and webhook outbox | SQLite `engagements.sqlite3` in the cache directory by default; overridden by `ADVERSARYFLOW_ENGAGEMENT_DB` | Persistent across service restarts; include in backups |
 | In-memory ATT&CK indexes | Flask process | Rebuilt per normalized domain set and invalidated on refresh |
 | Wizard scope and evidence | Browser local storage | Versioned key; export JSON before clearing browser data |
 | API/CSRF tokens | Process memory; Compose token also in a mode-0700 tmpfs file | Regenerated with the service/container unless explicitly supplied |
 | Reports, JSON and kits | Browser download destination | Owned and retained by the operator |
 
-The service has no database and does not upload plans, evidence, or reports.
+The service stores saved engagement revisions and related records in SQLite.
+Docker's named cache volume contains the default engagement database as well as
+downloaded ATT&CK data. Back up the database and JSON plan exports to preserve
+saved work; see [Operations](OPERATIONS.md).
 
 ## Repository and deployment layout
 
