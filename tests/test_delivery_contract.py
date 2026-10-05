@@ -39,6 +39,30 @@ class DeliveryContractTests(unittest.TestCase):
             self.assertIn(f"frontend/{asset}", command)
         self.assertIn("git diff --exit-code", command)
 
+    def test_python_runtime_lock_matches_package_requirements(self):
+        project = Path("pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r"(?ms)^dependencies\s*=\s*\[(.*?)\]", project)
+        self.assertIsNotNone(match)
+        assert match is not None
+        requirements = re.findall(r'"([^"=]+)==([^"\s]+)"', match.group(1))
+        self.assertTrue(requirements)
+        locked = {
+            re.sub(r"[-_.]+", "-", name).lower(): version
+            for name, version in re.findall(
+                r"(?m)^([\w.-]+)==([^\s\\]+)", Path("requirements.lock").read_text(encoding="utf-8")
+            )
+        }
+        for name, version in requirements:
+            with self.subTest(package=name):
+                key = re.sub(r"[-_.]+", "-", name).lower()
+                self.assertEqual(locked.get(key), version, "Regenerate requirements.lock when changing runtime pins")
+
+    def test_codeql_init_and_analyze_use_the_same_revision(self):
+        workflow = self.workflows["codeql.yml"]
+        pins = dict(re.findall(r"github/codeql-action/(init|analyze)@([0-9a-f]{40})", workflow))
+        self.assertEqual(set(pins), {"init", "analyze"})
+        self.assertEqual(pins["init"], pins["analyze"], "CodeQL init and analyze must be upgraded together")
+
     def test_browser_job_runs_all_frontend_checks_before_playwright(self):
         browser = self.workflow[
             self.workflow.index("  browser:"):self.workflow.index("  compose-smoke:")

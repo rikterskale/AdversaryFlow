@@ -11,10 +11,19 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Tailwind major upgrades require a reviewed CSS/PostCSS migration.
+    ignore:
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
     groups:
       browser-tooling:
         patterns: ["*"]
+        # Keep framework migrations separate from routine dependency updates.
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      codeql:
+        patterns: ["github/codeql-action/*"]

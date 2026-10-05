@@ -4,6 +4,13 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Update Werkzeug to 3.1.9 with matching runtime hashes, React Query to
+  5.104.0, Vite to 8.3.1, and Vitest to 5.0.2; regenerate browser assets.
+- Migrate Tailwind to 4.3.3 with its dedicated PostCSS plugin, CSS imports,
+  and explicit configuration/source paths to remove the unpatched `braces`
+  dependency. Keep framework major upgrades out of routine update groups.
+- Upgrade CodeQL init and analyze together to 4.38.2 and group future updates.
+  Check runtime-lock and CodeQL-version consistency in the delivery suite.
 - Close SQLite connections deterministically, isolate API test databases, and
   cover revision concurrency, rollback, audit integrity, and webhook leases.
 - Preserve the active plan identity when an engagement save finishes after
