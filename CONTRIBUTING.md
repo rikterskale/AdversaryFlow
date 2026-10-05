@@ -97,6 +97,12 @@ CI job. Install the pinned tooling, then run both locally:
 
 Both must report zero findings before a pull request is opened.
 
+CodeQL runs for Python and JavaScript/TypeScript in CI. Each language produces
+a downloadable SARIF artifact. When repository Code Scanning is enabled, the
+workflow also uploads results to GitHub's security tab. When that feature is
+unavailable, review the SARIF artifacts; a successful analysis job alone does
+not mean its results contain no findings.
+
 On Windows, use `install.ps1` and `.venv\Scripts\python.exe`.
 
 ## Pull requests

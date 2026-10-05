@@ -22,8 +22,46 @@ jobs:
         language: [python, javascript-typescript]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Detect Code Scanning availability
+        id: scanning
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          def detect_upload(repo):
+              response = subprocess.run(["gh", "api", f"repos/{repo}/code-scanning/analyses?per_page=1"],
+                                        capture_output=True, text=True)
+              if response.returncode == 0:
+                  return "always"
+              message = json.loads(response.stdout).get("message", "")
+              if "Code scanning is not enabled for this repository" in message:
+                  print("::warning::Code Scanning is unavailable; retain analysis as SARIF artifacts.")
+                  return "never"
+              raise SystemExit(response.stderr or message)
+
+          if __name__ == "__main__":
+              upload = detect_upload(os.environ["REPO"])
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write(f"upload={upload}\n")
+          PY
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
       - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
       - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          output: test-results/codeql
+          upload: ${{ steps.scanning.outputs.upload }}
+          upload-database: ${{ steps.scanning.outputs.upload == 'always' }}
+      - name: Preserve CodeQL results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-${{ matrix.language }}
+          path: test-results/codeql/*.sarif
+          if-no-files-found: error
