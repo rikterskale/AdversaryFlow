@@ -3,6 +3,7 @@
 import textwrap
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 
@@ -10,10 +11,10 @@ class AutoMergeGuardTests(unittest.TestCase):
     def setUp(self):
         workflow = Path(".github/workflows/automerge.yml").read_text(encoding="utf-8")
         code = workflow.split("python - <<'PY'\n", 1)[1].split("          PY\n", 1)[0]
-        self.namespace = {"__name__": "workflow_test"}
+        self.namespace: dict[str, Any] = {"__name__": "workflow_test"}
         exec(compile(textwrap.dedent(code), "automerge.yml", "exec"), self.namespace)
         self.pr = {"state": "OPEN", "isDraft": False, "headRefOid": "head", "baseRefName": "main"}
-        self.runs = {
+        self.runs: dict[str, list[dict[str, str | None]]] = {
             "ci.yml": [{"status": "completed", "conclusion": "success"}],
             "codeql.yml": [{"status": "completed", "conclusion": "success"}],
         }
