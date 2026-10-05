@@ -4,6 +4,9 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Wait explicitly for successful CI and CodeQL before automatic merges, and
+  require checks on the current PR commit and an up-to-date base. Grant CodeQL
+  read access to workflow runs so analysis can upload its results.
 - Update Werkzeug to 3.1.9 with matching runtime hashes, React Query to
   5.104.0, Vite to 8.3.1, and Vitest to 5.0.2; regenerate browser assets.
 - Migrate Tailwind to 4.3.3 with its dedicated PostCSS plugin, CSS imports,
