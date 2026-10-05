@@ -63,6 +63,20 @@ class DeliveryContractTests(unittest.TestCase):
         self.assertEqual(set(pins), {"init", "analyze"})
         self.assertEqual(pins["init"], pins["analyze"], "CodeQL init and analyze must be upgraded together")
 
+    def test_optional_tooling_locks_match_inputs(self):
+        for group in ("dev", "test"):
+            source = Path(f"requirements-{group}.in").read_text(encoding="utf-8")
+            lock = Path(f"requirements-{group}.lock").read_text(encoding="utf-8")
+            pins = dict(re.findall(r"(?m)^([\w.-]+)==([^\s\\]+)", lock))
+            for name, version in re.findall(r"(?m)^([\w.-]+)==([^\s\\]+)", source):
+                with self.subTest(group=group, package=name):
+                    self.assertEqual(pins.get(name), version, "Regenerate optional locks when changing pins")
+        project = Path("pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'content-packs\s*=\s*\["cryptography==([^"\s]+)"\]', project)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(pins["cryptography"], match.group(1))
+
     def test_browser_job_runs_all_frontend_checks_before_playwright(self):
         browser = self.workflow[
             self.workflow.index("  browser:"):self.workflow.index("  compose-smoke:")
