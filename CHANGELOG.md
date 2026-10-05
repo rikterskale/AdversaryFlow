@@ -4,6 +4,9 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Apply follow-up React Query 5.104.1, Vite 8.3.2, Vitest 5.0.3,
+  cryptography 50.0.2, mypy 2.4.0, and Ruff 0.16.10 updates with matching
+  dependency lockfiles and regenerated browser assets.
 - Wait explicitly for successful CI and CodeQL before automatic merges, and
   require checks on the current PR commit and an up-to-date base. Grant CodeQL
   read access to workflow runs so analysis can upload its results.
