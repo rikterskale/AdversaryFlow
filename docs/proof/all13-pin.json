@@ -1,0 +1,17 @@
+{
+  "proof_version": "1.0",
+  "bundle": "C:\\Users\\tsaxon\\.copilot\\session-state\\85e5a5d5-d498-4fe9-becb-dc52c2bb36fa\\files\\AdversaryFlow-all13-proof.zip",
+  "bundle_sha256": "1a0bd1cb62dc86c8f88af0241a232bdfea26c37039977980c4131d2ee5cfef22",
+  "bytes": 48036051,
+  "manifest_sha256": "9bcdecf86271bf2222841fba41568326d337cf500754a2576a87d4c3c619eef2",
+  "implementation_commit": "8286703ad5e3b25a54606f73a828c9e22cf0c562",
+  "implementation_tree": "d05b4403ec6e989b75fa6d4ee8f53015ba5e5b3f",
+  "base_commit": "6270a61ec85e444a4649add84c0f09b3410498d2",
+  "findings": 13,
+  "verification": {
+    "completed_utc": "2026-10-06T21:14:52.144147+00:00",
+    "exit_code": 0,
+    "checks": "Bundle digest, every internal file digest and byte size, exact archive file set, all thirteen case IDs, passing final command results, implementation tree and parent",
+    "limitations": "Content-addressed and tamper-evident; not independent timestamping, authenticated authorship or deletion prevention"
+  }
+}
