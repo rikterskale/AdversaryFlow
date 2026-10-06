@@ -19,6 +19,7 @@ export interface ExecutionEvidence {
   receipt_verified?: boolean;
   receipt_payload?: Record<string, unknown>;
   telemetry_refs?: string[];
+  telemetry_refs_draft?: string;
   evidence_source?: EvidenceSource;
   detection_result?: DetectionResult;
 }
@@ -46,9 +47,22 @@ export const evidenceSourceOptions: { value: EvidenceSource; label: string }[] =
 ];
 
 export function isMarkedRun(evidence: ExecutionEvidence | undefined): boolean {
+  return evidence?.outcome === "passed" || evidence?.outcome === "failed";
+}
+
+export function isRecorded(evidence: ExecutionEvidence | undefined): boolean {
   return Boolean(evidence && evidence.outcome !== "not_run");
 }
 
+export function normalizeReferences(text: string): string[] {
+  return [...new Set(text.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
+}
+
+export function referenceError(references: string[]): string | null {
+  if (references.length > 20) return "Use at most 20 unique telemetry references. Your draft is retained; correct it before exporting.";
+  if (references.some((item) => [...item].length > 500)) return "Each telemetry reference must be at most 500 Unicode characters. Your draft is retained; correct it before exporting.";
+  return null;
+}
 export function dateTimeLocalValue(value: string | undefined): string {
   if (!value) return "";
   const date = new Date(value);
@@ -86,6 +100,7 @@ export function validDateTime(value: unknown): value is string {
 
 export function validReceiptFields(value: unknown, techniqueId: string): value is Record<string, unknown> {
   return isRecord(value) && value.schema_version === "1.0" && value.technique_id === techniqueId
+    && utf8Bytes(JSON.stringify(value)) <= RECEIPT_MAX_BYTES
     && typeof value.receipt_sha256 === "string" && /^[a-fA-F0-9]{64}$/.test(value.receipt_sha256)
     && typeof value.run_id === "string" && Boolean(value.run_id) && value.run_id.length <= 128
     && validDateTime(value.started_at) && validDateTime(value.completed_at)
@@ -107,7 +122,7 @@ export async function verifyReceiptDigest(value: Record<string, unknown>): Promi
 }
 
 export async function evidenceFromReceipt(source: string, techniqueId: string): Promise<Partial<ExecutionEvidence>> {
-  if (source.length > 1_048_576) throw new Error("Receipt JSON is larger than 1 MiB.");
+  requireByteLimit(source, RECEIPT_MAX_BYTES, "Receipt JSON");
   let parsed: unknown;
   try {
     parsed = JSON.parse(source) as unknown;
@@ -138,3 +153,4 @@ export async function evidenceFromReceipt(source: string, techniqueId: string): 
     evidence_source: "exercise_receipt",
   };
 }
+import { RECEIPT_MAX_BYTES, requireByteLimit, utf8Bytes } from "../../state/workspaceIO";

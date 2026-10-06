@@ -354,7 +354,7 @@ half-imported.
 
 | Rejected because | Toast |
 |---|---|
-| File larger than 5 MB | `Plan file is larger than 5 MB` |
+| Recovery file larger than 128 MiB, or plan content larger than 32 MiB UTF-8 | Size-limit error; current workspace remains intact and recovery download remains available |
 | Not a schema 2.0 export | `This is not an AdversaryFlow 2.0 plan export` |
 | Missing tool/data version | `Plan is missing its tool or ATT&CK data version` |
 | Actor record incomplete | `Plan actor record is invalid` |

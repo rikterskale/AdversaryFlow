@@ -75,7 +75,9 @@
           },
           "additionalProperties": false
         },
-        "marked_run": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+        "marked_run": { "description": "Unique runnable technique IDs with passed or failed execution outcomes; skipped is never executed.", "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "reviewed": { "description": "Unique scoped technique IDs with passed, failed or skipped outcomes. Optional for older exports.", "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "skipped": { "description": "Unique scoped technique IDs with skipped outcomes. Optional for older exports.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       },
       "additionalProperties": false
     },

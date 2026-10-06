@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { apiFetch, responseJson } from "../../api/client";
-import type { AbilityBacklogItem, AbilityGapStatus, Actor, AttackDomain, EngagementSaveResponse, WorkflowResponse } from "../../api/contract";
+import { ApiError, apiFetch, responseJson } from "../../api/client";
+import type { AbilityBacklogItem, AbilityGapStatus, Actor, AttackDomain, WorkflowResponse } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
@@ -9,6 +9,8 @@ import { useWizardStore } from "../../state/wizardStore";
 import { useWorkspaceEvidence } from "../../state/useWorkspaceEvidence";
 import { buildExportBundle, executiveSummary, platformLabel, summarizeExportReadiness, toMarkdown, toRunbook } from "./exportModel";
 import { validateImportedPlan } from "./planContract";
+import { boundedJson } from "../../state/workspaceIO";
+import { parseEngagementSave } from "../welcome/SavedEngagements";
 
 interface ExportScreenProps {
   actor: Actor;
@@ -57,6 +59,21 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const procedureEvidence = useWizardStore((state) => state.procedureEvidence);
   const setEngagementRecord = useWizardStore((state) => state.setEngagementRecord);
   const records = useWorkspaceEvidence(actor, workflow);
+  const generation = useWizardStore((state) => state.workspaceGeneration);
+  const operation = useRef(new AbortController());
+  const operationSignal = (): AbortSignal => operation.current.signal;
+  useEffect(() => {
+    const controller = new AbortController();
+    operation.current = controller;
+    setReportPreview({ status: "empty" }); setReportDownloadError(null);
+    const unsubscribe = useWizardStore.subscribe((next, previous) => {
+      if (next.workspaceGeneration !== previous.workspaceGeneration || next.scope !== previous.scope
+          || next.records !== previous.records || next.procedureEvidence !== previous.procedureEvidence
+          || next.selectedActor !== previous.selectedActor || next.savedWorkflow !== previous.savedWorkflow
+          || next.importedWorkflow !== previous.importedWorkflow) controller.abort();
+    });
+    return () => { unsubscribe(); controller.abort(); };
+  }, [generation, actor, workflow, scope, records, procedureEvidence]);
   const [kitLoading, setKitLoading] = useState(false);
   const [atomicLoading, setAtomicLoading] = useState(false);
   const [engagementLoading, setEngagementLoading] = useState(false);
@@ -72,6 +89,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const validationError = useMemo(() => {
     try {
       validateImportedPlan(bundle.plan);
+      boundedJson(bundle.plan);
       return null;
     } catch (error: unknown) {
       return error instanceof Error ? error.message : "The plan does not match the published export schema.";
@@ -108,18 +126,23 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const exportKit = async (): Promise<void> => {
     if (kitLoading || validationError) return;
+    const signal = operationSignal();
     setKitLoading(true);
     try {
       const response = await apiFetch("/api/execution-kit", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify(bundle.plan),
+        signal,
       });
       if (!response.ok) await responseJson(response);
       const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), "AdversaryFlow_execution_kit.zip");
-      downloadBlob(await response.blob(), filename);
+      const blob = await response.blob();
+      if (signal.aborted) return;
+      downloadBlob(blob, filename);
       onNotice(`Execution kit ready: ${filename}`);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       onNotice(error instanceof Error ? error.message : "Execution kit generation failed. Check service health and try again.");
     } finally {
       setKitLoading(false);
@@ -128,20 +151,25 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const exportAtomicDraft = async (): Promise<void> => {
     if (atomicLoading || validationError || !csrfToken) return;
+    const signal = operationSignal();
     setAtomicLoading(true);
     try {
       const response = await apiFetch("/api/playbook/atomic", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify(bundle.plan),
+        signal,
       });
       if (!response.ok) await responseJson(response);
       const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), "AdversaryFlow_Atomic_Red_Team_draft.zip");
       const included = Number(response.headers.get("X-AdversaryFlow-Atomic-Included") ?? "0");
       const gaps = Number(response.headers.get("X-AdversaryFlow-Atomic-Gaps") ?? "0");
-      downloadBlob(await response.blob(), filename);
+      const blob = await response.blob();
+      if (signal.aborted) return;
+      downloadBlob(blob, filename);
       onNotice(`Atomic Red Team draft ready · ${included} reviewed tests included · ${gaps} items in the manifest gap backlog`);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       onNotice(error instanceof Error ? `Atomic export failed: ${error.message}` : "Atomic playbook generation failed.");
     } finally {
       setAtomicLoading(false);
@@ -151,22 +179,25 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
   const saveEngagement = async (): Promise<void> => {
     if (engagementLoading || validationError || !csrfToken) return;
     const workspace = useWizardStore.getState();
+    const signal = operationSignal();
     setEngagementLoading(true);
     try {
       const response = await apiFetch("/api/engagements", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify({ plan: bundle.plan, ...(engagementId ? { engagement_id: engagementId } : {}) }),
+        signal,
       });
-      const saved = await responseJson(response) as EngagementSaveResponse;
+      const saved = parseEngagementSave(await responseJson(response));
+      if (signal.aborted) return;
       const current = useWizardStore.getState();
-      if (current.selectedActor?.stix_id === workspace.selectedActor?.stix_id
-          && current.evidenceKey === workspace.evidenceKey && current.engagementId === workspace.engagementId) {
-        setEngagementRecord(saved.engagement_id, saved.revision);
-      }
+      if (current.workspaceGeneration !== workspace.workspaceGeneration || current.selectedActor?.stix_id !== workspace.selectedActor?.stix_id
+          || current.evidenceKey !== workspace.evidenceKey || current.engagementId !== workspace.engagementId) return;
+      setEngagementRecord(saved.engagement_id, saved.revision);
       const packPin = saved.content_pack_sha256 ? ` · pack set ${saved.content_pack_sha256.slice(0, 12)}` : "";
       onNotice(`Engagement saved · revision ${saved.revision} · plan SHA-256 ${saved.plan_sha256.slice(0, 12)}${packPin}`);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       onNotice(error instanceof Error ? `Engagement save failed: ${error.message}` : "The engagement could not be saved.");
     } finally {
       setEngagementLoading(false);
@@ -175,13 +206,16 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const loadAbilityBacklog = async (): Promise<void> => {
     if (backlogLoading) return;
+    const signal = operationSignal();
     setBacklogLoading(true);
     try {
-      const response = await apiFetch("/api/ability-backlog?limit=200");
+      const response = await apiFetch("/api/ability-backlog?limit=200", { signal });
       const result = await responseJson(response) as { items: AbilityBacklogItem[] };
+      if (signal.aborted) return;
       setBacklogItems(result.items);
       setBacklogOpen(true);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       onNotice(error instanceof Error ? error.message : "The ability backlog could not be loaded.");
     } finally {
       setBacklogLoading(false);
@@ -190,17 +224,21 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const updateBacklogItem = async (item: AbilityBacklogItem): Promise<void> => {
     if (backlogSaving || !csrfToken) return;
+    const signal = operationSignal();
     setBacklogSaving(item.id);
     try {
       const response = await apiFetch(`/api/ability-backlog/${encodeURIComponent(item.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify({ owner: item.owner?.trim() || null, status: item.status }),
+        signal,
       });
       const updated = await responseJson(response) as AbilityBacklogItem;
+      if (signal.aborted) return;
       setBacklogItems((items) => items.map((current) => current.id === updated.id ? updated : current));
       onNotice(`Backlog item ${updated.technique_id} updated`);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       onNotice(error instanceof Error ? error.message : "The backlog item could not be updated.");
     } finally {
       setBacklogSaving(null);
@@ -209,6 +247,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const generateReport = async (): Promise<void> => {
     if (reportPreview.status === "loading" || reportLoading || validationError || !csrfToken) return;
+    const signal = operationSignal();
     setReportPreview({ status: "loading" });
     setReportDownloadError(null);
     try {
@@ -216,15 +255,18 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         method: "POST",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify(bundle.plan),
+        signal,
       });
       if (!response.ok) await responseJson(response);
       const html = await response.text();
+      if (signal.aborted) return;
       if (!html.trim()) throw new Error("The service returned an empty HTML report.");
       const fallback = `AdversaryFlow_${bundle.slug}_report.html`;
       const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), fallback);
       setReportPreview({ status: "ready", html, filename });
       onNotice("Engagement report preview ready");
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       const message = error instanceof Error ? error.message : "Report generation failed. Check service health and try again.";
       setReportPreview({ status: "error", message });
       onNotice(message);
@@ -233,6 +275,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
 
   const exportReport = async (format: ReportFormat): Promise<void> => {
     if (reportLoading || validationError || reportPreview.status !== "ready" || !csrfToken) return;
+    const signal = operationSignal();
     setReportDownloadError(null);
     if (format === "html") {
       downloadBlob(new Blob([reportPreview.html], { type: "text/html;charset=utf-8" }), reportPreview.filename);
@@ -245,15 +288,19 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         method: "POST",
         headers: { "Content-Type": "application/json", "X-AdversaryFlow-CSRF": csrfToken },
         body: JSON.stringify(bundle.plan),
+        signal,
       });
       if (!response.ok) await responseJson(response);
       const fallback = format === "json"
         ? `AdversaryFlow_${bundle.slug}.json`
         : `AdversaryFlow_${bundle.slug}_report.${format}`;
       const filename = contentDispositionFilename(response.headers.get("Content-Disposition"), fallback);
-      downloadBlob(await response.blob(), filename);
+      const blob = await response.blob();
+      if (signal.aborted) return;
+      downloadBlob(blob, filename);
       onNotice(`Engagement report ready: ${filename}`);
     } catch (error: unknown) {
+      if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       const message = error instanceof Error ? error.message : "Report download failed. Check service health and try again.";
       setReportDownloadError(message);
       onNotice(message);
@@ -293,7 +340,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         <div className="statbox"><strong>{bundle.preview.total}</strong><span>Techniques</span></div>
         <div className="statbox"><strong>{bundle.preview.stages.length}</strong><span>Stages</span></div>
         <div className="statbox statbox--success"><strong>{bundle.preview.runnable}</strong><span>Runnable tests</span></div>
-        <div className="statbox"><strong>{markedRun}</strong><span>Marked run</span></div>
+        <div className="statbox"><strong>{markedRun}</strong><span>Executed · {bundle.plan.summary.skipped?.length ?? 0} skipped</span></div>
       </div>
 
       <div className="export-layout">
@@ -325,7 +372,7 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
         <aside className="export-secondary" aria-label="Reports and planning exports">
           <div className="export-section-heading"><div><p className="eyebrow">Purple-team reporting</p><h2>Package outcomes and gaps</h2></div></div>
           <div className="report-readiness" aria-label="Report coverage snapshot">
-            <div><strong>{markedRun}/{bundle.preview.runnable}</strong><span>Outcomes recorded</span></div>
+            <div><strong>{bundle.plan.summary.reviewed?.length ?? markedRun}/{bundle.preview.total}</strong><span>Outcomes reviewed · {markedRun} executed</span></div>
             <div><strong>{readiness.detectionAssessed}/{readiness.techniques}</strong><span>Detections assessed</span></div>
             <div><strong>{readiness.coverageGaps}</strong><span>Catalog gaps</span></div>
           </div>
@@ -387,8 +434,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
             <button disabled={!exportReady || atomicLoading || !csrfToken} onClick={() => { void exportAtomicDraft(); }} type="button">{atomicLoading ? "Preparing Atomic draft…" : "Atomic Red Team draft + gap backlog"}<Icon name={atomicLoading ? "package" : "download"} /></button>
             <button disabled={backlogLoading} onClick={() => { if (backlogOpen) setBacklogOpen(false); else void loadAbilityBacklog(); }} type="button">{backlogLoading ? "Loading ability backlog…" : backlogOpen ? "Hide ability backlog" : "Manage ability backlog"}<Icon name="arrow-right" /></button>
             <button disabled={!exportReady} onClick={() => {
-              downloadBlob(new Blob([JSON.stringify(bundle.plan, null, 2)], { type: "application/json" }), `AdversaryFlow_${bundle.slug}.json`);
-              onNotice("JSON plan saved with your evidence");
+              downloadBlob(new Blob([boundedJson(bundle.plan)], { type: "application/json" }), `AdversaryFlow_${bundle.slug}.json`);
+              onNotice("JSON plan download requested. Confirm the file is saved.");
             }} type="button">Save JSON plan <Icon name="download" /></button>
             <button disabled={!exportReady} onClick={() => exportText("markdown")} type="button">Markdown report <Icon name="download" /></button>
             <button disabled={!exportReady} onClick={() => exportText("runbook")} type="button">Commented Runbook <Icon name="download" /></button>

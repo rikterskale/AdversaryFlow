@@ -297,7 +297,7 @@ test("J26 — recording an outcome advances the progress indicator", async ({ pa
   await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
   await expect(page.locator("#progressCount")).toHaveText("1 / 3");
   await expect(page.locator("#progressPct")).toHaveText("33%");
-  await expect(page.locator("#actionbarCtx")).toContainText("1 / 3 runnable techniques marked run");
+  await expect(page.locator("#actionbarCtx")).toContainText("1 / 3 runnable techniques executed");
   await expect(page.locator("#saveStatus")).toHaveText("Saved in this browser");
 });
 
@@ -311,7 +311,7 @@ test("J27 — unavailable local storage is reported, not swallowed", async ({ pa
   await toScope(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByLabel("Outcome for T1059.001").selectOption("passed");
-  await expect(page.getByRole("status").filter({ hasText: "Progress can't be saved in this browser" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "This workspace is not saved" })).toBeVisible();
 });
 
 test("the review workspace has no serious accessibility violations", async ({ page }) => {
@@ -332,7 +332,7 @@ test("J28 — the export screen summarises the finished plan", async ({ page }) 
   await expect(stats.nth(0)).toContainText("Techniques");
   await expect(stats.nth(1)).toContainText("Stages");
   await expect(stats.nth(2)).toContainText("Runnable tests");
-  await expect(stats.nth(3)).toContainText("Marked run");
+  await expect(stats.nth(3)).toContainText("Executed");
   await expect(page.locator("#actionbarCtx")).toHaveText("Plan complete");
 });
 
@@ -410,6 +410,7 @@ test("J31 — imported multiline fields cannot add executable runbook lines", as
     cleanup: "echo cleanup\necho CLEANUP_INJECTION",
   };
   await page.setInputFiles("#importPlan", planFile(plan));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   const { text } = await exportAndRead(page, /Runbook/);
   const executableLines = text.split(/\r?\n/).filter(line => line.trim() && !line.startsWith("REM"));
@@ -421,6 +422,7 @@ test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan()));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
   await expect(page.getByLabel("Outcome for T1059.001")).toHaveValue("passed");
@@ -440,6 +442,7 @@ test("J33 — a default-scope export round-trips into a runnable plan", async ({
 
   await page.goto("/");
   await page.setInputFiles("#importPlan", exportedPath);
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
   await expect(page.locator("pre.cmd__code")).toHaveText("whoami");
   await expect(page.locator("pre.cmd__code")).not.toContainText("Restricted by scope");
@@ -701,7 +704,7 @@ test("E4 — a rejected bootstrap start stops with an actionable setup error", a
 
 test("E5 — bootstrap polling reports its fifteen-minute deadline", async ({ page }) => {
   const started = new Date("2026-09-23T12:00:00Z");
-  await page.clock.setFixedTime(started);
+  await page.clock.install({ time: started });
   let bootstrapCalls = 0;
   await page.route("**/api/session", route => route.fulfill({ json: { csrf_token: "uat-token", version: "0.4.0" } }));
   await page.route("**/api/bootstrap", route => {
@@ -713,7 +716,7 @@ test("E5 — bootstrap polling reports its fifteen-minute deadline", async ({ pa
   });
   await page.goto("/");
   await expect.poll(() => bootstrapCalls).toBeGreaterThan(0);
-  await page.clock.setFixedTime(new Date(started.getTime() + 900001));
+  await page.clock.fastForward(900001);
   await expect(page.getByText("Preparing ATT&CK data timed out. Check the service log, then retry setup.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
 });
@@ -789,14 +792,14 @@ test("E13 — refreshing an open plan requires confirmation and rebuilds it", as
   await expect(page.getByRole("status").filter({ hasText: "ATT&CK feed refreshed; the plan was rebuilt" })).toBeVisible();
 });
 
-test("E15 — a plan file larger than five megabytes is refused before parsing", async ({ page }) => {
+test("E15 — a recovery file larger than 128MiB is refused before parsing", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
-  await page.setInputFiles("#importPlan", {
-    name: "oversized-plan.json",
-    mimeType: "application/json",
-    buffer: Buffer.alloc(5 * 1024 * 1024 + 1, 0x20),
-  });
-  await expect(page.getByRole("status").filter({ hasText: "Plan file is larger than 5 MB" })).toBeVisible();
+  const file = planFile({});
+  const descriptor = fs.openSync(file, "w");
+  fs.ftruncateSync(descriptor, 128 * 1024 * 1024 + 1);
+  fs.closeSync(descriptor);
+  await page.setInputFiles("#importPlan", file);
+  await expect(page.getByRole("status").filter({ hasText: "Recovery file is larger than 128 MiB" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
 });

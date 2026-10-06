@@ -11,18 +11,51 @@ import html
 import io
 import json
 import re
-import textwrap
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any, ClassVar, Dict, Iterable, List, Mapping, Sequence, Tuple
 from urllib.parse import urlparse
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
+
 from . import content_pack
+from .artifact_limits import PLAN_MAX_BYTES
 from .execution_kit import ExecutionKitError, normalize_plan, rebind_to_catalog
 
 OUTCOMES = {"not_run", "passed", "failed", "skipped"}
 DETECTION_RESULTS = {"not_assessed", "alerted", "silent", "blocked", "not_instrumented"}
+_font_lock = threading.Lock()
+_FONT_NAME = "AdversaryFlowNoto"
+
+
+def _pdf_font() -> TTFont:
+    with _font_lock:
+        if _FONT_NAME not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(_FONT_NAME, str(Path(__file__).parent / "fonts" / "NotoSansSC.ttf")))
+    return pdfmetrics.getFont(_FONT_NAME)
+
+
+def _unicode_pdf_text(value: str) -> str:
+    glyphs = _pdf_font().face.charToGlyph
+    # PDF's subset ToUnicode map supports BMP characters. Make other glyphs
+    # explicit and searchable, rather than substituting question marks/tofu.
+    return "".join(character if ord(character) <= 0xFFFF and ord(character) in glyphs
+                   else f"[U+{ord(character):04X}]" for character in value)
+
+
+@dataclass(frozen=True)
+class _PdfText:
+    x: float
+    y: float
+    value: str
+    size: float
+    bold: bool
+    color: Tuple[float, float, float]
 
 
 class ReportError(ExecutionKitError):
@@ -208,7 +241,7 @@ class EngagementReport:
 
     @property
     def recorded(self) -> int:
-        return self.coverage.occurrences - self.coverage.outcome_not_run
+        return self.coverage.outcome_passed + self.coverage.outcome_failed
 
     @property
     def detection_assessed(self) -> int:
@@ -540,7 +573,13 @@ def report_filename(report: EngagementReport, extension: str) -> str:
 def render_json(document: Mapping[str, Any]) -> bytes:
     """Serialize the existing schema-versioned plan without a report-shaped fork."""
     try:
-        return (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        pretty = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        if len(pretty) <= PLAN_MAX_BYTES:
+            return pretty
+        compact = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(compact) > PLAN_MAX_BYTES:
+            raise ReportError("Plan JSON exceeds the 32 MiB UTF-8 limit")
+        return compact
     except (TypeError, ValueError) as exc:
         raise ReportError("Plan cannot be serialized as JSON") from exc
 
@@ -744,8 +783,8 @@ class _PdfLayout:
 
     def __init__(self, report: EngagementReport) -> None:
         self.report = report
-        self.pages: List[List[str]] = []
-        self.page: List[str] = []
+        self.pages: List[List[str | _PdfText]] = []
+        self.page: List[str | _PdfText] = []
         self.y = 0.0
         self._new_page()
 
@@ -757,7 +796,7 @@ class _PdfLayout:
         self.rect(0, 762, self.width, 30, fill=(0.063, 0.106, 0.2))
         self.text(self.left, 775, "ADVERSARYFLOW / PURPLE-TEAM REPORT", 8, bold=True, color=(0.64, 0.75, 1.0))
 
-    def finish(self) -> List[List[str]]:
+    def finish(self) -> List[List[str | _PdfText]]:
         if self.page:
             self.pages.append(self.page)
             self.page = []
@@ -805,24 +844,31 @@ class _PdfLayout:
         self.y -= 10
 
 
-def _pdf_string(value: str) -> str:
-    encoded = value.encode("cp1252", "replace").decode("latin-1")
-    return encoded.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-
-
 def _pdf_text_command(x: float, y: float, value: str, size: float, bold: bool,
-                      color: Tuple[float, float, float]) -> str:
-    font = "F2" if bold else "F1"
-    return (f"BT {color[0]:.3f} {color[1]:.3f} {color[2]:.3f} rg /{font} {size:.2f} Tf "
-            f"1 0 0 1 {x:.2f} {y:.2f} Tm ({_pdf_string(value)}) Tj ET")
+                      color: Tuple[float, float, float]) -> _PdfText:
+    return _PdfText(x, y, _unicode_pdf_text(value), size, bold, color)
 
 
 def _wrap_pdf(value: str, size: float, width: float) -> List[str]:
     plain = re.sub(r"\s+", " ", value).strip()
     if not plain:
         return []
-    characters = max(12, int(width / (size * 0.53)))
-    return textwrap.wrap(plain, width=characters, break_long_words=True, break_on_hyphens=True)
+    plain = _unicode_pdf_text(plain)
+    lines: List[str] = []
+    line = ""
+    for character in plain:
+        if line and pdfmetrics.stringWidth(line + character, _FONT_NAME, size) > width:
+            boundary = line.rfind(" ")
+            if boundary > 0:
+                lines.append(line[:boundary])
+                line = line[boundary + 1:]
+            else:
+                lines.append(line)
+                line = ""
+        line += character
+    if line:
+        lines.append(line)
+    return lines
 
 
 def _truncate(value: str, maximum: int) -> str:
@@ -831,7 +877,7 @@ def _truncate(value: str, maximum: int) -> str:
     return value[:maximum - 1].rstrip() + "…"
 
 
-def _layout_pdf(report: EngagementReport) -> List[List[str]]:
+def _layout_pdf(report: EngagementReport) -> List[List[str | _PdfText]]:
     layout = _PdfLayout(report)
     layout.text(layout.left, layout.y, "PURPLE-TEAM ENGAGEMENT REPORT", 9, bold=True, color=(0.22, 0.42, 0.96))
     layout.y -= 27
@@ -958,7 +1004,7 @@ class _HtmlBlock:
 
 
 class _ReportHtmlParser(HTMLParser):
-    """Extract the visible report blocks used by the dependency-free PDF writer."""
+    """Extract visible HTML report blocks for the offline Unicode PDF writer."""
 
     _block_tags: ClassVar[frozenset[str]] = frozenset(
         {"h1", "h2", "h3", "h4", "p", "li", "small", "th", "td", "footer"}
@@ -1002,7 +1048,7 @@ class _ReportHtmlParser(HTMLParser):
             self._parts.append(data)
 
 
-def _layout_pdf_html(report: EngagementReport, document: bytes) -> List[List[str]]:
+def _layout_pdf_html(report: EngagementReport, document: bytes) -> List[List[str | _PdfText]]:
     parser = _ReportHtmlParser()
     try:
         parser.feed(document.decode("utf-8"))
@@ -1035,43 +1081,25 @@ def _layout_pdf_html(report: EngagementReport, document: bytes) -> List[List[str
             layout.paragraph(block.text, size=7.5, color=(0.38, 0.44, 0.55), space_after=4)
         else:
             layout.paragraph(block.text, size=9, space_after=7)
+    layout.paragraph("PDF font note: unsupported glyphs and non-BMP emoji use explicit [U+...] code-point markers. "
+                     "The HTML report retains the original Unicode text.", size=7.5)
     return layout.finish()
 
 
-def _pdf_document(pages: Sequence[Sequence[str]]) -> bytes:
-    objects: Dict[int, bytes] = {
-        1: b"<< /Type /Catalog /Pages 2 0 R >>",
-        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-        4: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
-    }
-    page_ids = []
-    next_id = 5
-    for commands in pages:
-        page_id, content_id = next_id, next_id + 1
-        next_id += 2
-        page_ids.append(page_id)
-        stream = "\n".join(commands).encode("latin-1")
-        objects[content_id] = b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
-        objects[page_id] = (
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>"
-        ).encode("ascii")
-    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
-    objects[2] = f"<< /Type /Pages /Count {len(page_ids)} /Kids [{kids}] >>".encode("ascii")
+def _pdf_document(pages: Sequence[Sequence[str | _PdfText]]) -> bytes:
     output = io.BytesIO()
-    output.write(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0] * (max(objects) + 1)
-    for object_id in range(1, max(objects) + 1):
-        offsets[object_id] = output.tell()
-        output.write(f"{object_id} 0 obj\n".encode("ascii"))
-        output.write(objects[object_id])
-        output.write(b"\nendobj\n")
-    xref = output.tell()
-    output.write(f"xref\n0 {len(offsets)}\n".encode("ascii"))
-    output.write(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        output.write(f"{offset:010d} 00000 n \n".encode("ascii"))
-    output.write(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+    document = canvas.Canvas(output, pagesize=(612, 792), pageCompression=0, invariant=1, pdfVersion=(1, 7))
+    document.setTitle("AdversaryFlow engagement report")
+    for commands in pages:
+        for command in commands:
+            if isinstance(command, _PdfText):
+                document.setFillColorRGB(*command.color)
+                document.setFont(_FONT_NAME, command.size)
+                document.drawString(command.x, command.y, command.value)
+            else:
+                document.addLiteral(command)
+        document.showPage()
+    document.save()
     return output.getvalue()
 
 

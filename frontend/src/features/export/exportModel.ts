@@ -1,5 +1,5 @@
 import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
-import { isMarkedRun, validDateTime, type ExecutionEvidence } from "../review/evidence";
+import { isMarkedRun, isRecorded, normalizeReferences, validDateTime, type ExecutionEvidence } from "../review/evidence";
 import { buildPlanPreview, tacticDescriptions, type PlanPreview, type ScopeSettings } from "../scope/scopeModel";
 import type { PlanExport } from "./planContract";
 
@@ -32,8 +32,8 @@ function compactEvidence(value: ExecutionEvidence | undefined): ExecutionEvidenc
   if (value.stderr_sha256 && /^[a-fA-F0-9]{64}$/.test(value.stderr_sha256)) output.stderr_sha256 = value.stderr_sha256;
   if (value.receipt_sha256 && /^[a-fA-F0-9]{64}$/.test(value.receipt_sha256)) output.receipt_sha256 = value.receipt_sha256;
   if (typeof value.receipt_verified === "boolean") output.receipt_verified = value.receipt_verified;
-  if (value.telemetry_refs?.length) {
-    const references = [...new Set(value.telemetry_refs.map((reference) => reference.trim()).filter((reference) => reference.length > 0 && reference.length <= 500))].slice(0, 20);
+  if (value.telemetry_refs_draft !== undefined || value.telemetry_refs?.length) {
+    const references = normalizeReferences(value.telemetry_refs_draft ?? value.telemetry_refs!.join("\n"));
     if (references.length) output.telemetry_refs = references;
   }
   if (value.evidence_source) output.evidence_source = value.evidence_source;
@@ -92,6 +92,7 @@ export function buildExportBundle(
   const preview = buildPlanPreview(workflow, scope);
   const runnableIds = new Set(preview.stages.flatMap((stage) => stage.techniques.filter((technique) => !technique.selectedCommand.unsupported).map((technique) => technique.attack_id)));
   const markedRun = [...runnableIds].filter((id) => isMarkedRun(records[id]));
+  const selectedIds = [...new Set(preview.stages.flatMap((stage) => stage.techniques.map((technique) => technique.attack_id)))];
   const plan: PlanExport = {
     schema_version: "2.0",
     tool: "AdversaryFlow",
@@ -123,6 +124,8 @@ export function buildExportBundle(
         lab_proxy: preview.labProxy,
       },
       marked_run: markedRun,
+      reviewed: selectedIds.filter((id) => isRecorded(records[id])),
+      skipped: selectedIds.filter((id) => records[id]?.outcome === "skipped"),
     },
     stages: preview.stages.map((stage) => ({
       tactic: stage.tactic,
@@ -251,7 +254,8 @@ export function executiveSummary(bundle: ExportBundle): string {
   const assessed = plan.stages.flatMap((stage) => stage.techniques).filter((technique) => technique.execution.detection_result && technique.execution.detection_result !== "not_assessed").length;
   const fidelity = plan.summary.fidelity_mix;
   const fidelitySummary = fidelity ? `${fidelity.direct} direct, ${fidelity.bounded_synthetic} bounded synthetic, ${fidelity.lab_proxy} lab proxy` : "fidelity not recorded";
-  return `${plan.actor.name} (${plan.actor.attack_id}) — ${plan.summary.techniques} techniques across ${plan.summary.stages} stages; ${plan.summary.runnable} runnable, ${plan.summary.marked_run.length} recorded, ${assessed} detection results assessed; fidelity: ${fidelitySummary}. Authorized disposable-lab plan; AdversaryFlow did not execute commands.`;
+  const skipped = new Set(plan.stages.flatMap((stage) => stage.techniques.filter((item) => item.execution.outcome === "skipped").map((item) => item.id))).size;
+  return `${plan.actor.name} (${plan.actor.attack_id}) — ${plan.summary.techniques} techniques across ${plan.summary.stages} stages; ${plan.summary.runnable} runnable, ${plan.summary.marked_run.length} executed, ${skipped} skipped, ${assessed} detection results assessed; fidelity: ${fidelitySummary}. Authorized disposable-lab plan; AdversaryFlow did not execute commands.`;
 }
 
 export function platformLabel(platform: string): string {

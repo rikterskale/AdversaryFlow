@@ -1,5 +1,13 @@
 # AdversaryFlow
 
+Workspace safety: existing work is confirmed before replacement, and persistent
+storage failures stay visible until a successful save. **Download workspace
+recovery copy** preserves scope, workflow, archives and unfinished evidence even
+when a plan cannot export. Welcome also provides **Browse saved engagements**
+for server revisions. See [export and recovery contracts](docs/EXPORTS.md) for
+UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
+offline Unicode PDF support.
+
 **Make a security exercise plan, follow it in a guided browser interface, and save your results.**
 
 Choose a threat group or campaign from MITRE ATT&CK, a public reference of

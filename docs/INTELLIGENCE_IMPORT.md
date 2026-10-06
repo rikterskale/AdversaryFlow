@@ -44,3 +44,10 @@ Current code-backed catalog entries are projected into the separate
 `schemas/adversaryflow-ability.schema.json` contract. Those projections carry
 `review_status: unassessed`; they are groundwork for versioned content packs,
 not assertions that the entries have passed a new content-review process.
+
+Attached procedures use compound actor/candidate identity, so comparing the
+same source against two actors retains independent reviewed evidence. Rejection
+immediately revokes that actor/source attachment, including recovery snapshots.
+Acceptance never autoattaches a new candidate: choose **Attach accepted
+procedures**. Reimport reflects existing accepted attachments, and an all-rejected
+review can still synchronize an empty accepted set.

@@ -149,7 +149,7 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
   const previousFocusKey = useRef(focusKey);
   const doctorQuery = useQuery({
     queryKey: ["doctor"],
-    queryFn: getDoctor,
+    queryFn: ({ signal }) => getDoctor(signal),
     enabled: healthOpen,
     retry: false,
     staleTime: 30_000,

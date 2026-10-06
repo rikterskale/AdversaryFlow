@@ -11,6 +11,7 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_ASSETS = ("index.html", "styles.css", "app.js", "favicon.svg")
+FONT_ASSETS = ("NotoSansSC.ttf", "OFL.txt")
 FRONTEND_BUILD_FILES = (
     "package.json",
     "package-lock.json",
@@ -112,6 +113,11 @@ def verify_distributions(directory: Path, source_root: Path = ROOT) -> None:
         with zipfile.ZipFile(wheel) as archive:
             for asset, content in expected.items():
                 _verify_bytes("Wheel", f"frontend/{asset}", content, _wheel_asset(archive, asset))
+            for asset in FONT_ASSETS:
+                path = f"backend/fonts/{asset}"
+                source = source_root / path
+                if source.is_file():
+                    _verify_bytes("Wheel font", path, source.read_bytes(), archive.read(path))
         with tarfile.open(sdist, mode="r:gz") as archive:
             for asset, content in expected.items():
                 _verify_bytes(
@@ -122,6 +128,11 @@ def verify_distributions(directory: Path, source_root: Path = ROOT) -> None:
                     "Source distribution build input", path,
                     (source_root / path).read_bytes(), _sdist_file(archive, path),
                 )
+            for asset in FONT_ASSETS:
+                path = f"backend/fonts/{asset}"
+                source = source_root / path
+                if source.is_file():
+                    _verify_bytes("Source distribution font", path, source.read_bytes(), _sdist_file(archive, path))
     except (zipfile.BadZipFile, tarfile.TarError, OSError) as exc:
         raise SystemExit(f"Could not inspect Python distributions: {exc}") from exc
 
@@ -136,7 +147,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     verify_distributions(args.dist_dir.resolve())
-    print("Python distributions contain the fresh frontend assets and source rebuild inputs.")
+    print("Python distributions contain the fresh frontend assets, source rebuild inputs, and offline PDF fonts/licenses.")
     return 0
 
 

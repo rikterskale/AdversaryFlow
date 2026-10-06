@@ -140,6 +140,7 @@ test("real service exports reports and keeps imported high-risk steps withheld",
   expect(plan.scope.allow_high_risk).toBe(false);
   await page.goto(baseURL);
   await page.locator("#importPlan").setInputFiles({ name: "plan.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(plan)) });
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await page.getByRole("button", { name: "Finish & export" }).click();
   const zipPath = await download(page, /Download Windows execution kit/);
   const rows = JSON.parse(execFileSync(python, ["-c", "import csv,io,json,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=next(n for n in z.namelist() if n.endswith('.csv')); print(json.dumps(list(csv.DictReader(io.StringIO(z.read(n).decode('utf-8-sig'))))))", zipPath], { encoding: "utf8" }));
@@ -234,6 +235,7 @@ test("saved and imported plans remain usable when bootstrap fails", async ({ pag
   expect((await savePlan(page)).summary.marked_run).toEqual(original.summary.marked_run);
   await page.reload();
   await page.locator("#importPlan").setInputFiles({ name: "plan.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(original)) });
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Windows evidence preserved");
 });
 

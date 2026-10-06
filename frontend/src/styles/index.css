@@ -86,6 +86,13 @@ main { width: 100%; }
 .resume-panel p:last-child { max-width: 470px; margin: 0; color: var(--text-subtle); font-size: 11px; }
 .resume-panel__actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 7px; }
 .resume-panel__actions .button { min-height: 36px; padding: 7px 10px; font-size: 11px; }
+.saved-engagements { width: min(760px, calc(100% - 40px)); display: grid; gap: 12px; margin: 24px auto; border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 18px; background: var(--surface); }
+.saved-engagements h2 { margin: 0; font-size: 18px; }
+.saved-engagements p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.saved-engagements .button { justify-self: start; transition: border-color .18s ease, transform .18s ease; }
+.saved-engagements label { display: grid; gap: 6px; font-size: 13px; }
+.saved-engagements select { min-width: 0; width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 8px 10px; background: var(--surface-elevated); color: var(--text); }
+.saved-engagements__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .intelligence-import { max-width: 760px; margin-top: 28px; border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 18px; background: var(--surface); }
 .intelligence-import__heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .intelligence-import__heading h2 { margin: 2px 0 0; font-size: 16px; }

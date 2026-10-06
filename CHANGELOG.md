@@ -4,6 +4,23 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Confirm destructive welcome/replacement actions; surface persistent browser
+  storage failures and provide versioned whole-workspace recovery, including
+  original crash wrappers and explicit saved-file confirmation before reset.
+- Align UTF-8 plan/API limits at 32 MiB, workspace recovery at 128 MiB and
+  receipts at 1 MiB; use compact JSON when pretty formatting exceeds a bound.
+- Browse, download and restore saved server engagement revisions while retaining
+  append identity; explicitly reload authenticated catalog snapshots for review.
+- Partition procedure attachments by actor/candidate, revoke rejected
+  attachments, preserve execution attribution during notes edits, retain invalid
+  telemetry drafts rather than dropping references, and separate skipped/reviewed
+  outcomes from executed counts.
+- Bound API and preparation deadlines, cancel obsolete operations, validate
+  engagement responses and prevent delayed saves/reports attaching to new work.
+- Embed redistributable offline Noto Unicode PDF fonts; preserve Chinese,
+  Cyrillic and supported symbols with explicit unsupported emoji markers.
+  Add extraction/raster regressions and font/license packaging verification.
+
 - Apply follow-up React Query 5.104.1, Vite 8.3.2, Vitest 5.0.3,
   cryptography 50.0.2, mypy 2.4.0, and Ruff 0.16.10 updates with matching
   dependency lockfiles and regenerated browser assets.

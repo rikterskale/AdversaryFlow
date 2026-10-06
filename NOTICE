@@ -7,3 +7,11 @@ with, endorsed by, or sponsored by MITRE. Runtime ATT&CK data is downloaded
 from the public attack-stix-data project and is not bundled with the
 AdversaryFlow package. Use of that data remains subject to MITRE's terms at
 https://attack.mitre.org/resources/terms-of-use/.
+
+Offline PDF reports embed subsets of Noto Sans Simplified Chinese, copyright
+2014-2021 Adobe (http://www.adobe.com/), under the SIL Open Font License 1.1.
+The unmodified font and complete license are in backend/fonts.
+Upstream: https://github.com/notofonts/noto-cjk
+Source: Sans/Variable/TTF/Subset/NotoSansSC-VF.ttf
+Bundled font SHA-256:
+d68bafcb48a2707749396aa12bbbd833cb70401f3a9a689fd2902c7e0d295964

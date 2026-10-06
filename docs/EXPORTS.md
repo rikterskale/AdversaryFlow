@@ -122,7 +122,7 @@ not exist. Report generation never searches for rules or contacts the network.
 
 Reports omit command bodies, cleanup commands, and any executable content.
 The self-contained HTML report escapes all plan text and carries a restrictive
-content-security policy. The dependency-free PDF is rendered from that HTML,
+content-security policy. The offline Unicode PDF is rendered from that HTML,
 is paginated, and includes the plan digest and ATT&CK data version for
 provenance. The plan's own `generated` value is used instead of a new report
 clock, so the same plan and catalog produce the same bytes. Report generation
@@ -136,6 +136,69 @@ JSON remains the canonical machine-readable plan and evidence record. The
 `json` report endpoint serializes that submitted record without creating a
 parallel report schema. HTML/PDF are human-facing views derived from it, not
 new schema versions.
+
+## Workspace recovery and honest progress
+
+**Begin emulation plan** asks before clearing existing scope, evidence and
+snapshots; cancel keeps the entire workspace. **Download workspace recovery
+copy** is available throughout the wizard, including when plan export is
+invalid or browser storage is full/denied. Storage failures remain visible on
+every screen until a successful workspace write, not merely until remount.
+Downloads are requests, not confirmation that a file reached disk.
+
+Recovery version 1.0 (`schemas/adversaryflow-workspace.schema.json`) includes
+workflow snapshots, archives, procedure citations, evidence, unfinished
+telemetry-reference drafts, scope and server engagement identity. Choose it
+through **Resume JSON plan**, then confirm replacement. Original crash files
+with `saved_workspace` containing a Zustand JSON string remain importable.
+Malformed/unsafe state and invalid receipt digests are rejected before any
+replacement. Crash reset requires explicit confirmation that the downloaded
+copy was opened and checked; clicking a download link alone does not unlock it.
+
+Plan files and API plan artifacts are bounded at **32 MiB of actual UTF-8**,
+whole-workspace recovery at **128 MiB**, and individual receipt JSON at **1 MiB**.
+The 4,000-procedure/step limits remain. JSON uses pretty formatting when it fits,
+otherwise compact formatting without dropping any evidence. The server save
+envelope has a separate 1 KiB allowance. Oversized/invalid plans retain their
+workspace recovery control; keep the tab open and preserve that copy before
+reducing scope or citations.
+
+Telemetry references allow 20 unique values, each at most 500 Unicode
+characters. Invalid edits remain recoverable drafts and block plan export;
+legacy references are never silently truncated. Notes/detection/cleanup edits
+preserve execution operator/target; only new records default to current scope.
+
+**Executed** means passed or failed, never skipped. Optional `summary.reviewed`
+includes passed/failed/skipped unique scoped IDs and `summary.skipped` identifies
+skips; `marked_run` and each technique's `run` mean executed. Older 2.0/3.0 files
+without the optional lists remain accepted; progress is derived from execution
+outcomes, not old summary flags. Browser progress counts unique runnable IDs,
+while reports intentionally count stage occurrences.
+
+Use **Browse saved engagements** on Welcome to list service records, choose a
+revision, download its JSON or restore it with replacement confirmation.
+Restoring retains engagement ID/revision; **Save new revision** appends rather
+than creating an unrelated engagement. Empty/error states include refresh/retry.
+
+Imported restricted placeholders stay withheld even if a scope guardrail is
+enabled. **Reload catalog and review changes** explicitly authenticates and
+loads the same actor/domains from the service, keeps the original snapshot and
+procedure provenance, preserves current guardrails, and partitions execution
+evidence by actor/domains/data version/platform. It returns to Scope for review;
+no imported payload executes and exact-platform gaps remain blocked.
+
+All API operations have cancellable deadlines: ordinary requests 30 seconds,
+report/kit/refresh/intelligence operations 120 seconds, and setup 15 minutes
+overall with bounded individual polls. Timeouts, cancellation, network and
+authorization failures remain distinct. Obsolete navigation/startup operations
+are cancelled; mutation saves are not blindly retried after uncertain failure.
+
+PDFs package and embed SIL-OFL-licensed Noto Sans SC subsets, with searchable
+Chinese, Cyrillic and supported BMP symbols. Unsupported glyphs and non-BMP
+emoji appear as explicit searchable `[U+1F50D]`-style code-point markers, never
+silent `?` replacements. HTML retains the original Unicode. No OS font or
+runtime font download is used; native installs, wheels and containers include
+the font and license. The font source/digest is recorded in `NOTICE`.
 
 ### Evidence limitation
 

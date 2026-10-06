@@ -35,15 +35,15 @@ describe("exportModel", () => {
     expect(roundTrip.preview.runnable).toBe(1);
     expect(() => validateImportedPlan(roundTrip.plan)).not.toThrow();
   });
-  it("exports only effective stages and validates the generated schema 2.0 plan", () => {
+  it("retains invalid legacy references and blocks export rather than silently truncating them", () => {
     const records: Record<string, ExecutionEvidence> = {
       T1033: { outcome: "passed", detection_result: "alerted", telemetry_refs: ["x".repeat(501), ...Array.from({ length: 25 }, (_, index) => `event-${index}`)] },
     };
     const bundle = buildExportBundle(actor, workflow, scope, records, ["enterprise"]);
     expect(bundle.plan.scope.stages).toEqual(["execution"]);
     expect(bundle.plan.stages.map((stage) => stage.tactic)).toEqual(["execution"]);
-    expect(bundle.plan.stages[0]?.techniques[0]?.execution.telemetry_refs).toHaveLength(20);
-    expect(() => validateImportedPlan(bundle.plan)).not.toThrow();
+    expect(bundle.plan.stages[0]?.techniques[0]?.execution.telemetry_refs).toHaveLength(26);
+    expect(() => validateImportedPlan(bundle.plan)).toThrow("execution record");
   });
 
   it("deduplicates readiness statistics for techniques mapped to multiple tactics", () => {

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Actor, AttackDomain, IntelligenceImportResponse, ProcedureCandidate, ProcedureEvidence } from "../../api/contract";
 import { Button } from "../../components/Button";
+import { useWizardStore } from "../../state/wizardStore";
 
 interface IntelligenceImportPanelProps {
   actors: Actor[];
@@ -15,6 +16,7 @@ interface IntelligenceImportPanelProps {
     actor_stix_id: string;
     domains: AttackDomain[];
     csrfToken: string;
+    signal?: AbortSignal;
   }) => Promise<IntelligenceImportResponse>;
   onNotice: (message: string) => void;
   onAttachProcedures: (procedures: ProcedureEvidence[]) => void;
@@ -38,6 +40,14 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
   const [reviewer, setReviewer] = useState("");
   const [result, setResult] = useState<IntelligenceImportResponse | null>(null);
   const [working, setWorking] = useState(false);
+  const controller = useRef<AbortController | null>(null);
+  const attached = useWizardStore((state) => state.procedureEvidence);
+  const domainKey = domains.join("+");
+
+  useEffect(() => {
+    setResult(null); setWorking(false);
+    return () => controller.current?.abort();
+  }, [actorId, domainKey, file]);
 
   useEffect(() => {
     if (!actors.some((actor) => actor.stix_id === actorId)) setActorId(actors[0]?.stix_id ?? "");
@@ -50,6 +60,8 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
       return;
     }
     setWorking(true);
+    const request = new AbortController();
+    controller.current?.abort(); controller.current = request;
     try {
       const next = await onImport({
         file,
@@ -59,13 +71,20 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
         actor_stix_id: actorId,
         domains,
         csrfToken,
+        signal: request.signal,
       });
-      setResult(next);
+      if (request.signal.aborted) return;
+      const previous = useWizardStore.getState().procedureEvidence;
+      setResult({ ...next, candidates: next.candidates.map((candidate) => {
+        const saved = previous.find((item) => item.actor_stix_id === next.actor.stix_id && item.source_sha256 === next.source.sha256 && item.candidate_id === candidate.candidate_id);
+        return saved ? { ...candidate, review_status: saved.review_status, reviewed_by: saved.reviewed_by,
+          reviewed_at: saved.reviewed_at, accepted_by: saved.accepted_by, accepted_at: saved.accepted_at } : candidate;
+      }) });
       onNotice(`Compared ${next.candidates.length} imported ATT&CK mappings`);
     } catch (error: unknown) {
-      onNotice(error instanceof Error ? error.message : "Structured intelligence import failed");
+      if (!request.signal.aborted) onNotice(error instanceof Error ? error.message : "Structured intelligence import failed");
     } finally {
-      setWorking(false);
+      if (controller.current === request) setWorking(false);
     }
   };
 
@@ -75,6 +94,10 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
       return;
     }
     if (!result) return;
+    if (status === "rejected") {
+      useWizardStore.getState().revokeProcedures(result.actor.stix_id, result.source.sha256, [candidateId]);
+      onNotice("Rejected mapping removed from this actor/source workspace and its recovery snapshots.");
+    }
     const now = new Date().toISOString();
     setResult({
       ...result,
@@ -165,7 +188,8 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
                 ))}
               </div>
               <Button disabled={!result.candidates.some((item) => item.review_status !== "needs_review")} onClick={() => downloadReviewedCase(result)} variant="primary">Download reviewed mapping record</Button>
-              <Button disabled={!result.candidates.some((item) => item.review_status === "accepted")} onClick={attachAccepted} variant="secondary">Attach accepted procedures to planning workspace</Button>
+              <Button disabled={!result.candidates.some((item) => item.review_status !== "needs_review")} onClick={attachAccepted} variant="secondary">Attach accepted procedures to planning workspace</Button>
+              <p role="status">{attached.filter((item) => item.actor_stix_id === result.actor.stix_id && item.source_sha256 === result.source.sha256).length} procedures currently attached for this actor and source. Rejection revokes an attachment immediately; acceptance requires Attach.</p>
               <p className="muted">Only accepted mappings are attached. They retain source provenance and reviewer attribution and will appear in a schema 3.0 plan for the matching actor.</p>
             </div>
           ) : null}

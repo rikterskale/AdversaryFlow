@@ -21,6 +21,8 @@ export interface PlanSummary {
   fallback: number;
   fidelity_mix?: { direct: number; bounded_synthetic: number; lab_proxy: number };
   marked_run: string[];
+  reviewed?: string[];
+  skipped?: string[];
 }
 
 export interface PlanTechnique {
@@ -102,7 +104,7 @@ function uriOrNull(value: unknown): value is string | null {
   try { return Boolean(new URL(value).protocol); } catch { return false; }
 }
 
-function validateActor(value: unknown): void {
+export function validateActor(value: unknown): asserts value is Actor {
   if (!onlyKeys(value, ["stix_id", "attack_id", "name", "type", "aliases", "description", "technique_count"])
     || !nonEmptyString(value.stix_id) || !nonEmptyString(value.attack_id) || !nonEmptyString(value.name)
     || (value.type !== "group" && value.type !== "campaign")
@@ -110,7 +112,7 @@ function validateActor(value: unknown): void {
     || !nonNegativeInteger(value.technique_count)) throw new Error("Plan actor record is invalid");
 }
 
-function validateCommand(value: unknown, techniqueId: string): void {
+export function validateCommand(value: unknown, techniqueId: string): void {
   const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
   if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance", "interpreter"])
     || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every((key) => typeof value[key] === "string")
@@ -139,7 +141,7 @@ function validateCommand(value: unknown, techniqueId: string): void {
   }
 }
 
-function validateExecution(value: unknown): void {
+export function validateExecution(value: unknown): asserts value is ExecutionEvidence {
   if (!onlyKeys(value, ["outcome"], ["updated_at", "operator", "target", "notes", "cleanup_completed", "run_id", "started_at", "completed_at", "exit_code", "stdout_sha256", "stderr_sha256", "receipt_sha256", "receipt_verified", "telemetry_refs", "evidence_source", "detection_result"])
     || typeof value.outcome !== "string" || !["not_run", "passed", "failed", "skipped"].includes(value.outcome)
     || (value.detection_result !== undefined && (typeof value.detection_result !== "string" || !detectionResults.has(value.detection_result)))
@@ -154,7 +156,7 @@ function validateExecution(value: unknown): void {
     || (value.exit_code !== undefined && (!Number.isInteger(value.exit_code) || Number(value.exit_code) < -255 || Number(value.exit_code) > 65_535))
     || ["stdout_sha256", "stderr_sha256", "receipt_sha256"].some((key) => value[key] !== undefined && (typeof value[key] !== "string" || !/^[a-fA-F0-9]{64}$/.test(value[key] as string)))
     || (value.receipt_verified !== undefined && typeof value.receipt_verified !== "boolean")
-    || (value.telemetry_refs !== undefined && (!uniqueStrings(value.telemetry_refs, true) || value.telemetry_refs.length > 20 || value.telemetry_refs.some((reference) => reference.length > 500)))
+    || (value.telemetry_refs !== undefined && (!uniqueStrings(value.telemetry_refs, true) || value.telemetry_refs.length > 20 || value.telemetry_refs.some((reference) => [...reference].length > 500)))
     || (value.evidence_source !== undefined && (typeof value.evidence_source !== "string" || !evidenceSources.has(value.evidence_source)))) {
     throw new Error("Plan execution record is invalid");
   }
@@ -172,7 +174,7 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
     if (!Array.isArray(data.procedures) || data.procedures.length > 4_000) throw new Error("Plan procedure evidence is invalid");
     const sourceKinds = new Set(["csv", "navigator_layer", "stix2_bundle"]);
     const candidateIds = new Set<string>();
-    const actorRecord = data.actor as Record<string, unknown>;
+    const actorRecord = data.actor;
     data.procedures.forEach((procedure) => {
       const keys = ["candidate_id", "actor_stix_id", "mapping_data_version", "technique_id", "technique_name", "tactics", "platforms", "source_kind", "source_name", "source_url", "source_sha256", "evidence_quote", "procedure", "confidence", "review_status", "reviewed_by", "reviewed_at", "accepted_by", "accepted_at"];
       if (!onlyKeys(procedure, keys) || !nonEmptyString(procedure.candidate_id) || procedure.candidate_id.length > 128
@@ -209,9 +211,11 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
   const summaryKeys = ["techniques", "runnable", "unsupported", "stages", "curated", "fallback", "marked_run"];
   const summary = data.summary;
   const fidelityMix = isRecord(summary) ? summary.fidelity_mix : undefined;
-  if (!onlyKeys(summary, summaryKeys, ["fidelity_mix"])
+  if (!onlyKeys(summary, summaryKeys, ["fidelity_mix", "reviewed", "skipped"])
     || summaryKeys.slice(0, 6).some((key) => !nonNegativeInteger(summary[key]))
     || !uniqueStrings(summary.marked_run)
+    || (summary.reviewed !== undefined && !uniqueStrings(summary.reviewed))
+    || (summary.skipped !== undefined && !uniqueStrings(summary.skipped))
     || (fidelityMix !== undefined && (!isRecord(fidelityMix) || !onlyKeys(fidelityMix, ["direct", "bounded_synthetic", "lab_proxy"])
       || ["direct", "bounded_synthetic", "lab_proxy"].some((key) => !nonNegativeInteger(fidelityMix[key]))))) throw new Error("Plan summary is invalid");
 

@@ -9,11 +9,14 @@ import { EvidenceSnapshots } from "../components/EvidenceSnapshots";
 import { ErrorState, LoadingState } from "../components/Feedback";
 import { ActorGallery } from "../features/actors/ActorGallery";
 import { ExportScreen } from "../features/export/ExportScreen";
-import { validateImportedPlan, verifyImportedPlanReceipts } from "../features/export/planContract";
+import type { PlanExport } from "../features/export/planContract";
 import { ReviewScreen } from "../features/review/ReviewScreen";
 import { ScopeScreen } from "../features/scope/ScopeScreen";
 import { Welcome } from "../features/welcome/Welcome";
-import { evidenceIdentity, useWizardStore, type WizardStep } from "../state/wizardStore";
+import { evidenceIdentity, useStorageHealth, useWizardStore, type WizardStep, type WorkspaceState } from "../state/wizardStore";
+import { downloadWorkspace, parseWorkspaceFile } from "../state/workspaceRecovery";
+import { WORKSPACE_MAX_BYTES } from "../state/workspaceIO";
+import { SavedEngagements, type SavedRevision } from "../features/welcome/SavedEngagements";
 import { AppShell } from "./AppShell";
 import { AuthDialog } from "./AuthDialog";
 
@@ -51,19 +54,29 @@ export function App(): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [catalogRetryError, setCatalogRetryError] = useState("");
   const [pendingPlanReset, setPendingPlanReset] = useState<PendingPlanReset | null>(null);
+  const [beginOpen, setBeginOpen] = useState(false);
+  const [reloadOpen, setReloadOpen] = useState(false);
+  const [reloading, setReloading] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{ plan: PlanExport; saved?: SavedRevision } | { workspace: WorkspaceState } | null>(null);
+  const storageHealth = useStorageHealth();
+  const operation = useRef<AbortController | null>(null);
+  const workspaceGeneration = useWizardStore((state) => state.workspaceGeneration);
 
-  const start = useCallback(async (): Promise<void> => {
+  const start = useCallback(async (signal: AbortSignal): Promise<void> => {
     setStartupError("");
     setStartupPhase("connecting");
     try {
-      const nextSession = await getSession();
+      const nextSession = await getSession(signal);
+      if (signal.aborted) return;
       setSession(nextSession);
       setAuthOpen(false);
       setStartupPhase("preparing");
-      await prepareService(nextSession.csrf_token);
+      await prepareService(nextSession.csrf_token, signal);
+      if (signal.aborted) return;
       setStartupPhase("ready");
       void queryClient.invalidateQueries();
     } catch (error: unknown) {
+      if (signal.aborted) return;
       if (error instanceof ApiError && error.status === 401) {
         setAuthOpen(true);
         setStartupPhase("connecting");
@@ -81,8 +94,12 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    void start();
+    const controller = new AbortController();
+    void start(controller.signal);
+    return () => controller.abort();
   }, [start, startupAttempt]);
+
+  useEffect(() => () => { operation.current?.abort(); }, [workspaceGeneration]);
 
   useEffect(() => {
     if (initialWorkspaceStep.current > 0) useWizardStore.getState().setStep(0);
@@ -96,7 +113,7 @@ export function App(): React.JSX.Element {
 
   const actorsQuery = useQuery({
     queryKey: ["actors", ...domains],
-    queryFn: () => getActors(domains),
+    queryFn: ({ signal }) => getActors(domains, signal),
     enabled: startupPhase === "ready",
   });
 
@@ -112,7 +129,7 @@ export function App(): React.JSX.Element {
 
   const healthQuery = useQuery({
     queryKey: ["health"],
-    queryFn: getHealth,
+    queryFn: ({ signal }) => getHealth(signal),
     enabled: startupPhase === "ready",
     retry: false,
     refetchInterval: 15_000,
@@ -120,9 +137,9 @@ export function App(): React.JSX.Element {
 
   const workflowQuery = useQuery({
     queryKey: ["workflow", selectedActor?.stix_id ?? "", ...domains],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!selectedActor) throw new Error("Choose a threat actor before loading a workflow.");
-      return getWorkflow(selectedActor.stix_id, domains);
+      return getWorkflow(selectedActor.stix_id, domains, signal);
     },
     enabled: startupPhase === "ready" && Boolean(selectedActor) && currentStep >= 2 && !importedWorkflow,
   });
@@ -170,13 +187,17 @@ export function App(): React.JSX.Element {
     setPendingPlanReset(null);
   };
 
-  const beginPlan = (): void => {
-    if (selectedActor || maxStep > 0) {
-      const acceptedProcedures = procedureEvidence;
-      restart();
-      attachProcedureEvidence(acceptedProcedures);
-    }
+  const confirmBegin = (): void => {
+    const acceptedProcedures = procedureEvidence;
+    restart();
+    attachProcedureEvidence(acceptedProcedures);
     useWizardStore.getState().setStep(1);
+    setBeginOpen(false);
+  };
+  const beginPlan = (): void => {
+    const state = useWizardStore.getState();
+    if (selectedActor || maxStep > 0 || Object.keys(state.records).length || Object.keys(state.evidenceArchive).length) setBeginOpen(true);
+    else confirmBegin();
   };
 
   const resumePlan = (): void => {
@@ -185,26 +206,62 @@ export function App(): React.JSX.Element {
   };
 
   const loadPlanFile = async (file: File): Promise<void> => {
-    if (file.size > 5 * 1024 * 1024) {
-      setNotice("Plan file is larger than 5 MB");
+    if (file.size > WORKSPACE_MAX_BYTES) {
+      setNotice("Recovery file is larger than 128 MiB. Keep the existing workspace open.");
       return;
     }
     try {
-      const value = JSON.parse(await file.text()) as unknown;
-      validateImportedPlan(value);
-      await verifyImportedPlanReceipts(value);
-      importPlan(value);
-      setNotice("Plan imported with its saved guardrails; verify commands and data version before use");
+      const parsed = await parseWorkspaceFile(await file.text());
+      const incoming = parsed.kind === "plan" ? { plan: parsed.plan } : { workspace: parsed.workspace };
+      setPendingImport(incoming);
     } catch (error: unknown) {
       setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.");
     }
+  };
+
+  const restoreEngagement = (saved: SavedRevision): void => setPendingImport({ plan: saved.plan, saved });
+  const confirmImport = (): void => {
+    if (!pendingImport) return;
+    if ("workspace" in pendingImport) useWizardStore.getState().importWorkspace(pendingImport.workspace);
+    else {
+      importPlan(pendingImport.plan);
+      if (pendingImport.saved) useWizardStore.getState().setEngagementRecord(pendingImport.saved.engagement_id, pendingImport.saved.revision);
+    }
+    setPendingImport(null);
+    setNotice("workspace" in pendingImport ? "Workspace recovered with saved settings. Review commands before use." : "Plan imported with its saved guardrails; verify commands and data version before use");
+  };
+  const backup = (): void => {
+    try { downloadWorkspace(); setNotice("Recovery download requested. Confirm the file is saved before clearing any work."); }
+    catch (error: unknown) { setNotice(error instanceof Error ? error.message : "Recovery download failed. Keep this tab open."); }
+  };
+  const reloadCatalog = async (): Promise<void> => {
+    if (!selectedActor || reloading || !session) return;
+    const generation = useWizardStore.getState().workspaceGeneration;
+    const controller = new AbortController();
+    operation.current?.abort();
+    operation.current = controller;
+    setReloading(true);
+    try {
+      await getSession(controller.signal);
+      const next = await getWorkflow(selectedActor.stix_id, domains, controller.signal);
+      if (controller.signal.aborted || generation !== useWizardStore.getState().workspaceGeneration) return;
+      useWizardStore.getState().reloadCatalog(next);
+      setStep(2);
+      setReloadOpen(false);
+      setNotice("Catalog reloaded. Review current scope and command changes; the imported snapshot is retained in recovery history.");
+    } catch (error: unknown) { if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : "Catalog reload failed. Retry after reconnecting."); }
+    finally { setReloading(false); }
   };
 
   const refreshFeed = async (): Promise<void> => {
     if (!session || refreshing) return;
     setRefreshing(true);
     try {
-      await refreshAttackData(domains, session.csrf_token);
+      const controller = new AbortController();
+      operation.current?.abort(); operation.current = controller;
+      const generation = useWizardStore.getState().workspaceGeneration;
+      await refreshAttackData(domains, session.csrf_token, controller.signal);
+      if (controller.signal.aborted || generation !== useWizardStore.getState().workspaceGeneration) return;
       resetAfterRefresh();
       queryClient.removeQueries({ queryKey: ["workflow"] });
       await queryClient.invalidateQueries({ queryKey: ["actors"] });
@@ -276,14 +333,26 @@ export function App(): React.JSX.Element {
       session={session}
       setupFailed={startupPhase === "failed" || actorsQuery.isError}
     >
+      {storageHealth.status === "failed" ? <div className="callout workspace-notice" role="alert"><p>{storageHealth.message}</p><Button onClick={backup}>Download workspace recovery copy</Button></div> : null}
+      <div className="workspace-notice"><Button onClick={backup} variant="ghost">Download workspace recovery copy</Button>{importedWorkflow && selectedActor ? <Button disabled={reloading || !session} onClick={() => setReloadOpen(true)}>Reload catalog and review changes</Button> : null}</div>
       {canUseSavedPlan && startupPhase === "failed" ? <div className="callout workspace-notice" role="status"><p>Working from your saved plan. You can review evidence and save JSON while ATT&amp;CK setup is unavailable.</p><Button onClick={() => setStartupAttempt((value) => value + 1)}>Retry connection</Button></div> : null}
       {currentStep >= 2 ? <EvidenceSnapshots /> : null}
+      {currentStep === 0 ? <SavedEngagements onNotice={setNotice} onRestore={restoreEngagement} /> : null}
       {content}
       <AuthDialog
         message={authAttempted ? "That token was not accepted. Check it and try again." : ""}
         onConnect={connect}
         open={authOpen}
       />
+      <Dialog title="Begin a new plan?" description="Your scope, recorded evidence, and recovery history will be cleared. Accepted procedure citations are kept. Download a recovery copy first if needed." open={beginOpen} onClose={() => setBeginOpen(false)}>
+        <div className="dialog-actions"><Button onClick={backup}>Download recovery copy</Button><Button onClick={() => setBeginOpen(false)} variant="ghost">Keep current workspace</Button><Button onClick={confirmBegin} variant="primary">Clear and begin</Button></div>
+      </Dialog>
+      <Dialog title="Replace this browser workspace?" description="Restoring replaces scope, evidence and history. Cancel keeps the whole current workspace unchanged." open={Boolean(pendingImport)} onClose={() => setPendingImport(null)}>
+        <div className="dialog-actions"><Button onClick={backup}>Download current recovery copy</Button><Button onClick={() => setPendingImport(null)} variant="ghost">Cancel restore</Button><Button onClick={confirmImport} variant="primary">Replace and restore</Button></div>
+      </Dialog>
+      <Dialog title="Reload catalog and review changes?" description="Authenticated catalog commands for the same actor and domains replace the imported snapshot, never execute it. Current guardrails and procedure provenance stay in place. The original snapshot is retained; evidence from another data version remains partitioned." open={reloadOpen} onClose={() => setReloadOpen(false)}>
+        <div className="dialog-actions"><Button onClick={() => setReloadOpen(false)} variant="ghost">Keep imported snapshot</Button><Button disabled={reloading} onClick={() => { void reloadCatalog(); }} variant="primary">{reloading ? "Reloading…" : "Reload and review scope"}</Button></div>
+      </Dialog>
       <Dialog
         description="Changing the plan source rebuilds the workflow so evidence cannot be attributed to the wrong actor or ATT&CK data set."
         onClose={() => setPendingPlanReset(null)}

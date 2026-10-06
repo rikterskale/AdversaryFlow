@@ -10,6 +10,9 @@ import {
   evidenceFromReceipt,
   evidenceSourceOptions,
   outcomeOptions,
+  isMarkedRun,
+  normalizeReferences,
+  referenceError,
   type DetectionResult,
   type EvidenceSource,
   type ExecutionEvidence,
@@ -51,10 +54,11 @@ function fidelityLabel(technique: ScopedTechnique): { className: string; label: 
 
 export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice }: TechniqueCardProps): React.JSX.Element {
   const [receipt, setReceipt] = useState("");
-  const [telemetryText, setTelemetryText] = useState(() => (evidence?.telemetry_refs ?? []).join("\n"));
+  const [telemetryText, setTelemetryText] = useState(() => evidence?.telemetry_refs_draft ?? (evidence?.telemetry_refs ?? []).join("\n"));
   const [stdoutHash, setStdoutHash] = useState(evidence?.stdout_sha256 ?? "");
   const [stderrHash, setStderrHash] = useState(evidence?.stderr_sha256 ?? "");
-  const telemetryValue = (evidence?.telemetry_refs ?? []).join("\n");
+  const telemetryValue = evidence?.telemetry_refs_draft ?? (evidence?.telemetry_refs ?? []).join("\n");
+  const telemetryError = referenceError(normalizeReferences(telemetryText));
   useEffect(() => { setStdoutHash(evidence?.stdout_sha256 ?? ""); }, [evidence?.stdout_sha256]);
   useEffect(() => { setStderrHash(evidence?.stderr_sha256 ?? ""); }, [evidence?.stderr_sha256]);
   useEffect(() => {
@@ -65,7 +69,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
   }, [telemetryValue]);
   const command = technique.selectedCommand;
   const unsupported = Boolean(command.unsupported);
-  const marked = Boolean(evidence && evidence.outcome !== "not_run");
+  const marked = isMarkedRun(evidence);
   const fidelity = fidelityLabel(technique);
   const attackUrl = safeUrl(technique.url);
   const detection = evidence?.detection_result ?? "not_assessed";
@@ -168,10 +172,12 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
             <label>stdout SHA-256<input value={stdoutHash} maxLength={64} onChange={(event) => setStdoutHash(event.target.value)} onBlur={(event) => updateHash("stdout_sha256", event.target.value)} /></label>
             <label>stderr SHA-256<input value={stderrHash} maxLength={64} onChange={(event) => setStderrHash(event.target.value)} onBlur={(event) => updateHash("stderr_sha256", event.target.value)} /></label>
             <label>Evidence source<select aria-label={`Evidence source for ${technique.attack_id}`} onChange={(event) => onUpdate({ evidence_source: event.target.value as EvidenceSource })} value={evidence?.evidence_source ?? "operator_supplied"}>{evidenceSourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label>Telemetry references<textarea maxLength={10000} onChange={(event) => {
+            <label>Telemetry references <span>(20 unique, 500 characters each)</span><textarea aria-label="Telemetry references" aria-invalid={Boolean(telemetryError)} onChange={(event) => {
               setTelemetryText(event.target.value);
-              onUpdate({ telemetry_refs: [...new Set(event.target.value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))] });
+              const refs = normalizeReferences(event.target.value);
+              onUpdate({ telemetry_refs_draft: event.target.value, ...(!referenceError(refs) ? { telemetry_refs: refs } : {}) });
             }} placeholder="SIEM event IDs or endpoint links, one per line" value={telemetryText} /></label>
+            {telemetryError ? <p role="alert">{telemetryError}</p> : null}
           </div>
           {command.exercise_kind === "technique_relevant_bounded" ? <div className="receipt-import"><label>Exercise receipt JSON<textarea aria-label={`Exercise receipt for ${technique.attack_id}`} onChange={(event) => setReceipt(event.target.value)} placeholder="Paste the JSON emitted by the bounded lab exercise" value={receipt} /></label><Button onClick={() => { void importReceipt(); }} variant="ghost">Verify and import receipt</Button></div> : null}
         </details>

@@ -210,7 +210,7 @@ with current-version expectations or results that have not been observed.
 | E12 | Browser rejects clipboard writes | Click **Copy command** *(auto: `uat.spec.js` E12)* | Denial toast shown | Toast `Clipboard access was denied` | **Pass** |
 | E13 | A plan is open | Click refresh, cancel, then confirm *(auto: `uat.spec.js` E13)* | Cancel preserves plan; confirm rebuilds and returns to picker | Plan remained after cancel; confirmed refresh returned to picker with `ATT&CK feed refreshed; the plan was rebuilt` | **Pass** |
 | E14 | Refresh is already active or bootstrap is loading | POST refresh *(auto: `test_e14_refresh_conflicts_name_the_active_operation`)* | Returns `409 refresh_in_progress` or `409 bootstrap_in_progress` | Both 409 envelopes observed and named the active operation | **Pass** |
-| E15 | Welcome screen | Select a JSON file of 5 MiB + 1 byte *(auto: `uat.spec.js` E15)* | File rejected before parsing and welcome remains usable | Toast `Plan file is larger than 5 MB`; welcome heading remained visible | **Pass** |
+| E15 | Welcome screen | Select a recovery JSON file of 128 MiB + 1 byte *(auto: `uat.spec.js` E15)* | File rejected before parsing and welcome remains usable | Toast `Recovery file is larger than 128 MiB`; welcome heading remained visible | Automated regression |
 | E16 | Known domain and mocked downloader | `cache-refresh --domains enterprise` *(auto: `test_cache_refresh_accepts_known_domains`)* | Refresh completes and prints cache status | Exit 0; enterprise refresh result emitted | **Pass** |
 
 ---

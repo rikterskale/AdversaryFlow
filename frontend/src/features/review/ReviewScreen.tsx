@@ -4,7 +4,7 @@ import type { Actor, WorkflowResponse } from "../../api/contract";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { Icon } from "../../components/Icon";
-import { consumeStorageWriteFailure, useWizardStore } from "../../state/wizardStore";
+import { useStorageHealth, useWizardStore } from "../../state/wizardStore";
 import { useWorkspaceEvidence } from "../../state/useWorkspaceEvidence";
 import { buildPlanPreview, tacticDescriptions, titlePlatform, type PlanPreview, type ScopedTechnique } from "../scope/scopeModel";
 import { CoverageHeatmap } from "./CoverageHeatmap";
@@ -66,7 +66,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const saveStatus = useStorageHealth((state) => state.status);
 
   useEffect(() => {
     if (activeStage >= plan.stages.length) setActiveStage(0);
@@ -109,12 +109,6 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
 
   const persistEvidence = (techniqueId: string, patch: Partial<ExecutionEvidence>): void => {
     updateEvidence(techniqueId, patch);
-    if (consumeStorageWriteFailure()) {
-      setSaveFailed(true);
-      onNotice("Progress can't be saved in this browser — export the plan to keep your records");
-    } else {
-      setSaveFailed(false);
-    }
   };
 
   const writeClipboard = useCallback(async (value: string): Promise<void> => {
@@ -171,7 +165,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
         <div><p className="eyebrow">Step 3 of 4 · Review and track</p><h1 id="plan-title">{actor.name} · {actor.attack_id}</h1><p id="planActorMeta">Authorized lab plan · commands target <strong>{titlePlatform(scope.commandPlatform)}</strong> · every copy remains operator initiated</p></div>
         <div className="plan-progress">
           <div aria-label="Runnable technique progress" aria-valuemax={100} aria-valuemin={0} aria-valuenow={progress} aria-valuetext={`${done} of ${runnableIds.size} runnable techniques`} className="progress-ring" id="progressRing" role="progressbar" style={{ "--progress": `${progress * 3.6}deg` } as React.CSSProperties}><span id="progressPct">{progress}%</span></div>
-          <div><strong id="progressCount">{done} / {runnableIds.size}</strong><span>techniques recorded</span><small className="detection-progress">{detectionsAssessed} / {runnableIds.size} detections assessed</small><small className={saveFailed ? "is-error" : ""} id="saveStatus">{saveFailed ? "Not saved in this browser" : "Saved in this browser"}</small></div>
+          <div><strong id="progressCount">{done} / {runnableIds.size}</strong><span>techniques executed</span><small>{[...runnableIds].filter((id) => records[id]?.outcome === "skipped").length} skipped</small><small className="detection-progress">{detectionsAssessed} / {runnableIds.size} detections assessed</small><small className={saveStatus === "failed" ? "is-error" : ""} id="saveStatus">{saveStatus === "saved" ? "Saved in this browser" : saveStatus === "failed" ? "Not saved in this browser" : "Browser save not confirmed"}</small></div>
         </div>
       </header>
 
@@ -190,7 +184,8 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
           {plan.stages.map((item, index) => {
             const runnable = item.techniques.filter((technique) => !technique.selectedCommand.unsupported);
             const stageDone = runnable.filter((technique) => isMarkedRun(records[technique.attack_id])).length;
-            return <button aria-current={index === activeStage ? "step" : undefined} className={`railitem ${index === activeStage ? "is-active" : ""}`} key={item.tactic} onClick={() => selectStage(index)} type="button"><span className="railitem__num">{index + 1}</span><span className="railitem__name">{item.title}</span><span className="railitem__meta">{stageDone}/{runnable.length}</span>{runnable.length > 0 && stageDone === runnable.length ? <span className="railitem__done"><Icon name="check" /></span> : null}</button>;
+            const skipped = runnable.filter((technique) => records[technique.attack_id]?.outcome === "skipped").length;
+            return <button aria-current={index === activeStage ? "step" : undefined} className={`railitem ${index === activeStage ? "is-active" : ""}`} key={item.tactic} onClick={() => selectStage(index)} type="button"><span className="railitem__num">{index + 1}</span><span className="railitem__name">{item.title}</span><span className="railitem__meta">{stageDone}/{runnable.length} executed · {skipped} skipped</span>{runnable.length > 0 && stageDone === runnable.length ? <span className="railitem__done"><Icon name="check" /></span> : null}</button>;
           })}
         </nav>
 
@@ -201,7 +196,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
 
       <div className="actionbar review-actionbar">
         <Button onClick={onBack} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Back</Button>
-        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${done ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{plan.stages.length ? `${done} / ${runnableIds.size} runnable techniques marked run` : "No techniques in scope"}</span><small>{plan.stages.length ? "Evidence autosaves locally · export when this review is complete" : "Return to Scope Engagement and enable a stage before exporting."}</small></div></div>
+        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${done ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{plan.stages.length ? `${done} / ${runnableIds.size} runnable techniques executed` : "No techniques in scope"}</span><small>{plan.stages.length ? "Evidence autosaves locally · export when this review is complete" : "Return to Scope Engagement and enable a stage before exporting."}</small></div></div>
         <Button disabled={!plan.stages.length} onClick={onFinish} variant="primary">Finish &amp; export <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
 

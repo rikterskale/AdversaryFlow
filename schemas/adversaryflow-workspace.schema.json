@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/AdversaryFlow/schemas/adversaryflow-workspace.schema.json",
+  "title": "AdversaryFlow whole-workspace recovery copy",
+  "description": "128 MiB UTF-8 file limit. The importer also validates workflow commands, execution records, receipt digests, accepted procedures and unsafe object keys. Imported commands are always untrusted.",
+  "type": "object",
+  "required": ["recovery_version", "tool", "captured_at", "workspace"],
+  "properties": {
+    "recovery_version": { "const": "1.0" },
+    "tool": { "const": "AdversaryFlow" },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "workspace": {
+      "type": "object",
+      "required": ["currentStep", "maxStep", "domains", "selectedActor", "scope", "scopeInitializedFor", "evidenceKey", "records", "importedWorkflow", "savedWorkflow", "evidenceArchive", "engagementId", "engagementRevision", "procedureEvidence"],
+      "properties": {
+        "currentStep": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "maxStep": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "domains": { "$ref": "#/$defs/domains" },
+        "selectedActor": { "anyOf": [{ "type": "null" }, { "$ref": "adversaryflow-plan.schema.json#/$defs/actor" }] },
+        "scope": { "$ref": "#/$defs/scope" },
+        "scopeInitializedFor": { "type": ["string", "null"] },
+        "evidenceKey": { "type": ["string", "null"] },
+        "records": { "$ref": "#/$defs/records" },
+        "importedWorkflow": { "$ref": "#/$defs/workflow" },
+        "savedWorkflow": { "$ref": "#/$defs/workflow" },
+        "evidenceArchive": { "type": "object", "additionalProperties": { "$ref": "#/$defs/snapshot" } },
+        "engagementId": { "type": ["string", "null"] },
+        "engagementRevision": { "type": ["integer", "null"], "minimum": 1 },
+        "procedureEvidence": { "$ref": "#/$defs/procedures" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "domains": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["enterprise", "ics", "mobile"] } },
+    "procedures": { "type": "array", "items": { "$ref": "adversaryflow-plan-v3.schema.json#/properties/procedures/items" } },
+    "scope": {
+      "type": "object",
+      "required": ["commandPlatform", "tactics", "includePre", "curatedOnly", "allowNetwork", "allowAdmin", "allowHighRisk", "operator", "target"],
+      "properties": {
+        "commandPlatform": { "enum": ["windows", "linux", "macos"] },
+        "tactics": { "type": "array", "items": { "type": "string" } },
+        "includePre": { "type": "boolean" }, "curatedOnly": { "type": "boolean" },
+        "allowNetwork": { "type": "boolean" }, "allowAdmin": { "type": "boolean" }, "allowHighRisk": { "type": "boolean" },
+        "operator": { "type": "string", "maxLength": 120 }, "target": { "type": "string", "maxLength": 200 }
+      },
+      "additionalProperties": false
+    },
+    "records": {
+      "type": "object", "maxProperties": 4000,
+      "propertyNames": { "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" },
+      "additionalProperties": {
+        "description": "Execution evidence plus recoverable telemetry_refs_draft and optional digest-verified receipt_payload. Invalid reference drafts are retained, not eligible for plan export.",
+        "type": "object", "required": ["outcome"],
+        "properties": {
+          "outcome": { "enum": ["not_run", "passed", "failed", "skipped"] },
+          "telemetry_refs_draft": { "type": "string" },
+          "telemetry_refs": { "type": "array", "items": { "type": "string" } },
+          "receipt_payload": { "$ref": "adversaryflow-receipt.schema.json" }
+        }
+      }
+    },
+    "workflow": {
+      "anyOf": [{ "type": "null" }, {
+        "type": "object", "required": ["actor", "summary", "kill_chain", "stages", "metadata"],
+        "properties": {
+          "actor": { "type": "object" }, "summary": { "type": "object" }, "kill_chain": { "type": "array" },
+          "stages": { "type": "array", "maxItems": 32, "x-maxTotalTechniques": 4000, "items": {
+            "type": "object", "required": ["tactic", "title", "techniques"],
+            "properties": { "tactic": { "type": "string" }, "title": { "type": "string" }, "techniques": { "type": "array" } }
+          } },
+          "metadata": { "type": "object", "required": ["version", "data_version", "domains"],
+            "properties": { "version": { "type": "string" }, "data_version": { "type": "string" }, "domains": { "$ref": "#/$defs/domains" } }
+          }
+        },
+        "additionalProperties": false
+      }]
+    },
+    "snapshot": {
+      "type": "object", "required": ["actor", "domains", "scope", "workflow", "records"],
+      "properties": {
+        "actor": { "anyOf": [{ "type": "null" }, { "$ref": "adversaryflow-plan.schema.json#/$defs/actor" }] },
+        "domains": { "$ref": "#/$defs/domains" }, "scope": { "$ref": "#/$defs/scope" },
+        "workflow": { "$ref": "#/$defs/workflow" }, "records": { "$ref": "#/$defs/records" },
+        "procedureEvidence": { "$ref": "#/$defs/procedures" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

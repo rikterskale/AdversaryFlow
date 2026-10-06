@@ -49,6 +49,6 @@ describe("TechniqueCard", () => {
     fireEvent.change(field, { target: { value: "event-1\n" } });
     expect(field).toHaveValue("event-1\n");
     fireEvent.change(field, { target: { value: "event-1\nevent-2" } });
-    expect(onUpdate).toHaveBeenLastCalledWith({ telemetry_refs: ["event-1", "event-2"] });
+    expect(onUpdate).toHaveBeenLastCalledWith({ telemetry_refs: ["event-1", "event-2"], telemetry_refs_draft: "event-1\nevent-2" });
   });
 });

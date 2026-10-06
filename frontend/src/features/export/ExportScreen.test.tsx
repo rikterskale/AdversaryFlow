@@ -146,9 +146,29 @@ describe("ExportScreen report generation", () => {
     expect(useWizardStore.getState().engagementId).toBeNull();
   });
 
+  it("F12 cancels a delayed report immediately on evidence edits and keeps regeneration available", async () => {
+    let resolveResponse: ((response: Response) => void) | undefined;
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_path: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>((resolve) => { resolveResponse = resolve; });
+    }));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate report" }));
+    act(() => {
+      useWizardStore.getState().updateEvidence("T1033", { notes: "New workspace evidence" });
+      expect(signal?.aborted).toBe(true);
+      resolveResponse?.(new Response("<html><body>Obsolete report</body></html>"));
+    });
+    await waitFor(() => expect(screen.getByText("No report generated yet")).toBeVisible());
+    expect(screen.queryByTitle("Engagement report preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate report" })).toBeEnabled();
+  });
+
   it("stores the engagement ID when the saved workspace is still active", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       engagement_id: "current-plan-id", revision: 1, plan_sha256: "a".repeat(64),
+      created_at: "2026-10-06T20:00:00Z",
     }), { headers: { "Content-Type": "application/json" }, status: 201 })));
     renderScreen();
     fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));

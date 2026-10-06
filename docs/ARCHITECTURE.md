@@ -239,7 +239,10 @@ boundaries remain separate control-plane work.
   same-origin resource/opener policy, no-referrer, and no-store API responses
   are applied centrally.
 - **Resource limits:** ordinary JSON requests use the small global body cap;
-  complete plan artifact endpoints have a 5 MiB cap and a 4,000-step limit.
+  complete plan artifact endpoints have a 32 MiB UTF-8 cap and a 4,000-step limit.
+  Engagement saves allow 1 KiB additional envelope overhead, but the plan itself
+  retains the 32 MiB cap. Browser whole-workspace recovery files have a separate
+  128 MiB cap so archives and unfinished reference drafts can be retained.
   Structured intelligence imports have a 16 MiB raw-file cap and a 4,000
   candidate limit.
 - **Secrets:** no secret is checked in. Compose generates a per-start token

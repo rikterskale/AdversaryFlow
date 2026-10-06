@@ -254,6 +254,7 @@ test("welcome catalog retry preserves the saved plan and evidence", async ({ pag
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
   let fail = true;
   await page.route("**/api/actors?*", route => fail
@@ -280,6 +281,7 @@ test("welcome catalog failure still allows importing a plan", async ({ page }) =
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("Actor catalog is unavailable");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
   await expect(page.getByText("Unverified import — review every command before copying")).toBeVisible();
 });
@@ -480,6 +482,7 @@ test("a saved plan can be resumed from the welcome screen", async ({ page }) => 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeFocused();
   await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
@@ -493,6 +496,7 @@ test("a resumed plan re-exports against the published schema", async ({ page }) 
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await page.getByRole("button", { name: "Generate report" }).click();
@@ -575,6 +579,7 @@ test("a plan exported with the default scope resumes as a runnable plan", async 
 
   await page.goto("/");
   await page.setInputFiles("#importPlan", exportedPath);
+  await page.getByRole("button", { name: "Replace and restore" }).click();
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
   await expect(page.locator("pre.cmd__code")).toContainText("whoami");
   await expect(page.locator("pre.cmd__code")).not.toContainText("Restricted by scope");
@@ -658,7 +663,7 @@ test("unavailable local storage is reported instead of silently losing evidence"
   await buildPlan(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
   await page.getByLabel("Outcome for T1033").selectOption("passed");
-  await expect(page.getByRole("status").filter({ hasText: "Progress can't be saved" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "This workspace is not saved" })).toBeVisible();
 });
 
 test("a failed setup shows an actionable error and can be retried", async ({ page }) => {

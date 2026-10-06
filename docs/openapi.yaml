@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AdversaryFlow API
   version: 0.5.3
-  description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication.
+  description: Local API for ATT&CK actors and guided emulation plans. When the service is bound beyond loopback, every API operation requires BearerToken authentication. Plan artifact bodies are limited to 32 MiB UTF-8 (engagement envelopes allow 1 KiB overhead), individual receipts to 1 MiB, and intelligence input to 16 MiB. PDF reports embed offline Noto fonts; unsupported glyphs and non-BMP emoji use explicit code-point markers.
 servers:
   - url: http://127.0.0.1:5000
 security:

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from . import command_catalog, telemetry
+from .artifact_limits import PLAN_MAX_BYTES, RECEIPT_MAX_BYTES
 from .plan_schema import validate_plan_document
 
 MAX_PLAN_STEPS = 4000
@@ -302,6 +303,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
     _validate_schema(document)
     if not isinstance(document, dict):
         raise ExecutionKitError("Plan must be a JSON object")
+    if len(json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > PLAN_MAX_BYTES:
+        raise ExecutionKitError("Plan exceeds the 32 MiB UTF-8 limit")
     schema_version = document.get("schema_version")
     if not isinstance(schema_version, str) or schema_version not in {"2.0", "3.0"} or document.get("tool") != "AdversaryFlow":
         raise ExecutionKitError("Only AdversaryFlow schema 2.0 or 3.0 plans can produce execution kits")
@@ -455,6 +458,8 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
             if not isinstance(entry, dict) or set(entry) != receipt_keys or not isinstance(entry.get("receipt"), dict):
                 raise ExecutionKitError("Schema 3.0 plan contains an invalid receipt record")
             receipt = entry["receipt"]
+            if len(json.dumps(receipt, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > RECEIPT_MAX_BYTES:
+                raise ExecutionKitError("Receipt exceeds the 1 MiB UTF-8 limit")
             receipt_technique_id = entry.get("technique_id")
             run_id = entry.get("run_id")
             digest = entry.get("receipt_sha256")

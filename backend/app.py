@@ -31,6 +31,7 @@ from werkzeug.exceptions import HTTPException
 from . import (
     __version__,
     ability_model,
+    artifact_limits,
     atomic_adapter,
     attack_data,
     command_catalog,
@@ -59,7 +60,7 @@ FRONTEND_DIR = _frontend_dir()
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
-EXECUTION_KIT_MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+EXECUTION_KIT_MAX_CONTENT_LENGTH = artifact_limits.PLAN_MAX_BYTES
 _runtime: Dict[str, Any] = {
     "ready": False,
     "loading": False,
@@ -115,7 +116,7 @@ def begin_request() -> None:
     if request.path == "/api/execution-kit" or request.path.startswith("/api/report/"):
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if request.path == "/api/engagements" or request.path.startswith("/api/engagements/"):
-        request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
+        request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH + 1024
     if request.path == "/api/playbook/atomic":
         request.max_content_length = EXECUTION_KIT_MAX_CONTENT_LENGTH
     if REMOTE_MODE and request.path.startswith("/api/"):
