@@ -19,6 +19,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "test-results" / "safari-native"
+ELEMENT = "element-6066-11e4-a52e-4f735466cecf"
+# WebDriver reports these while React re-renders or a screen is still settling.
+# Playwright retries them implicitly; safaridriver returns them immediately.
+TRANSIENT_ERRORS = ("stale element reference", "element not interactable", "element click intercepted", "no such element")
+
+
+def button_present(text: str) -> str:
+    return ("return Array.from(document.querySelectorAll('button'))"
+            f".some(b => (b.getAttribute('aria-label') || b.textContent || '').includes({json.dumps(text)}));")
 
 
 def request(url: str, method: str = "GET", body=None):
@@ -57,22 +66,65 @@ class Safari:
         while True:
             try:
                 result = self.command("POST", "/element", {"using": using, "value": selector})
-                return result["element-6066-11e4-a52e-4f735466cecf"]
+                return result[ELEMENT]
             except RuntimeError:
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.2)
 
-    def click(self, text: str, *, exact: bool = False):
+    def retry(self, action, deadline: float):
+        while True:
+            try:
+                return action()
+            except RuntimeError as exc:
+                if time.monotonic() >= deadline or not any(error in str(exc) for error in TRANSIENT_ERRORS):
+                    raise
+                time.sleep(0.2)
+
+    def poll(self, script: str, seconds: float) -> bool:
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if self.script(script):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def click(self, text: str, *, exact: bool = False, until: str | None = None):
+        """Click a button like Playwright: wait until it is enabled, centre it, retry transient errors.
+
+        safaridriver dispatches a native click at the element's last-computed
+        centre and returns immediately. Right after a screen change (notably the
+        sticky review action bar after resuming a plan) that click can be lost,
+        so screen transitions pass ``until`` and are re-clicked until it holds.
+        """
         predicate = (f"@aria-label='{text}' or normalize-space(.)='{text}'" if exact
                      else f"contains(@aria-label, '{text}') or contains(normalize-space(.), '{text}')")
-        element = self.element(f"//button[{predicate}]", "xpath")
-        self.command("POST", f"/element/{element}/click", {})
+        selector = f"//button[{predicate}]"
+        deadline = time.monotonic() + 30
+
+        def attempt() -> None:
+            element = self.element(selector, "xpath")
+            ref = {ELEMENT: element}
+            if not self.script("return !arguments[0].disabled;", ref):
+                raise RuntimeError("element not interactable: button is disabled")
+            self.script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", ref)
+            self.command("POST", f"/element/{element}/click", {})
+
+        while True:
+            self.retry(attempt, deadline)
+            if until is None or self.poll(until, 3):
+                return
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"Safari click on {text!r} did not reach: {until}")
 
     def fill(self, selector: str, text: str):
-        element = self.element(selector)
-        self.command("POST", f"/element/{element}/clear", {})
-        self.command("POST", f"/element/{element}/value", {"text": text})
+        def attempt() -> None:
+            element = self.element(selector)
+            self.script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", {ELEMENT: element})
+            self.command("POST", f"/element/{element}/clear", {})
+            self.command("POST", f"/element/{element}/value", {"text": text})
+
+        self.retry(attempt, time.monotonic() + 30)
 
     def screenshot(self, name: str):
         (OUTPUT / f"{name}.png").write_bytes(base64.b64decode(self.command("GET", "/screenshot")))
@@ -95,15 +147,15 @@ def exercise(browser: Safari, base: str):
     browser.command("POST", "/url", {"url": base})
     browser.fill("#auth-token", "browser-fixture-token")
     browser.click("Connect securely")
-    browser.click("Begin emulation plan")
+    browser.click("Begin emulation plan", until=button_present("Zeta Group"))
     browser.click("Zeta Group")
-    browser.click("Continue")
+    browser.click("Continue", until=button_present("Build plan"))
     browser.click("Windows", exact=True)
-    browser.click("Build plan")
+    browser.click("Build plan", until=button_present("Finish & export"))
     note = '[aria-label="Evidence note for T1059.001"]'
     browser.fill(note, "Native Safari evidence")
     browser.script("const s=document.querySelector('[aria-label=\"Outcome for T1059.001\"]'); s.value='passed'; s.dispatchEvent(new Event('change',{bubbles:true}));")
-    browser.click("Finish & export")
+    browser.click("Finish & export", until=button_present("Generate report"))
     browser.click("Generate report", exact=True)
     browser.wait("return Array.from(document.querySelectorAll('button')).some(b=>b.textContent.includes('Regenerate report'));")
     frame = browser.element("iframe")
@@ -125,22 +177,22 @@ def exercise(browser: Safari, base: str):
     browser.screenshot("export")
     print("PASS Safari: authentication, plan, evidence, HTML report, JSON/PDF downloads", flush=True)
 
-    browser.click("Scope engagement", exact=True)
+    browser.click("Scope engagement", exact=True, until=button_present("Build plan"))
     browser.click("Linux", exact=True)
-    browser.click("Build plan")
+    browser.click("Build plan", until=button_present("Finish & export"))
     browser.wait("return document.querySelector('[aria-label=\"Evidence note for T1082\"]');")
     assert not browser.script("return [...document.querySelectorAll('.evidence__note')].some(e=>e.value==='Native Safari evidence');")
-    browser.click("Scope engagement", exact=True)
+    browser.click("Scope engagement", exact=True, until=button_present("Build plan"))
     browser.click("Windows", exact=True)
-    browser.click("Build plan")
+    browser.click("Build plan", until=button_present("Finish & export"))
     browser.wait("return document.querySelector(arguments[0])?.value==='Native Safari evidence';", note)
     browser.command("POST", "/refresh", {})
-    browser.click("Resume Zeta Group plan")
+    browser.click("Resume Zeta Group plan", until=button_present("Finish & export"))
     browser.wait("return document.querySelector(arguments[0])?.value==='Native Safari evidence';", note)
     print("PASS Safari: platform separation, restoration, persisted resume", flush=True)
 
     request(base + "/test-control", "POST", {"action": "csrf"})
-    browser.click("Finish & export")
+    browser.click("Finish & export", until=button_present("Generate report"))
     browser.click("Generate report", exact=True)
     browser.wait("return Array.from(document.querySelectorAll('button')).some(b=>b.textContent.includes('Regenerate report'));")
     request(base + "/test-control", "POST", {"action": "token"})
