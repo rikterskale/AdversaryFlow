@@ -1,14 +1,8 @@
 # AdversaryFlow
 
-Workspace safety: existing work is confirmed before replacement, and persistent
-storage failures stay visible until a successful save. **Download workspace
-recovery copy** preserves scope, workflow, archives and unfinished evidence even
-when a plan cannot export. Welcome also provides **Browse saved engagements**
-for server revisions. See [export and recovery contracts](docs/EXPORTS.md) for
-UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
-offline Unicode PDF support.
-
-**Make a security exercise plan, follow it in a guided browser interface, and save your results.**
+**AdversaryFlow is a local, browser-based security exercise planner that turns
+MITRE ATT&CK threat-group and campaign techniques into guided lab plans, with
+evidence notes, detection tracking, and exportable reports.**
 
 Choose a threat group or campaign from MITRE ATT&CK, a public reference of
 attacker techniques. AdversaryFlow puts its activities in order and provides
@@ -170,6 +164,14 @@ explains the operator-controlled runner.
   saved revision. It is local storage, not an online backup. Keep your JSON
   copy too. If the ATT&CK version or platform changes, use **Saved evidence
   from other platforms or data versions** to recover the earlier snapshot.
+
+Workspace safety: existing work is confirmed before replacement, and persistent
+storage failures stay visible until a successful save. **Download workspace
+recovery copy** preserves scope, workflow, archives and unfinished evidence even
+when a plan cannot export. Welcome also provides **Browse saved engagements**
+for server revisions. See [export and recovery contracts](docs/EXPORTS.md) for
+UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
+offline Unicode PDF support.
 
 ## Stop and restart
 
