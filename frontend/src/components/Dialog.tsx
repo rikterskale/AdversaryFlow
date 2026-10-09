@@ -13,6 +13,8 @@ interface DialogProps {
 
 export function Dialog({ title, description, open, onClose, children, closeLabel = "Close dialog" }: DialogProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -21,7 +23,10 @@ export function Dialog({ title, description, open, onClose, children, closeLabel
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     const handleDialogKeys = (event: KeyboardEvent): void => {
-      if (event.key === "Escape" && onClose) onClose();
+      if (event.key === "Escape" && onCloseRef.current) {
+        event.preventDefault();
+        onCloseRef.current();
+      }
       if (event.key !== "Tab" || !panelRef.current) return;
       const focusable = [...panelRef.current.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -46,7 +51,7 @@ export function Dialog({ title, description, open, onClose, children, closeLabel
       document.removeEventListener("keydown", handleDialogKeys);
       previous?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) return null;
   return (

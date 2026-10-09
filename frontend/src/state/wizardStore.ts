@@ -3,7 +3,7 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 
 import type { Actor, AttackDomain, ProcedureEvidence, WorkflowResponse } from "../api/contract";
 import { evidenceFromImportedPlan, scopeFromImportedPlan, workflowFromImportedPlan, type PlanExport } from "../features/export/planContract";
-import { defaultScope, type ScopeSettings } from "../features/scope/scopeModel";
+import { defaultScope, resolveCommand, type ScopeSettings } from "../features/scope/scopeModel";
 import type { ExecutionEvidence } from "../features/review/evidence";
 
 export type WizardStep = 0 | 1 | 2 | 3 | 4;
@@ -18,8 +18,17 @@ export interface EvidenceSnapshot {
   procedureEvidence?: ProcedureEvidence[];
 }
 
-export function evidenceIdentity(actorId: string, workflow: WorkflowResponse, platform: string): string {
-  return [actorId, workflow.metadata.domains.join("+"), workflow.metadata.data_version, platform].join("|");
+export function evidenceIdentity(actorId: string, workflow: WorkflowResponse, platform: string, selections?: Record<string, string>, scope?: ScopeSettings): string {
+  const choices = Object.entries(selections ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  const effectiveScope = scope ?? { commandPlatform: platform as ScopeSettings["commandPlatform"], commandSelections: selections,
+    allowNetwork: false, allowAdmin: false, allowHighRisk: false, tactics: [], includePre: true, curatedOnly: false, operator: "", target: "" };
+  const selectedIds = [...new Set(workflow.stages.flatMap((stage) => stage.techniques.map((technique) => {
+    const selected = resolveCommand(technique, effectiveScope);
+    return selected.command_id ? `${technique.attack_id}:${selected.command_id}` : "";
+  })))].filter(Boolean).sort();
+  return [actorId, workflow.metadata.domains.join("+"), workflow.metadata.data_version,
+    ...(choices.length ? [`choices:${choices.map(([id, value]) => `${id}:${value}`).join(";")}`] : []),
+    ...(selectedIds.length ? [`commands:${selectedIds.join(";")}`] : []), platform].join("|");
 }
 
 export interface WizardState {
@@ -141,8 +150,11 @@ export const useWizardStore = create<WizardState>()(
         : { scope: { ...state.scope, tactics }, scopeInitializedFor: actorId }),
       updateScope: (patch) => set((state) => {
         const scope = { ...state.scope, ...patch };
-        const key = state.evidenceKey && scope.commandPlatform !== state.scope.commandPlatform
-          ? [...state.evidenceKey.split("|").slice(0, -1), scope.commandPlatform].join("|") : null;
+        const workflow = state.savedWorkflow ?? state.importedWorkflow;
+        const key = state.evidenceKey && workflow && state.selectedActor
+          ? evidenceIdentity(state.selectedActor.stix_id, workflow, scope.commandPlatform, scope.commandSelections, scope)
+          : state.evidenceKey && scope.commandPlatform !== state.scope.commandPlatform
+            ? [...state.evidenceKey.split("|").slice(0, -1), scope.commandPlatform].join("|") : null;
         return { ...(key ? switchEvidence(state, key) : {}), scope };
       }),
       ensureEvidenceKey: (key, workflow) => set((state) => {
@@ -190,7 +202,7 @@ export const useWizardStore = create<WizardState>()(
           selectedActor: { ...plan.actor, aliases: [...plan.actor.aliases] },
           scope,
           scopeInitializedFor: plan.actor.stix_id,
-          evidenceKey: [plan.actor.stix_id, plan.domains.join("+"), plan.data_version, scope.commandPlatform].join("|"),
+          evidenceKey: evidenceIdentity(plan.actor.stix_id, workflowFromImportedPlan(plan), scope.commandPlatform, scope.commandSelections, scope),
           records: evidenceFromImportedPlan(plan),
           importedWorkflow: workflowFromImportedPlan(plan),
           savedWorkflow: workflowFromImportedPlan(plan),
@@ -245,7 +257,7 @@ export const useWizardStore = create<WizardState>()(
           workflow: state.importedWorkflow ?? state.savedWorkflow, records: state.records,
           procedureEvidence: state.procedureEvidence.filter((item) => item.actor_stix_id === state.selectedActor?.stix_id),
         };
-        const key = evidenceIdentity(state.selectedActor.stix_id, workflow, state.scope.commandPlatform);
+        const key = evidenceIdentity(state.selectedActor.stix_id, workflow, state.scope.commandPlatform, state.scope.commandSelections, state.scope);
         return { evidenceArchive: archived, evidenceKey: key,
           records: key === state.evidenceKey ? state.records : archived[key]?.records ?? {},
           importedWorkflow: workflow, savedWorkflow: workflow, workspaceGeneration: state.workspaceGeneration + 1 };

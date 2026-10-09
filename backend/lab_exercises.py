@@ -13,6 +13,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import socket
 import sqlite3
 import subprocess
@@ -39,6 +40,12 @@ class ExerciseSpec:
 
 
 SCENARIOS: Dict[str, ExerciseSpec] = {
+    "filesystem_artifact": ExerciseSpec("filesystem_artifact", "Perform a technique-specific file operation only on owned temporary synthetic artifacts, then verify restoration or removal.", "Temporary artifact create, rename/metadata/modify/delete operation and cleanup verification; no user data or disks touched."),
+    "synthetic_capture": ExerciseSpec("synthetic_capture", "Generate and inspect a tiny synthetic image, audio, video-frame or clipboard/input artifact without accessing real capture devices.", "Synthetic media/input artifact creation, bounded byte count and digest; no screen, microphone, camera or clipboard access."),
+    "packet_artifact": ExerciseSpec("packet_artifact", "Build and inspect a synthetic ARP/packet record entirely offline; no sniffing, poisoning or packet transmission.", "Synthetic packet artifact write/read and digest; no network interface capture or injection."),
+    "configuration_change": ExerciseSpec("configuration_change", "Change and restore a technique-marked synthetic policy/configuration file without touching host controls.", "Temporary configuration before/after digests, bounded mutation, restoration and cleanup; no real policy is changed."),
+    "cryptography_artifact": ExerciseSpec("cryptography_artifact", "Encrypt and decrypt a synthetic marker using a local toy cipher/RSA demonstration; no operational credentials or real encrypted channel.", "Synthetic plaintext/ciphertext digests and successful round-trip verification; no real-world cryptography or attacker channel is validated."),
+    "execution_guardrails": ExerciseSpec("execution_guardrails", "Evaluate synthetic environment/lock guardrails and report the decision without deploying or hiding a payload.", "Owned lock-file creation/exclusion, synthetic condition evaluation and cleanup; no sandbox or debugger evasion."),
     "controlled_exception": ExerciseSpec(
         "controlled_exception",
         "Launch a child process that raises and reports a controlled exception.",
@@ -247,11 +254,42 @@ _SCENARIO_TECHNIQUES: Dict[str, tuple[str, ...]] = {
 }
 
 
+_PORTABLE_SCENARIO_TECHNIQUES = {
+    "content_obfuscation": "T1001 T1001.001 T1001.002 T1001.003 T1027 T1027.001 T1027.003 T1027.006 T1027.009 T1027.010 T1027.011 T1027.013 T1027.015 T1132 T1132.001 T1132.002 T1140 T1568.002 T1568.003",
+    "credential_material": "T1003 T1003.005 T1539 T1552 T1552.001 T1552.004 T1555 T1555.003 T1555.005 T1606.001 T1649 T1550",
+    "loopback_transfer": "T1008 T1020 T1029 T1041 T1048 T1048.002 T1048.003 T1071 T1071.001 T1071.002 T1071.003 T1071.004 T1095 T1102 T1102.001 T1102.002 T1102.003 T1104 T1105 T1205 T1205.001 T1219 T1219.001 T1219.002 T1498 T1499 T1565.002 T1567 T1567.002 T1567.004 T1568 T1568.001 T1570 T1571 T1665",
+    "loopback_proxy": "T1090 T1090.001 T1090.002 T1090.004 T1557 T1572",
+    "packet_artifact": "T1040 T1557.002",
+    "filesystem_artifact": "T1025 T1039 T1052.001 T1070 T1070.003 T1070.004 T1070.006 T1074 T1074.001 T1074.002 T1080 T1092 T1119 T1485 T1561.001 T1561.002 T1564.001 T1564.005 T1565 T1565.001 T1565.003 T1036 T1036.002 T1036.003 T1036.005 T1036.006 T1036.008 T1560 T1560.001 T1560.002 T1560.003",
+    "cryptography_artifact": "T1486 T1573 T1573.001 T1573.002",
+    "synthetic_capture": "T1056.002 T1113 T1115 T1123 T1125",
+    "persistence_configuration": "T1037 T1037.004 T1098.004 T1136 T1136.001 T1176.001 T1176.002 T1542.003 T1546 T1546.004 T1547 T1547.006",
+    "configuration_change": "T1036.004 T1036.010 T1070.007 T1070.009 T1490 T1531 T1553 T1553.006 T1564.002 T1564.012 T1685 T1685.006 T1686 T1690",
+    "module_search": "T1574 T1574.006 T1620",
+    "execution_guardrails": "T1480 T1480.001 T1480.002 T1622",
+    "application_control": "T1027.004 T1059.005 T1072 T1204 T1204.001 T1204.002 T1204.004 T1218 T1496.001 T1548 T1559 T1564.003",
+    "cloud_identity": "T1069.002",
+    "data_repository": "T1217",
+    "email_artifact": "T1114 T1566.002",
+    "social_engineering": "T1189",
+    "system_control": "T1489",
+    "supply_chain": "T1495 T1554",
+    "mock_authentication": "T1021 T1021.004 T1021.005 T1133 T1210",
+    "virtualization": "T1200",
+    "web_content": "T1659",
+}
+PORTABLE_EXERCISE_IDS = frozenset(technique for techniques in _PORTABLE_SCENARIO_TECHNIQUES.values() for technique in techniques.split())
+
 TECHNIQUE_SCENARIOS: Dict[str, str] = {}
 for _scenario, _techniques in _SCENARIO_TECHNIQUES.items():
     for _technique in _techniques:
         if _technique in TECHNIQUE_SCENARIOS:
             raise RuntimeError(f"duplicate technique exercise: {_technique}")
+        TECHNIQUE_SCENARIOS[_technique] = _scenario
+for _scenario, _portable_techniques in _PORTABLE_SCENARIO_TECHNIQUES.items():
+    for _technique in _portable_techniques.split():
+        if _technique in TECHNIQUE_SCENARIOS:
+            raise RuntimeError(f"duplicate portable technique exercise: {_technique}")
         TECHNIQUE_SCENARIOS[_technique] = _scenario
 
 
@@ -750,6 +788,104 @@ def _wireless_capture(_: str, root: Path) -> List[Dict[str, Any]]:
     return [
         {"event": "synthetic_wireless_capture", "beacon_found": b"BEACON" in path.read_bytes(), "capture_sha256": _sha(path.read_bytes())}
     ]
+
+
+def _filesystem_artifact(t: str, root: Path) -> List[Dict[str, Any]]:
+    path = root / "synthetic-document.txt"
+    original = f"AdversaryFlow synthetic data for {t}".encode()
+    path.write_bytes(original)
+    if t in {"T1070.004", "T1485", "T1561.001", "T1561.002", "T1070.003"}:
+        path.write_bytes(b"\0" * len(original))
+        path.unlink()
+        event = "owned_artifact_deleted"
+        verified = not path.exists()
+    elif t == "T1070.006":
+        os.utime(path, (946684800, 946684800))
+        event, verified = "owned_artifact_timestamp", int(path.stat().st_mtime) == 946684800
+    elif t.startswith("T1036") or t in {"T1564.001", "T1564.005"}:
+        renamed = root / (".synthetic-hidden.txt" if t.startswith("T1564") else "synthetic-document.txt ")
+        path.rename(renamed)
+        event, verified = "owned_artifact_renamed", renamed.read_bytes() == original
+    elif t.startswith("T1560"):
+        archive = root / "synthetic.zip"
+        with zipfile.ZipFile(archive, "w") as writer:
+            writer.write(path, path.name)
+        with zipfile.ZipFile(archive) as reader:
+            verified = reader.read(path.name) == original
+        event = "owned_artifact_archived"
+    elif t.startswith("T1565") or t == "T1080":
+        path.write_bytes(original + b"-controlled-change")
+        changed = path.read_bytes() != original
+        path.write_bytes(original)
+        event, verified = "owned_artifact_mutation_restored", changed and path.read_bytes() == original
+    else:
+        staged = root / "synthetic-staging"
+        staged.mkdir()
+        copy = staged / path.name
+        copy.write_bytes(path.read_bytes())
+        event, verified = "owned_artifact_staged", copy.read_bytes() == original
+    if not verified:
+        raise RuntimeError("Bounded filesystem operation did not verify")
+    return [{"event": event, "technique_id": t, "synthetic_only": True, "verified": verified, "original_sha256": _sha(original)}]
+
+
+def _synthetic_capture(t: str, root: Path) -> List[Dict[str, Any]]:
+    payload = b"P6\n2 2\n255\n" + bytes((255, 0, 0) * 4) if t in {"T1113", "T1125"} else f"SYNTHETIC-INPUT-OR-AUDIO-{t}".encode()
+    path = root / "synthetic-capture.bin"
+    path.write_bytes(payload)
+    return [{"event": "synthetic_media_artifact", "technique_id": t, "bytes": len(payload), "sha256": _sha(path.read_bytes()), "real_device_access": False}]
+
+
+def _packet_artifact(t: str, root: Path) -> List[Dict[str, Any]]:
+    record = {"technique_id": t, "protocol": "ARP", "source_mac": "02:00:00:00:00:01", "target": "192.0.2.1", "transmitted": False}
+    path = root / "synthetic-packet.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    loaded = json.loads(path.read_text())
+    return [{"event": "synthetic_packet_inspected", "protocol": loaded["protocol"], "transmitted": False, "sha256": _sha(path.read_bytes())}]
+
+
+def _configuration_change(t: str, root: Path) -> List[Dict[str, Any]]:
+    path = root / "synthetic-policy.json"
+    before = json.dumps({"technique_id": t, "enabled": True, "scope": "synthetic-only"}).encode()
+    path.write_bytes(before)
+    changed = json.loads(before)
+    changed["enabled"] = False
+    path.write_text(json.dumps(changed), encoding="utf-8")
+    after_hash = _sha(path.read_bytes())
+    path.write_bytes(before)
+    return [{"event": "synthetic_policy_restored", "before_sha256": _sha(before), "changed_sha256": after_hash, "restored": path.read_bytes() == before, "host_policy_changed": False}]
+
+
+def _cryptography_artifact(t: str, root: Path) -> List[Dict[str, Any]]:
+    plaintext = f"SYNTHETIC-MARKER-{t}".encode()
+    if t == "T1573.002":
+        encrypted = [pow(byte, 17, 3233) for byte in plaintext]
+        restored = bytes(pow(value, 2753, 3233) for value in encrypted)
+        ciphertext = json.dumps(encrypted).encode()
+        algorithm = "toy RSA, fixed demonstration key; not operational cryptography"
+    else:
+        key = os.urandom(len(plaintext))
+        ciphertext = bytes(left ^ right for left, right in zip(plaintext, key, strict=True))
+        restored = bytes(left ^ right for left, right in zip(ciphertext, key, strict=True))
+        algorithm = "synthetic one-time XOR demonstration"
+    (root / "synthetic-ciphertext.bin").write_bytes(ciphertext)
+    if restored != plaintext:
+        raise RuntimeError("Synthetic cryptography round trip failed")
+    return [{"event": "synthetic_cipher_roundtrip", "algorithm": algorithm, "plaintext_sha256": _sha(plaintext), "ciphertext_sha256": _sha(ciphertext), "verified": True}]
+
+
+def _execution_guardrails(t: str, root: Path) -> List[Dict[str, Any]]:
+    lock = root / "owned.guard"
+    with lock.open("x") as handle:
+        handle.write(t)
+    excluded = False
+    try:
+        with lock.open("x"):
+            pass
+    except FileExistsError:
+        excluded = True
+    lock.unlink()
+    return [{"event": "synthetic_guardrail_evaluated", "technique_id": t, "second_owner_excluded": excluded, "synthetic_environment_match": True, "payload_deployed": False}]
 
 
 _RUNNERS: Dict[str, Callable[[str, Path], List[Dict[str, Any]]]] = {

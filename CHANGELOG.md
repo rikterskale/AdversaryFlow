@@ -4,6 +4,11 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Exempt loopback-only catalog blocks from the network-active guardrail: only
+  commands that can reach beyond loopback keep `requires_network`, loopback
+  blocks are labelled `loopback_network_activity`, and word-boundary matching
+  stops prose such as "dumping" or "stopping" being misread as a `ping` probe.
+  Require explicit credentials for every network-active cloud/container recipe.
 - Check native environments offline at launch and repair missing, mismatched, or
   unloadable runtime dependencies automatically. Defer installer port checks to
   startup, report bind failures with recovery instructions, wait for HTTP before

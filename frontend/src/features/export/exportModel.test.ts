@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Actor, Command, WorkflowResponse } from "../../api/contract";
 import type { ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
-import { buildExportBundle, summarizeExportReadiness } from "./exportModel";
+import { buildExportBundle, summarizeExportReadiness, toRunbook } from "./exportModel";
 import { scopeFromImportedPlan, validateImportedPlan, verifyImportedPlanReceipts, workflowFromImportedPlan } from "./planContract";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -23,6 +23,39 @@ const workflow: WorkflowResponse = {
 const scope: ScopeSettings = { commandPlatform: "windows", tactics: ["reconnaissance", "execution"], includePre: false, curatedOnly: false, allowNetwork: false, allowAdmin: false, allowHighRisk: false, operator: "Purple Team", target: "lab-01" };
 
 describe("exportModel", () => {
+  it.each(["windows", "linux", "macos"] as const)("keeps all untrusted execution metadata commented in a %s runbook", (platform) => {
+    const enriched = structuredClone(workflow);
+    Object.assign(enriched.stages[1]!.techniques[0]!.commands[0]!, { platform, command_id: "a".repeat(64), environment: "cloud",
+      execution_role: "environment_validation", required_tools: ["az\n& echo TOOL_INJECTION"],
+      required_credentials: ["Tenant\n| echo ACCESS_INJECTION %ENV% !DELAYED!"] });
+    const bundle = buildExportBundle(actor, enriched, { ...scope, commandPlatform: platform }, {}, ["enterprise"]);
+    const text = toRunbook(bundle);
+    const comment = platform === "windows" ? "REM" : "#";
+    expect(text.split(/\r?\n/).filter(line => line.trim() && !line.startsWith(comment))).toEqual([]);
+    expect(text).toContain("TOOL_INJECTION");
+    expect(text).toContain("ACCESS_INJECTION");
+    expect(text).not.toContain("%ENV%");
+    expect(text).not.toContain("!DELAYED!");
+  });
+  it("round trips execution metadata and explicit variant selection in both schema versions", () => {
+    const enriched = structuredClone(workflow);
+    const id = "a".repeat(64);
+    Object.assign(enriched.stages[1]!.techniques[0]!.commands[0]!, { command_id: id, environment: "cloud", execution_role: "environment_validation", required_tools: ["az"], required_credentials: ["Authorized Azure account"] });
+    const plan = buildExportBundle(actor, enriched, { ...scope, commandSelections: { T1033: id } }, {}, ["enterprise"]).plan;
+    for (const version of ["2.0", "3.0"] as const) {
+      const saved = { ...plan, schema_version: version, ...(version === "3.0" ? { procedures: [] } : {}) };
+      expect(() => validateImportedPlan(saved)).not.toThrow();
+      const restored = buildExportBundle(actor, workflowFromImportedPlan(saved), scopeFromImportedPlan(saved), {}, ["enterprise"]).plan;
+      expect(restored.scope.command_selections).toEqual({ T1033: id });
+      expect(restored.stages[0]?.techniques[0]?.command).toMatchObject({ command_id: id, environment: "cloud", required_tools: ["az"], required_credentials: ["Authorized Azure account"], availability_status: "prerequisites_unverified" });
+    }
+  });
+
+  it("rejects malformed optional execution metadata", () => {
+    const plan = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
+    Object.assign(plan.stages[0]!.techniques[0]!.command, { environment: ["cloud"] });
+    expect(() => validateImportedPlan(plan)).toThrow("invalid command");
+  });
   it("preserves imported guardrails while requiring review of untrusted command text", () => {
     const original = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
     const importedScope = scopeFromImportedPlan(original);

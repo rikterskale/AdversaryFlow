@@ -309,8 +309,9 @@ test("system health exposes the guided doctor report and fixes", async ({ page }
   expect(results.violations).toEqual([]);
 });
 
-test("mobile screens never create page-level horizontal scrolling", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+for (const width of [320, 390]) {
+test(`mobile screens never create page-level horizontal scrolling at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
   await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
@@ -326,6 +327,7 @@ test("mobile screens never create page-level horizontal scrolling", async ({ pag
   await page.getByRole("button", { name: /Finish & export/ }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
+}
 
 test("actor cards present clean copy and concise accessible names", async ({ page }) => {
   await interceptApi(page);
@@ -535,14 +537,20 @@ test("switching the command platform marks techniques unsupported", async ({ pag
   await expect(summary).toContainText("Runnable on Linux");
   await expect(page.locator("#actionbarCtx")).toContainText("0 runnable");
   await expect(page.locator("#actionbarCtx")).toContainText("1 unsupported");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.getByRole("button", { name: /Copy command/ })).toBeDisabled();
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await expect(page.getByRole("button", { name: "Save JSON plan" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Generate report" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Download Linux execution kit/ })).toBeDisabled();
 });
 
 test("safety scope blocks a network high-risk command until it is allowed", async ({ page }) => {
   await interceptApi(page, [highRiskCommand]);
   await buildPlan(page);
   await expect(page.locator("#actionbarCtx")).toContainText("0 runnable");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   await page.locator("label.toggle", { hasText: "Allow network-active commands" }).click();
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -682,11 +690,12 @@ test("a failed setup shows an actionable error and can be retried", async ({ pag
   } }));
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByText("ATT&CK cache is unreadable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeDisabled();
   await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
 
   await page.getByRole("button", { name: "Retry setup" }).click();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByRole("button", { name: /Test Actor/ })).toBeVisible();
   await expect(page.locator("#dataStatus")).toContainText("1 actor");
 });

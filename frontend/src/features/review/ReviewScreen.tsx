@@ -66,6 +66,11 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
   const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
+  const [pendingVariant, setPendingVariant] = useState<{ techniqueId: string; commandId: string } | null>(null);
+  const changeVariant = (techniqueId: string, commandId: string): void => {
+    useWizardStore.getState().updateScope({ commandSelections: { ...scope.commandSelections, [techniqueId]: commandId } });
+    onNotice("Command variant selected. Previous evidence is retained in a separate workspace snapshot.");
+  };
   const saveStatus = useStorageHealth((state) => state.status);
 
   useEffect(() => {
@@ -141,7 +146,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
 
   useEffect(() => {
     const handleKeys = (event: KeyboardEvent): void => {
-      if (event.altKey || event.ctrlKey || event.metaKey || pendingCopy) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || pendingCopy || pendingVariant) return;
       if (event.target instanceof HTMLElement && event.target.matches("input,select,textarea,a,button,[contenteditable]")) return;
       if (event.key.toLocaleLowerCase() === "j") { event.preventDefault(); moveFocus(focusedIndex + 1); }
       if (event.key.toLocaleLowerCase() === "k") { event.preventDefault(); moveFocus(focusedIndex - 1); }
@@ -152,7 +157,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
     };
     document.addEventListener("keydown", handleKeys);
     return () => document.removeEventListener("keydown", handleKeys);
-  }, [focusedIndex, focusedTechnique, moveFocus, pendingCopy, requestCopy]);
+  }, [focusedIndex, focusedTechnique, moveFocus, pendingCopy, pendingVariant, requestCopy]);
 
   const selectStage = (index: number, techniqueId: string | null = null): void => {
     setActiveStage(index);
@@ -190,7 +195,7 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
         </nav>
 
         <div className="stage-panel">
-          {stage ? <><div className="stagepanel__head"><span>{activeStage + 1}</span><div><h3>{stage.title}</h3><p>{tacticDescriptions[stage.tactic] ?? "Mapped ATT&CK tactic."} · {stage.techniques.length} technique{stage.techniques.length === 1 ? "" : "s"}</p></div></div><p className="kbdhint">Keyboard: <kbd>j</kbd>/<kbd>k</kbd> move between techniques · <kbd>c</kbd> copies the focused command</p><div className="techlist">{stageTechniques.map((technique, index) => <TechniqueCard evidence={records[technique.attack_id]} firstLab={firstLab?.technique.attack_id === technique.attack_id} focused={index === focusedIndex} key={technique.attack_id} onCopy={(value, kind) => requestCopy(technique, value, kind)} onFocus={() => setFocusedIndex(index)} onNotice={onNotice} onUpdate={(patch) => persistEvidence(technique.attack_id, patch)} technique={technique} />)}</div><div className="stage-nav"><Button disabled={activeStage === 0} onClick={() => selectStage(activeStage - 1)} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Previous stage</Button><Button disabled={activeStage >= plan.stages.length - 1} onClick={() => selectStage(activeStage + 1)}>Next stage <Icon className="button-icon" name="arrow-right" /></Button></div></> : <div className="empty-state"><h3>No techniques in scope</h3><p>Return to Scope and enable at least one kill-chain stage.</p></div>}
+          {stage ? <><div className="stagepanel__head"><span>{activeStage + 1}</span><div><h3>{stage.title}</h3><p>{tacticDescriptions[stage.tactic] ?? "Mapped ATT&CK tactic."} · {stage.techniques.length} technique{stage.techniques.length === 1 ? "" : "s"}</p></div></div><p className="kbdhint">Keyboard: <kbd>j</kbd>/<kbd>k</kbd> move between techniques · <kbd>c</kbd> copies the focused command</p><div className="techlist">{stageTechniques.map((technique, index) => <TechniqueCard evidence={records[technique.attack_id]} firstLab={firstLab?.technique.attack_id === technique.attack_id} focused={index === focusedIndex} key={technique.attack_id} onCopy={(value, kind) => requestCopy(technique, value, kind)} onFocus={() => setFocusedIndex(index)} onNotice={onNotice} onSelectCommand={(commandId) => { if (Object.keys(records).length) setPendingVariant({ techniqueId: technique.attack_id, commandId }); else changeVariant(technique.attack_id, commandId); }} onUpdate={(patch) => persistEvidence(technique.attack_id, patch)} technique={technique} />)}</div><div className="stage-nav"><Button disabled={activeStage === 0} onClick={() => selectStage(activeStage - 1)} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Previous stage</Button><Button disabled={activeStage >= plan.stages.length - 1} onClick={() => selectStage(activeStage + 1)}>Next stage <Icon className="button-icon" name="arrow-right" /></Button></div></> : <div className="empty-state"><h3>No techniques in scope</h3><p>Return to Scope and enable at least one kill-chain stage.</p></div>}
         </div>
       </div>
 
@@ -200,6 +205,9 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
         <Button disabled={!plan.stages.length} onClick={onFinish} variant="primary">Finish &amp; export <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
 
+      <Dialog open={Boolean(pendingVariant)} onClose={() => setPendingVariant(null)} title="Change command variant?" description="Existing evidence will be archived with its original command selection. This variant starts a separate evidence record.">
+        <div className="dialog-actions"><Button onClick={() => setPendingVariant(null)}>Cancel</Button><Button onClick={() => { if (pendingVariant) changeVariant(pendingVariant.techniqueId, pendingVariant.commandId); setPendingVariant(null); }} variant="primary">Change command variant</Button></div>
+      </Dialog>
       <Dialog description="Review prerequisites, side effects, telemetry, and rollback in the technique card before copying. AdversaryFlow does not execute this command." onClose={() => setPendingCopy(null)} open={Boolean(pendingCopy)} title={`Copy this ${pendingCopy?.risk ?? ""} risk lab command?`}>
         <pre className="confirm-command">{pendingCopy?.value}</pre>
         <div className="dialog-actions"><Button onClick={() => setPendingCopy(null)} variant="ghost">Cancel</Button><Button onClick={() => { if (pendingCopy) void writeClipboard(pendingCopy.value); setPendingCopy(null); }} variant="primary">Copy command</Button></div>

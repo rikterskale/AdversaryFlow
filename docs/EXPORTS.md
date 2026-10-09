@@ -237,7 +237,7 @@ schemas/adversaryflow-plan-v3.schema.json. Both include:
   cleanup verification, stdout/stderr hashes, receipt digests, evidence-source
   classification, and endpoint/SIEM references.
 
-The 146 bounded synthetic exercises emit digest-protected JSON receipts that
+The 320 bounded synthetic exercises emit digest-protected JSON receipts that
 can be verified and imported from the plan screen. This verifies receipt
 integrity, not independent execution; use endpoint or SIEM references to record
 that stronger corroboration.

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { actor, scope, workflow } from "../test/remediationFixtures";
 import { buildExportBundle } from "../features/export/exportModel";
-import { useWizardStore, workspaceSnapshot } from "../state/wizardStore";
+import { evidenceIdentity, useWizardStore, workspaceSnapshot } from "../state/wizardStore";
 import { App } from "./App";
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -11,7 +11,7 @@ beforeEach(() => {
   useWizardStore.getState().restart();
   useWizardStore.getState().selectActor(actor);
   useWizardStore.getState().updateScope(scope);
-  useWizardStore.getState().ensureEvidenceKey("fixture-key", workflow);
+  useWizardStore.getState().ensureEvidenceKey(evidenceIdentity(actor.stix_id, workflow, scope.commandPlatform), workflow);
   useWizardStore.getState().updateEvidence("T1033", { outcome: "passed", notes: "Keep my evidence" });
   useWizardStore.getState().setStep(3);
   vi.stubGlobal("fetch", vi.fn().mockImplementation(async (path: string) => {
@@ -23,13 +23,61 @@ beforeEach(() => {
     return json({ status: "ready", ready: true, loading: false, phase: "ready", version: "0.5.3", error: null, attack_data: {}, service: {} });
   }));
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 function mount(): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
 }
 
 describe("workspace replacement UX", () => {
+  it("Home exposes saved engagements and imports without clearing evidence or server identity", async () => {
+    useWizardStore.getState().setEngagementRecord("saved-engagement", 2);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Resume Fixture Actor plan" }));
+    await screen.findByRole("heading", { name: "Fixture Actor · G0001" });
+    const before = workspaceSnapshot(useWizardStore.getState());
+    fireEvent.click(screen.getByRole("button", { name: "Return to workspace home" }));
+    expect(screen.getByRole("button", { name: "Browse saved engagements" })).toBeVisible();
+    expect(screen.getByLabelText("Resume JSON plan")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resume Fixture Actor plan" }));
+    expect(workspaceSnapshot(useWizardStore.getState())).toEqual(before);
+  });
+
+  it("a pending service connection does not block resuming the saved workflow", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise<Response>(() => undefined)));
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "Resume Fixture Actor plan" }));
+    expect(await screen.findByRole("heading", { name: "Fixture Actor · G0001" })).toBeVisible();
+    expect(screen.getByLabelText("Evidence note for T1033")).toHaveValue("Keep my evidence");
+  });
+
+  it("a token prompt can be dismissed to recover saved work and reopened to reconnect", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ error: "unauthorized", message: "Token required" }, 401)));
+    mount();
+    await screen.findByRole("dialog", { name: "Connect to this AdversaryFlow service" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with saved work" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume Fixture Actor plan" }));
+    expect(screen.getByLabelText("Evidence note for T1033")).toHaveValue("Keep my evidence");
+    fireEvent.click(screen.getByRole("button", { name: "Connect to service" }));
+    expect(screen.getByRole("dialog", { name: "Connect to this AdversaryFlow service" })).toBeVisible();
+  });
+
+  it("invalid plan imports keep an actionable error after the notification expires", async () => {
+    mount();
+    await screen.findByRole("button", { name: "Resume Fixture Actor plan" });
+    const before = workspaceSnapshot(useWizardStore.getState());
+    const file = Object.assign(new File(["invalid"], "invalid.json"), { text: async () => "invalid" });
+    vi.useFakeTimers();
+    await act(async () => { fireEvent.change(screen.getByLabelText("Resume JSON plan"), { target: { files: [file] } }); });
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not restore this file");
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(document.querySelector(".toast")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Your current workspace is unchanged");
+    expect(workspaceSnapshot(useWizardStore.getState())).toEqual(before);
+    vi.useRealTimers();
+  });
+
   it("F01 reopened Begin prompts; cancel preserves the whole workspace and confirm clears intentionally", async () => {
     mount();
     await waitFor(() => expect(screen.getByRole("button", { name: "Begin emulation plan" })).toBeEnabled());

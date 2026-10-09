@@ -6,8 +6,8 @@ import { evidenceIdentity, useWizardStore } from "./wizardStore";
 const emptyRecords: Record<string, ExecutionEvidence> = {};
 
 export function useWorkspaceEvidence(actor: Actor, workflow: WorkflowResponse): Record<string, ExecutionEvidence> {
-  const platform = useWizardStore((state) => state.scope.commandPlatform);
-  const key = evidenceIdentity(actor.stix_id, workflow, platform);
+  const scope = useWizardStore((state) => state.scope);
+  const key = evidenceIdentity(actor.stix_id, workflow, scope.commandPlatform, scope.commandSelections, scope);
   // Select by identity during render, before effects run, so no export or
   // evidence editor can see records from a different platform/data version.
   const records = useWizardStore((state) => state.evidenceKey === key

@@ -16,6 +16,7 @@ export function PlanPreview({ actor, commandPlatform, dataVersion, preview }: Pl
   const proxyWidth = preview.total ? `${(preview.labProxy / preview.total) * 100}%` : "0%";
   const withheldReasons = [
     { key: "platform", label: `No exact ${titlePlatform(commandPlatform)} test`, count: preview.withheld.platform },
+    { key: "notApplicable", label: "Not applicable to selected OS", count: preview.notApplicable ?? 0 },
     { key: "network", label: "Network permission required", count: preview.withheld.network },
     { key: "admin", label: "Administrator permission required", count: preview.withheld.admin },
     { key: "risk", label: "High-risk permission required", count: preview.withheld.highRisk },

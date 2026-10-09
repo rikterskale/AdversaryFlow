@@ -66,6 +66,13 @@ export interface ActorsResponse {
 export type CommandRisk = "none" | "low" | "medium" | "high";
 
 export interface Command {
+  command_id?: string;
+  environment?: "endpoint" | "cloud" | "container" | "pre_compromise";
+  execution_role?: "endpoint_test" | "planning" | "environment_validation";
+  required_tools?: string[];
+  required_credentials?: string[];
+  availability_status?: "runnable" | "permission_required" | "unsupported" | "not_applicable" | "prerequisites_unverified";
+  availability_reasons?: string[];
   platform: string;
   interpreter?: "cmd" | "powershell" | "bash";
   untrusted?: boolean;

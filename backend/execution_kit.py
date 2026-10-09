@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from . import command_catalog, telemetry
 from .artifact_limits import PLAN_MAX_BYTES, RECEIPT_MAX_BYTES
+from .catalog_execution import select_for_scope
 from .plan_schema import validate_plan_document
 
 MAX_PLAN_STEPS = 4000
@@ -64,6 +65,13 @@ class PlanStep:
     expected_output: str
     expected_telemetry: str
     timeout_seconds: int
+    command_id: str = ""
+    environment: str = "endpoint"
+    execution_role: str = "endpoint_test"
+    required_tools: Tuple[str, ...] = ()
+    required_credentials: Tuple[str, ...] = ()
+    availability_status: str = "runnable"
+    availability_reasons: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -204,6 +212,8 @@ def _unsupported_command(platform: str, message: str, note: str) -> Dict[str, An
         "acknowledgment_required": False,
         "fidelity": "direct",
         "unsupported": True,
+        "availability_status": "unsupported",
+        "availability_reasons": [message],
     }
 
 
@@ -218,13 +228,20 @@ def _apply_scope(command: Dict[str, Any], scope: Mapping[str, Any], platform: st
         restrictions.append("high-risk commands are disabled")
     if restrictions:
         bound["command"] = f"Restricted by scope: {'; '.join(restrictions)}."
-        bound["note"] = "Enable the corresponding safety option in Scope after reviewing the risk."
+        bound["note"] = str(bound.get("note", "")) + " Enable the corresponding safety option in Scope after reviewing the risk."
         bound["unsupported"] = True
         bound["restricted"] = True
+        bound["availability_status"] = "permission_required"
+        bound["availability_reasons"] = restrictions
+        return bound
+    if bound.get("unsupported"):
         return bound
     bound["command"] = kit_exercise_command(bound, platform)
     bound.pop("unsupported", None)
     bound.pop("restricted", None)
+    bound["availability_status"] = "prerequisites_unverified" if bound.get("required_tools") or bound.get("required_credentials") else "runnable"
+    bound["availability_reasons"] = [f"Confirm {tool} is installed on the execution host." for tool in bound.get("required_tools", [])]
+    bound["availability_reasons"] += [f"Confirm access: {credential}." for credential in bound.get("required_credentials", [])]
     return bound
 
 
@@ -266,19 +283,27 @@ def rebind_to_catalog(document: Mapping[str, Any]) -> Dict[str, Any]:
             technique_name = _string(technique.get("name"), "technique.name", maximum=500, required=True)
             result = command_catalog.get_commands(technique_id, technique_name, [tactic])
             source = result["source"]
-            exact = next((item for item in result["commands"] if item.get("platform") == platform), None)
+            selected_id = scope.get("command_selections", {}).get(technique_id) or technique.get("command", {}).get("command_id")
+            exact = select_for_scope(result["commands"], platform, scope, selected_id)
             if curated_only and source == "fallback":
                 exact = None
                 note = "Curated tests only is enabled; this technique has no keyed catalog record."
                 message = f"No curated {platform} test is available for this technique."
             else:
                 note = "Choose another platform or contribute an exact-platform test."
-                message = f"No {platform} test is available for this technique."
+                message = "Selected catalog command is no longer available; rebuild and review the plan." if selected_id and exact is None else f"No {platform} test is available for this technique."
             bound = (
                 _unsupported_command(platform, message, note)
                 if exact is None
                 else _apply_scope(dict(exact), scope, platform)
             )
+            if exact is None and result["commands"]:
+                bound["environment"] = result["commands"][0].get("environment", "endpoint")
+                bound["execution_role"] = result["commands"][0].get("execution_role", "endpoint_test")
+                endpoints = [item.lower() for item in technique.get("platforms", []) if item.lower() in SUPPORTED_PLATFORMS]
+                if not selected_id and endpoints and platform not in endpoints and bound["environment"] == "endpoint":
+                    bound["availability_status"] = "not_applicable"
+                    bound["availability_reasons"] = [f"ATT&CK maps this technique to {', '.join(endpoints)}, not {platform}."]
             if technique.get("supported") is False and not bound.get("unsupported"):
                 bound = _unsupported_command(platform, "Withheld in the reviewed plan.",
                                              "Rebuild and review the plan before enabling this step.")
@@ -449,6 +474,13 @@ def normalize_plan(document: Any, *, require_executable: bool = True) -> Executi
                 expected_output=_string(command.get("expected_output", ""), "command.expected_output"),
                 expected_telemetry=_string(command.get("expected_telemetry", ""), "command.expected_telemetry"),
                 timeout_seconds=timeout,
+                command_id=str(command.get("command_id", "")),
+                environment=str(command.get("environment", "endpoint")),
+                execution_role=str(command.get("execution_role", "endpoint_test")),
+                required_tools=_strings(command.get("required_tools", []), "command.required_tools"),
+                required_credentials=_strings(command.get("required_credentials", []), "command.required_credentials"),
+                availability_status=str(command.get("availability_status", "runnable" if supported else "unsupported")),
+                availability_reasons=_strings(command.get("availability_reasons", []), "command.availability_reasons"),
             ))
 
     if schema_version == "3.0":
@@ -530,6 +562,7 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
     columns = (
         "sequence", "step_id", "tactic", "tactic_title", "technique_id", "technique_name",
         "platform", "interpreter", "supported", "command_source", "fidelity", "risk", "requires_admin", "requires_network",
+        "command_id", "environment", "execution_role", "required_tools", "required_credentials", "availability_status", "availability_reasons",
         "prerequisites", "side_effects", "planned_command", "planned_command_sha256", "cleanup_command",
         "expected_output", "expected_telemetry", "timeout_seconds", "plan_sha256",
     )
@@ -545,6 +578,13 @@ def render_plan_csv(plan: ExecutionPlan) -> bytes:
             "technique_name": step.technique_name,
             "platform": step.platform,
             "interpreter": step.interpreter,
+            "command_id": step.command_id,
+            "environment": step.environment,
+            "execution_role": step.execution_role,
+            "required_tools": " | ".join(step.required_tools),
+            "required_credentials": " | ".join(step.required_credentials),
+            "availability_status": step.availability_status,
+            "availability_reasons": " | ".join(step.availability_reasons),
             "supported": str(step.supported).lower(),
             "command_source": step.command_source,
             "fidelity": step.fidelity,
@@ -588,6 +628,7 @@ def render_bash(plan: ExecutionPlan, csv_name: str, csv_sha256: str) -> str:
         _bash_array("REQUIRES_ADMIN", (_bool_text(step.requires_admin) for step in plan.steps)),
         _bash_array("REQUIRES_NETWORK", (_bool_text(step.requires_network) for step in plan.steps)),
         _bash_array("PREREQUISITES", (" | ".join(step.prerequisites) for step in plan.steps)),
+        _bash_array("EXECUTION_CONTEXT", (f"{step.environment} / {step.execution_role}; catalog command {step.command_id}; tools: {', '.join(step.required_tools) or 'none declared'}; access: {'; '.join(step.required_credentials) or 'none declared'}" for step in plan.steps)),
         _bash_array("EFFECTS", (" | ".join(step.side_effects) for step in plan.steps)),
         _bash_array("COMMANDS", (step.planned_command for step in plan.steps)),
         _bash_array("CLEANUPS", (step.cleanup_command for step in plan.steps)),
@@ -775,6 +816,7 @@ for index in "${!STEP_IDS[@]}"; do
   original_sha=$(sha_file "$original_file")
 
   heading "Step $seq of ${#STEP_IDS[@]} — $technique_id $technique_name"
+  printf 'Execution context: %s\n' "$(decode_b64 "${EXECUTION_CONTEXT[$index]}")"
   printf 'Stage: %s\nRisk: %s | Admin: %s | Network: %s\nEffects: %s\nPrerequisites: %s\nExpected output: %s\nExpected telemetry: %s\n\nPlanned command:\n' \
     "$tactic" "$risk" "$requires_admin" "$requires_network" "${effects:-not classified}" \
     "${prerequisites:-none listed}" "${expected_output:-not specified}" "${expected_telemetry:-not specified}"
@@ -923,6 +965,7 @@ def render_powershell(plan: ExecutionPlan, csv_name: str, csv_sha256: str) -> st
             "ExpectedOutput": step.expected_output, "ExpectedTelemetry": step.expected_telemetry,
             "Timeout": str(step.timeout_seconds),
             "Interpreter": step.interpreter,
+            "ExecutionContext": f"{step.environment} / {step.execution_role}; catalog command {step.command_id}; tools: {', '.join(step.required_tools) or 'none declared'}; access: {'; '.join(step.required_credentials) or 'none declared'}",
         }
         fields = "; ".join(f"{key}B64={_ps_quote(_b64(value))}" for key, value in values.items())
         records.append(f"    [pscustomobject]@{{ {fields} }}")
@@ -1094,6 +1137,7 @@ try {
         Write-Host "Risk: $($step.Risk) | Admin: $($step.RequiresAdmin) | Network: $($step.RequiresNetwork)"
         Write-Host "Interpreter: $($step.Interpreter)"
         Write-Host "Effects: $($step.Effects)"
+        Write-Host "Execution context: $($step.ExecutionContext)"
         Write-Host "Prerequisites: $($step.Prerequisites)"
         Write-Host "Expected output: $($step.ExpectedOutput)"
         Write-Host "Expected telemetry: $($step.ExpectedTelemetry)"

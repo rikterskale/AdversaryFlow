@@ -1,4 +1,5 @@
 import { isRecord, parseWorkflow } from "../api/guards";
+import { validCommandSelections } from "../api/executionMetadata";
 import type { ProcedureEvidence, WorkflowResponse } from "../api/contract";
 import { validateActor, validateCommand, validateExecution, validateImportedPlan, verifyImportedPlanReceipts, type PlanExport } from "../features/export/planContract";
 import { validDateTime, validReceiptFields, verifyReceiptDigest } from "../features/review/evidence";
@@ -25,9 +26,10 @@ function unsafeKeys(value: unknown, depth = 0): void {
 }
 
 function scope(value: unknown): asserts value is ScopeSettings {
-  const keys = ["commandPlatform", "tactics", "includePre", "curatedOnly", "allowNetwork", "allowAdmin", "allowHighRisk", "operator", "target"];
+  const keys = ["commandPlatform", "tactics", "includePre", "curatedOnly", "allowNetwork", "allowAdmin", "allowHighRisk", "operator", "target", "commandSelections"];
   if (!isRecord(value) || Object.keys(value).some((key) => !keys.includes(key))
     || !["windows", "linux", "macos"].includes(String(value.commandPlatform))
+    || (value.commandSelections !== undefined && !validCommandSelections(value.commandSelections))
     || !Array.isArray(value.tactics) || !value.tactics.every((item) => typeof item === "string")
     || !["includePre", "curatedOnly", "allowNetwork", "allowAdmin", "allowHighRisk"].every((key) => typeof value[key] === "boolean")
     || typeof value.operator !== "string" || value.operator.length > 120

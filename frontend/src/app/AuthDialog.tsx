@@ -7,9 +7,10 @@ interface AuthDialogProps {
   open: boolean;
   message: string;
   onConnect: (token: string) => void;
+  onClose: () => void;
 }
 
-export function AuthDialog({ open, message, onConnect }: AuthDialogProps): React.JSX.Element | null {
+export function AuthDialog({ open, message, onConnect, onClose }: AuthDialogProps): React.JSX.Element | null {
   const [token, setToken] = useState("");
   const [validation, setValidation] = useState("");
 
@@ -29,6 +30,7 @@ export function AuthDialog({ open, message, onConnect }: AuthDialogProps): React
     <Dialog
       description="This service requires its startup API token. The token stays in this browser tab."
       open={open}
+      onClose={onClose}
       title="Connect to this AdversaryFlow service"
     >
       <form className="auth-form" onSubmit={submit}>
@@ -36,6 +38,7 @@ export function AuthDialog({ open, message, onConnect }: AuthDialogProps): React
         <label htmlFor="auth-token"><span>API token</span><input autoComplete="off" autoFocus id="auth-token" onChange={(event) => setToken(event.target.value)} spellCheck={false} type="password" value={token} /></label>
         {validation || message ? <p className="field-error" role="alert">{validation || message}</p> : null}
         <Button type="submit" variant="primary">Connect securely</Button>
+        <Button onClick={onClose} variant="ghost">Continue with saved work</Button>
       </form>
     </Dialog>
   );

@@ -133,6 +133,13 @@ class ReportTechnique:
     sigma_references: Tuple[SigmaReference, ...]
     detection_bindings: Tuple[DetectionBinding, ...]
     execution: ReportExecution
+    command_id: str = ""
+    environment: str = "endpoint"
+    execution_role: str = "endpoint_test"
+    required_tools: Tuple[str, ...] = ()
+    required_credentials: Tuple[str, ...] = ()
+    availability_status: str = "runnable"
+    availability_reasons: Tuple[str, ...] = ()
 
     @property
     def outcome(self) -> str:
@@ -518,6 +525,13 @@ def build_report(document: Mapping[str, Any]) -> EngagementReport:
                 ),
                 detection_bindings=detection_bindings,
                 execution=_evidence(technique),
+                command_id=step.command_id,
+                environment=step.environment,
+                execution_role=step.execution_role,
+                required_tools=step.required_tools,
+                required_credentials=step.required_credentials,
+                availability_status=step.availability_status,
+                availability_reasons=step.availability_reasons,
             ))
     techniques = tuple(report_rows)
     if not techniques:
@@ -697,6 +711,7 @@ def render_html(report: EngagementReport) -> bytes:
               <div class="badges"><span class="badge fidelity-{_h(item.fidelity)}">{_h(_label(item.fidelity))} fidelity</span><span class="badge outcome-{_h(item.outcome)}">{_h(_label(item.outcome))}</span><span class="badge detection-{_h(item.detection_result)}">{_h(_label(item.detection_result))}</span></div>
             </div>
             <div class="technique-grid">
+              <section><h4>Execution context</h4><p>{_h(item.environment)} / {_h(item.execution_role)}</p><p>Tools: {_h(', '.join(item.required_tools) or 'None declared')}</p><p>Required access: {_h('; '.join(item.required_credentials) or 'None declared')}</p><p>Availability: {_h(item.availability_status)} · {_h('; '.join(item.availability_reasons))}</p><small>Catalog command: {_h(item.command_id or 'Legacy record')}</small></section>
               <section><h4>Expected telemetry</h4><p>{_h(telemetry)}</p><small>ATT&amp;CK data sources: {_h(sources)}</small></section>
               <section><h4>Telemetry acceptance</h4>{_acceptance_html(item.telemetry_acceptance)}</section>
               <section><h4>ATT&amp;CK detection guidance</h4><p>{_h(guidance)}</p><small>Sigma links: {sigma}</small></section>
@@ -948,6 +963,9 @@ def _layout_pdf(report: EngagementReport) -> List[List[str | _PdfText]]:
         block_lines = (
             title_lines
             + status_lines
+            + _wrap_pdf(f"Execution context: {item.environment} / {item.execution_role}; availability: {item.availability_status}", 8.5, layout.right - layout.left - 12)
+            + _wrap_pdf(f"Tools: {', '.join(item.required_tools) or 'None declared'}; access: {'; '.join(item.required_credentials) or 'None declared'}", 8.5, layout.right - layout.left - 12)
+            + _wrap_pdf(f"Catalog command: {item.command_id or 'Legacy record'}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Expected telemetry: {expected}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"ATT&CK data sources: {sources}", 8.5, layout.right - layout.left - 12)
             + _wrap_pdf(f"Detection mapping: {guidance}", 8.5, layout.right - layout.left - 12)

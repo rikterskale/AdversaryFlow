@@ -187,10 +187,10 @@ test("J18 — switching platform never substitutes another OS", async ({ page })
   await page.getByRole("button", { name: "Linux", exact: true }).click();
   await expect(page.locator("#scopeSummary")).toContainText("Runnable on Linux");
   await expect(page.locator("#actionbarCtx")).toHaveText("0 runnable · 1 unsupported across 1 stages");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   await page.locator(".stepper__item", { hasText: "Emulation plan" }).click();
-  await expect(page.locator("pre.cmd__code")).toHaveText("No Linux test is available for this technique.");
+  await expect(page.locator("pre.cmd__code")).toHaveText("Not applicable to Linux: ATT&CK maps this technique to windows.");
   await expect(page.getByRole("button", { name: /Copy command/ })).toBeDisabled();
 });
 
@@ -206,7 +206,7 @@ test("J19 — clearing every stage empties the plan", async ({ page }) => {
 test("J20 — a command above the chosen risk scope is withheld", async ({ page }) => {
   await toScope(page, { commands: [highRisk] });
   await expect(page.locator("#actionbarCtx")).toHaveText("0 runnable · 1 unsupported across 1 stages");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   // Reach the plan with the risk allowed, then withdraw the allowance.
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -513,14 +513,15 @@ test("J38 — a failed setup is reported with a retry", async ({ page }) => {
   await page.route("**/api/actors?*", r => r.fulfill({ json: { actors: ACTORS, domains: ["enterprise"], data_version: "enterprise:bundle--uat", version: "0.3.0" } }));
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByText("ATT&CK cache is unreadable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeDisabled();
   await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
   await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
 
   // J39 — the same session recovers once the fault clears.
   fail = false;
   await page.getByRole("button", { name: "Retry setup" }).click();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByRole("button", { name: /UAT Actor/ })).toBeVisible();
   await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors? · Enterprise$/);
 });

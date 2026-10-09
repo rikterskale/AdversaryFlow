@@ -13,6 +13,7 @@ import type {
   IntelligenceImportResponse,
   ProcedureCandidate,
 } from "./contract";
+import { validExecutionMetadata } from "./executionMetadata";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,7 +68,7 @@ export function parseActors(value: unknown): ActorsResponse {
 }
 
 function isCommand(value: unknown): value is Command {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value) || !validExecutionMetadata(value)) return false;
   return (
     typeof value.platform === "string" &&
     (value.interpreter === undefined || ["cmd", "powershell", "bash"].includes(String(value.interpreter))) &&

@@ -12,6 +12,8 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Mapping, Tuple
 
+from .catalog_execution import identify_command
+
 FIDELITY_VALUES = {"direct", "bounded_synthetic", "lab_proxy"}
 SAFETY_CLASSES = {"none", "low", "medium", "high"}
 
@@ -36,9 +38,17 @@ class Ability:
     content_source: str
     review_status: str
     content_sha256: str
+    command_id: str = ""
+    environment: str = "endpoint"
+    execution_role: str = "endpoint_test"
+    required_tools: Tuple[str, ...] = ()
+    required_credentials: Tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        if not self.command_id:
+            result.pop("command_id")
+        return result
 
 
 def catalog_ability(technique_id: str, command: Mapping[str, Any]) -> Ability:
@@ -68,7 +78,12 @@ def catalog_ability(technique_id: str, command: Mapping[str, Any]) -> Ability:
     network_targets = tuple(sorted({str(item) for item in targets}))
     side_effect_values = tuple(sorted({str(item) for item in side_effects}))
     timeout_seconds = int(command.get("timeout_seconds", 60))
-    normalized = {
+    normalized: Dict[str, Any] = {
+        "command_id": str(command.get("command_id") or identify_command(dict(command))["command_id"]),
+        "environment": str(command.get("environment", "endpoint")),
+        "execution_role": str(command.get("execution_role", "endpoint_test")),
+        "required_tools": tuple(command.get("required_tools", [])),
+        "required_credentials": tuple(command.get("required_credentials", [])),
         "technique_id": technique_id,
         "platform": platform,
         "executor": executor,
@@ -107,4 +122,9 @@ def catalog_ability(technique_id: str, command: Mapping[str, Any]) -> Ability:
         content_source="legacy_python_catalog",
         review_status="unassessed",
         content_sha256=digest,
+        command_id=normalized["command_id"],
+        environment=normalized["environment"],
+        execution_role=normalized["execution_role"],
+        required_tools=normalized["required_tools"],
+        required_credentials=normalized["required_credentials"],
     )

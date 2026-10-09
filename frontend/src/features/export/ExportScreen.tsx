@@ -346,7 +346,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       <div className="export-layout">
         <div className="export-primary">
           <div className="export-section-heading"><div><p className="eyebrow">Operator handoff</p><h2>Take the plan to the disposable lab</h2></div><span className="export-safety"><Icon name="shield" /> Catalog rebound</span></div>
-          <button className={`kit-card ${kitLoading ? "is-loading" : ""}`} disabled={!exportReady || kitLoading || !csrfToken} onClick={() => { void exportKit(); }} type="button">
+          {bundle.preview.runnable === 0 ? <p className="callout" role="status">This plan has no runnable commands under the current platform and guardrails. Save it or generate a report to document coverage gaps. Return to scope if you need an execution kit.</p> : null}
+          <button className={`kit-card ${kitLoading ? "is-loading" : ""}`} disabled={!exportReady || bundle.preview.runnable === 0 || kitLoading || !csrfToken} onClick={() => { void exportKit(); }} type="button">
             <span className="kit-card__icon"><Icon name="package" /></span>
             <span className="kit-card__copy">
               <span className="kit-card__eyebrow">Recommended · offline handoff</span>

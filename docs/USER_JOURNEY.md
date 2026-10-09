@@ -1,9 +1,9 @@
 # AdversaryFlow — User Journey
 
-> Every screen, command, message, and status code in this document was read out
-> of the source and observed running. Where a number appears (technique counts,
-> limits, timeouts) it was measured against the checked-in code or the live
-> ATT&CK bundle, not estimated.
+> This journey describes source-backed workflows. Catalog and actor counts
+> refer to the audited snapshot described below; the live ATT&CK feed can
+> change them. Validation coverage and platform limits belong to the associated
+> test or review report, rather than a guarantee for every environment.
 
 If you are installing or running AdversaryFlow for the first time, use
 [Getting started](GETTING_STARTED.md). This page is the observed journey map
@@ -26,12 +26,12 @@ harmful attack or its real-world impact.
 
 It is built for people who need to answer *"would we actually see this
 adversary?"* and want an answer grounded in evidence rather than a coverage
-spreadsheet. The audited catalog has **540 technique keys and 856 command
+spreadsheet. The audited catalog has **540 technique keys and 1,576 command
 records**. The audited enterprise dataset mapped 536 unique techniques across
 232 groups and campaigns, and those mapped techniques resolve to catalog
 records rather than the runtime fallback. This is coverage of catalog records,
-not proof of full attack-behaviour fidelity: **146 catalog techniques are
-explicitly marked bounded synthetic exercises** and mapped to 25
+not proof of full attack-behaviour fidelity: **320 catalog techniques are
+explicitly marked bounded synthetic exercises** and mapped to 31
 technique-relevant scenario families. Each emits a self-reported JSON receipt
 with a unique run ID, timestamps, scenario events, exit code, cleanup result,
 and SHA-256 digest. Receipt integrity proves what the runner reported; endpoint
@@ -107,19 +107,20 @@ installation, `adversaryflow --version` prints `AdversaryFlow 0.5.3`.
 ./run.sh
 ```
 
-`run.sh` runs `install.sh` first if `.venv/bin/adversaryflow` is missing
-(printing `[AdversaryFlow] first-run installation…`), then starts the service
-with `--open`.
+`run.sh` runs `install.sh` if the local environment is missing or fails the
+readiness check (printing `[AdversaryFlow] installing or repairing the local
+environment…`), then starts the service with `--open`.
 
 **Observable result:**
 
 ```
-[AdversaryFlow] starting; the browser will open when ATT&CK data is ready
+[AdversaryFlow] starting; the browser will open when the local service is ready
 AdversaryFlow 0.5.3: http://127.0.0.1:5000
 ```
 
 The HTTP service accepts requests immediately; ATT&CK data loads in a
-background thread. The browser opens once the data is ready or has failed.
+background thread. The browser opens once HTTP is serving, so the welcome
+screen can show setup status while saved-plan recovery remains available.
 
 ### Step 3 — First-run ATT&CK data preparation
 
@@ -128,14 +129,15 @@ polls `GET /api/bootstrap`. On a cold cache the first `GET` returns **503**, the
 page issues `POST /api/bootstrap` with the `X-AdversaryFlow-CSRF` header, and
 the background worker downloads the enterprise bundle.
 
-**Observable result:** a full-screen loader reads
+**Observable result:** setup status appears on the welcome screen. Saved-plan
+resume and JSON import remain available while preparation is pending.
+
+The status reads
 
 > **Preparing MITRE ATT&CK data…**
-> The first run downloads and validates the enterprise bundle. Downloaded
-> *N.N* MB of *N.N* MB. You can leave this tab open.
+> You can resume a saved plan or import JSON while the service prepares.
 
-The byte values are calculated from live cache metadata and only appear once
-download progress is available. The download is capped
+The download is capped
 at 128 MiB, checksummed, validated as a STIX bundle, and atomically promoted
 before it is used. Subsequent launches reuse the disk cache for 7 days.
 
@@ -187,6 +189,11 @@ target, and a curated/fallback split bar. The footer reads
 `<runnable> runnable · <unsupported> unsupported across <stages> stages`.
 
 ### Step 7 — Build and walk the plan
+
+**Build plan** remains available when scoped techniques have no runnable
+commands. Users can review and report those coverage gaps without enabling
+extra permissions. An empty scope still blocks progress, and unavailable
+commands and execution kits remain disabled.
 
 Click **Build plan** → the *Emulation plan* screen, headed
 `APT29 · G0016` with the subtitle *"development-lab emulation plan · commands
@@ -282,6 +289,10 @@ ready"*. The HTML, PDF, and JSON download controls then become available.
 
 ### Step 11 — Resume later
 
+The header's **Home** control returns to saved engagements and intelligence
+imports without resetting scope, evidence, recovery history, or the current
+server engagement identity. **Resume <actor> plan** returns to review.
+
 From the welcome screen choose **Resume JSON plan** and pick a previously
 exported JSON file.
 
@@ -292,7 +303,7 @@ commands and data version before use"*. Every imported command is marked
 unverified and requires acknowledgement before it can be copied. The plan's
 saved high-risk, administrator, and network permissions remain unchanged.
 
-The importer accepts only a bounded schema 2.0 document: 1–32 non-empty
+The importer accepts bounded schema 2.0 and 3.0 plans: 1–32 non-empty
 stages, at most 2,000 techniques in any one stage, at most 4,000 technique
 records across the plan, ATT&CK-formatted technique IDs, and commands no longer
 than 10,000 characters. Runbook export treats all imported text as data: line
@@ -474,7 +485,7 @@ table directly.
 | J51 | Reject an unknown CLI domain | `adversaryflow cache-refresh --domains bogus` | Refuses | Exit code 2 and stdout contains `Unknown ATT&CK domain(s): bogus` |
 | J52 | Operate offline | `adversaryflow --offline` with a seeded cache | Serves without network access | Actors load and no upstream request is made |
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
-| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 856 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
+| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 1,576 command records, and exactly 320 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
 | J55 | Accessibility | Walk forward and backward through the welcome, actor, scope, review, and export screens with the keyboard | Focus moves to each new screen heading and every step has no serious accessibility violations | The active element is the destination `h1` after forward, back, reached-step, resume/import, and restart transitions; axe-core reports zero `serious` or `critical` violations on every wizard screen |
 | J56 | Bound imported plans | Resume documents at and beyond each stage, per-stage technique, aggregate technique, command-length, and ATT&CK-ID boundary | Accepts valid boundary values and rejects values beyond them without changing screens | 1 and 32 non-empty stages, 2,000 techniques in a stage, 4,000 aggregate techniques, and a 10,000-character command are accepted; zero or 33 stages, an empty stage, 2,001 techniques in one stage, 4,001 in aggregate, a 10,001-character command, or a malformed technique ID produces the documented toast and leaves the welcome screen usable |
 | J57 | Enforce exact origins | Send a mutating request with a valid CSRF token and vary only `Origin` | Compares scheme, host, and effective port rather than hostname text alone | Foreign host, `null`, wrong scheme, and wrong port return HTTP 403 with `error = forbidden`; a matching `http://[::1]:5000` origin is accepted when the request host is `[::1]:5000` |

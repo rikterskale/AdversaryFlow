@@ -7,6 +7,19 @@ import { IntelligenceImportPanel } from "./IntelligenceImportPanel";
 
 beforeEach(() => useWizardStore.getState().restart());
 describe("intelligence decisions", () => {
+  it("keeps comparison failures visible and permits a corrected retry", async () => {
+    const onImport = vi.fn().mockRejectedValue(new Error("CSV needs a technique_id column"));
+    render(<IntelligenceImportPanel actors={[actor]} domains={["enterprise"]} csrfToken="fixture" onImport={onImport} onNotice={vi.fn()} onAttachProcedures={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Import and compare" }));
+    fireEvent.change(screen.getByLabelText("Structured source"), { target: { files: [new File(["invalid"], "fixture.csv")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Compare mappings" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("CSV needs a technique_id column");
+    expect(screen.getByRole("button", { name: "Compare mappings" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Source URL (optional)"), { target: { value: "http://example.org/report" } });
+    fireEvent.click(screen.getByRole("button", { name: "Compare mappings" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("complete HTTPS address");
+    expect(onImport).toHaveBeenCalledOnce();
+  });
   it("F08 Accept -> Attach -> Reject revokes export evidence; reimport and all-rejected remain synchronized", async () => {
     const { actor_stix_id: _actorId, mapping_data_version: _version, ...base } = procedure;
     const candidate: ProcedureCandidate = { ...base, review_status: "needs_review", accepted_by: "", accepted_at: "", reviewed_by: "", reviewed_at: "",

@@ -19,6 +19,7 @@ import {
   type ExecutionOutcome,
 } from "./evidence";
 import { titleMetadataValue, TouchPreview } from "./TouchPreview";
+import { TelemetryAcceptance } from "./TelemetryAcceptance";
 
 interface TechniqueCardProps {
   technique: ScopedTechnique;
@@ -29,6 +30,7 @@ interface TechniqueCardProps {
   onUpdate: (patch: Partial<ExecutionEvidence>) => void;
   onCopy: (value: string, kind: "command" | "cleanup") => void;
   onNotice: (message: string) => void;
+  onSelectCommand?: (commandId: string) => void;
 }
 
 function cleanText(value: string): string {
@@ -46,13 +48,13 @@ function safeUrl(value: string | null | undefined): string | null {
 }
 
 function fidelityLabel(technique: ScopedTechnique): { className: string; label: string } {
-  if (technique.selectedCommand.unsupported) return { className: "unsupported", label: "unsupported" };
+  if (technique.selectedCommand.unsupported) return { className: "unsupported", label: technique.selectedCommand.availability_status?.replaceAll("_", " ") ?? "unsupported" };
   if (technique.selectedCommand.fidelity === "bounded_synthetic") return { className: "bounded", label: "bounded synthetic" };
   if (technique.selectedCommand.fidelity === "lab_proxy") return { className: "proxy", label: "lab proxy" };
   return { className: "direct", label: "direct" };
 }
 
-export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice }: TechniqueCardProps): React.JSX.Element {
+export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice, onSelectCommand }: TechniqueCardProps): React.JSX.Element {
   const [receipt, setReceipt] = useState("");
   const [telemetryText, setTelemetryText] = useState(() => evidence?.telemetry_refs_draft ?? (evidence?.telemetry_refs ?? []).join("\n"));
   const [stdoutHash, setStdoutHash] = useState(evidence?.stdout_sha256 ?? "");
@@ -68,6 +70,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
     });
   }, [telemetryValue]);
   const command = technique.selectedCommand;
+  const variants = technique.commands.filter((item) => item.platform === command.platform && item.command_id);
   const unsupported = Boolean(command.unsupported);
   const marked = isMarkedRun(evidence);
   const fidelity = fidelityLabel(technique);
@@ -118,6 +121,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
       </header>
 
       <TouchPreview command={command} techniqueId={technique.attack_id} />
+      {onSelectCommand && (variants.length > 1 || variants.length > 0 && !command.command_id) ? <label className="callout command-variant" onClick={(event) => event.stopPropagation()}>Command variant<select aria-label={`Command variant for ${technique.attack_id}`} value={command.command_id ?? ""} onChange={(event) => onSelectCommand(event.target.value)}>{!command.command_id ? <option value="" disabled>Choose a current command</option> : null}{variants.map((item, index) => <option key={item.command_id} value={item.command_id}>{index + 1}. {item.note} ({item.risk} risk)</option>)}</select></label> : null}
 
       <div className={`command ${unsupported ? "cmd--unsupported" : ""}`}>
         <div className="cmd__head"><span className="cmd__plat">{command.platform}</span><Button className="copybtn" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onCopy(command.command, "command"); }}><Icon className="button-icon" name="copy" /> Copy command</Button></div>
@@ -164,6 +168,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
         <details className="evidenceproof" onClick={(event) => event.stopPropagation()}>
           <summary>Execution proof {evidence?.receipt_verified ? <span className="proofbadge">receipt digest verified (self-reported)</span> : null}</summary>
           <p>Correlate run IDs and timestamps with endpoint or SIEM telemetry for independent proof.</p>
+          <TelemetryAcceptance value={command.telemetry_acceptance} techniqueId={technique.attack_id} />
           <div className="evidenceproof__grid">
             <label>Run ID<input maxLength={128} onChange={(event) => onUpdate({ run_id: event.target.value || undefined })} value={evidence?.run_id ?? ""} /></label>
             <label>Exit code<input max={65535} min={-255} onChange={(event) => onUpdate({ exit_code: event.target.value ? Number(event.target.value) : undefined })} type="number" value={evidence?.exit_code ?? ""} /></label>

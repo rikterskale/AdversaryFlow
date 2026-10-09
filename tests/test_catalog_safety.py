@@ -68,8 +68,14 @@ class CatalogSafetyTests(unittest.TestCase):
     def test_network_classification_matches_known_markers(self):
         markers = ("http://", "https://", "nslookup", "resolve-dnsname", "test-netconnection")
         for technique_id, command in self.commands():
-            if any(marker in command["command"].lower() for marker in markers):
-                with self.subTest(technique_id=technique_id):
+            text = command["command"].lower()
+            if not any(marker in text for marker in markers):
+                continue
+            with self.subTest(technique_id=technique_id):
+                if "127.0.0.1" in text or "localhost" in text:
+                    self.assertFalse(command["requires_network"])
+                    self.assertIn("loopback_network_activity", command["side_effects"])
+                else:
                     self.assertTrue(command["requires_network"])
 
     def test_mutating_high_risk_commands_are_acknowledged(self):

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Actor, WorkflowResponse } from "../api/contract";
+import { defaultScope } from "../features/scope/scopeModel";
 import { evidenceIdentity, useWizardStore } from "./wizardStore";
 
 const actor: Actor = {
@@ -16,6 +17,34 @@ const actor: Actor = {
 describe("wizardStore", () => {
   beforeEach(() => {
     useWizardStore.getState().restart();
+  });
+
+  it("archives evidence when the chosen command changes and restores the original variant", () => {
+    const base = { platform: "windows", command: "whoami", note: "Identity", cleanup: "", risk: "low" as const,
+      requires_admin: false, requires_network: false, network_targets: [], side_effects: [], prerequisites: [],
+      expected_telemetry: "Process", expected_output: "Identity", timeout_seconds: 60, rollback: "",
+      cleanup_required: false, acknowledgment_required: false, command_id: "a".repeat(64) };
+    const workflow: WorkflowResponse = { actor: {}, summary: {}, kill_chain: [], metadata: { domains: ["enterprise"], data_version: "same", version: "0.5.3" },
+      stages: [{ tactic: "discovery", title: "Discovery", techniques: [{ attack_id: "T1033", name: "Identity", command_source: "curated",
+        commands: [base, { ...base, command: "hostname", command_id: "b".repeat(64) }] }] }] };
+    const store = useWizardStore.getState();
+    store.selectActor(actor);
+    store.updateScope({ commandPlatform: "windows" });
+    const key = evidenceIdentity(actor.stix_id, workflow, "windows", undefined, useWizardStore.getState().scope);
+    store.ensureEvidenceKey(key, workflow);
+    store.updateEvidence("T1033", { outcome: "passed", notes: "Original command" });
+    store.updateScope({ commandSelections: { T1033: "b".repeat(64) } });
+    expect(useWizardStore.getState().records).toEqual({});
+    expect(useWizardStore.getState().evidenceArchive[key]?.records.T1033?.notes).toBe("Original command");
+    store.updateScope({ commandSelections: {} });
+    expect(useWizardStore.getState().records.T1033?.notes).toBe("Original command");
+    const revised = structuredClone(workflow);
+    revised.stages[0]!.techniques[0]!.commands[0]!.command_id = "c".repeat(64);
+    expect(evidenceIdentity(actor.stix_id, revised, "windows")).not.toBe(key);
+    workflow.stages[0]!.techniques[0]!.commands[0]!.requires_network = true;
+    const scope = { ...defaultScope(), commandPlatform: "windows" as const };
+    expect(evidenceIdentity(actor.stix_id, workflow, "windows", undefined, scope))
+      .not.toBe(evidenceIdentity(actor.stix_id, workflow, "windows", undefined, { ...scope, allowNetwork: true }));
   });
 
   it("partitions evidence before leaving Scope and restores it when returning to a platform", () => {

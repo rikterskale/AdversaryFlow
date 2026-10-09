@@ -47,6 +47,36 @@ class CommandRecordTests(unittest.TestCase):
         record = command_record("linux", "true", "Runs nslookup against the lab resolver.")
         self.assertTrue(record["requires_network"])
 
+    def test_a_loopback_only_command_is_exempt_from_the_network_guardrail(self):
+        record = command_record("windows", "powershell -Command \"Test-NetConnection 127.0.0.1 -Port 9\"")
+        self.assertFalse(record["requires_network"])
+        self.assertIn("loopback_network_activity", record["side_effects"])
+        self.assertNotIn("network_activity", record["side_effects"])
+        self.assertTrue(record["acknowledgment_required"])
+
+    def test_a_localhost_dns_lookup_is_loopback_only(self):
+        record = command_record("linux", "nslookup localhost")
+        self.assertFalse(record["requires_network"])
+        self.assertIn("loopback_network_activity", record["side_effects"])
+
+    def test_a_loopback_ping_is_local_but_a_public_ping_is_not(self):
+        self.assertFalse(command_record("windows", "ping -n 1 127.0.0.1")["requires_network"])
+        self.assertTrue(command_record("windows", "ping 8.8.8.8")["requires_network"])
+
+    def test_a_public_dns_lookup_still_requires_network(self):
+        self.assertTrue(command_record("linux", "nslookup example.com")["requires_network"])
+
+    def test_prose_substrings_do_not_trigger_network_classification(self):
+        records = (
+            command_record("windows", "tasklist | findstr lsass",
+                           "Locates lsass without dumping it — no memory is read."),
+            command_record("windows", "sc.exe query wuauserv",
+                           "Queries a service without stopping it."),
+        )
+        for record in records:
+            with self.subTest(command=record["command"]):
+                self.assertFalse(record["requires_network"])
+
     def test_a_state_changing_command_is_medium_risk(self):
         record = command_record("windows", "reg add HKCU\\Software\\AdversaryFlowLab /v Marker /d 1 /f")
         self.assertEqual(record["risk"], "medium")

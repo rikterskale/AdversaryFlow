@@ -101,7 +101,7 @@ def _normalize_ability(raw: Any, *, require_identity: bool) -> Dict[str, Any]:
         "fidelity", "safety_class", "requires_admin", "requires_network", "network_targets", "side_effects",
         "timeout_seconds", "content_source", "review_status",
     }
-    optional = {"ability_id", "content_sha256", "procedure_candidate_ids"}
+    optional = {"ability_id", "content_sha256", "procedure_candidate_ids", "command_id", "environment", "execution_role", "required_tools", "required_credentials"}
     if set(raw) - fields - optional or fields - set(raw):
         raise ContentPackError("Ability fields do not match the versioned internal ability contract")
     if not isinstance(raw["technique_id"], str) or not TECHNIQUE_PATTERN.fullmatch(raw["technique_id"]):
@@ -138,6 +138,23 @@ def _normalize_ability(raw: Any, *, require_identity: bool) -> Dict[str, Any]:
         raise ContentPackError("Ability procedure_candidate_ids is invalid")
 
     normalized = {key: raw[key] for key in fields}
+    metadata_enums = {"environment": {"endpoint", "cloud", "container", "pre_compromise"},
+                      "execution_role": {"endpoint_test", "planning", "environment_validation"}}
+    for key, allowed in metadata_enums.items():
+        if key in raw:
+            if not isinstance(raw[key], str) or raw[key] not in allowed:
+                raise ContentPackError(f"Ability {key} is invalid")
+            normalized[key] = raw[key]
+    if "command_id" in raw:
+        if not isinstance(raw["command_id"], str) or not re.fullmatch(r"[a-f0-9]{64}", raw["command_id"]):
+            raise ContentPackError("Ability command_id is invalid")
+        normalized["command_id"] = raw["command_id"]
+    for key in ("required_tools", "required_credentials"):
+        if key in raw:
+            values = raw[key]
+            if not isinstance(values, (list, tuple)) or len(values) > 100 or any(not isinstance(item, str) or not item or len(item) > 2000 for item in values) or len(values) != len(set(values)):
+                raise ContentPackError(f"Ability {key} is invalid")
+            normalized[key] = sorted(values)
     normalized["requirements"] = sorted(raw["requirements"])
     normalized["network_targets"] = sorted(raw["network_targets"])
     normalized["side_effects"] = sorted(raw["side_effects"])

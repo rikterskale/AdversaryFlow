@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, AUTH_REQUIRED_EVENT, getActors, getHealth, getSession, getWorkflow, prepareService, previewIntelligenceImport, refreshAttackData, setApiToken } from "../api/client";
-import type { Actor, AttackDomain, ProcedureEvidence, SessionResponse } from "../api/contract";
+import type { Actor, AttackDomain, SessionResponse } from "../api/contract";
 import { Button } from "../components/Button";
 import { Dialog } from "../components/Dialog";
 import { EvidenceSnapshots } from "../components/EvidenceSnapshots";
@@ -20,7 +20,7 @@ import { SavedEngagements, type SavedRevision } from "../features/welcome/SavedE
 import { AppShell } from "./AppShell";
 import { AuthDialog } from "./AuthDialog";
 
-type StartupPhase = "connecting" | "preparing" | "ready" | "failed";
+type StartupPhase = "connecting" | "preparing" | "ready" | "failed" | "authentication";
 type PendingPlanReset =
   | { kind: "actor"; actor: Actor }
   | { kind: "domains"; domains: AttackDomain[] };
@@ -49,6 +49,7 @@ export function App(): React.JSX.Element {
   const [startupError, setStartupError] = useState("");
   const [startupAttempt, setStartupAttempt] = useState(0);
   const [authOpen, setAuthOpen] = useState(false);
+  const [connectionRequired, setConnectionRequired] = useState(false);
   const [authAttempted, setAuthAttempted] = useState(false);
   const [notice, setNotice] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -58,6 +59,7 @@ export function App(): React.JSX.Element {
   const [reloadOpen, setReloadOpen] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ plan: PlanExport; saved?: SavedRevision } | { workspace: WorkspaceState } | null>(null);
+  const [importError, setImportError] = useState("");
   const storageHealth = useStorageHealth();
   const operation = useRef<AbortController | null>(null);
   const workspaceGeneration = useWizardStore((state) => state.workspaceGeneration);
@@ -69,6 +71,8 @@ export function App(): React.JSX.Element {
       const nextSession = await getSession(signal);
       if (signal.aborted) return;
       setSession(nextSession);
+      setConnectionRequired(false);
+      setAuthAttempted(false);
       setAuthOpen(false);
       setStartupPhase("preparing");
       await prepareService(nextSession.csrf_token, signal);
@@ -79,7 +83,7 @@ export function App(): React.JSX.Element {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.status === 401) {
         setAuthOpen(true);
-        setStartupPhase("connecting");
+        setStartupPhase("authentication");
         return;
       }
       setStartupError(error instanceof Error ? error.message : "The service could not be prepared.");
@@ -88,7 +92,7 @@ export function App(): React.JSX.Element {
   }, [queryClient]);
 
   useEffect(() => {
-    const reconnect = (): void => { setAuthOpen(true); };
+    const reconnect = (): void => { setConnectionRequired(true); setAuthOpen(true); };
     window.addEventListener(AUTH_REQUIRED_EVENT, reconnect);
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, reconnect);
   }, []);
@@ -148,7 +152,8 @@ export function App(): React.JSX.Element {
   const canUseSavedPlan = Boolean(workflow && selectedActor && currentStep >= 2);
   useEffect(() => {
     if (workflow && selectedActor && currentStep >= 2) {
-      useWizardStore.getState().ensureEvidenceKey(evidenceIdentity(selectedActor.stix_id, workflow, commandPlatform), workflow);
+      const activeScope = useWizardStore.getState().scope;
+      useWizardStore.getState().ensureEvidenceKey(evidenceIdentity(selectedActor.stix_id, workflow, commandPlatform, activeScope.commandSelections, activeScope), workflow);
     }
   }, [workflow, selectedActor, currentStep, commandPlatform]);
 
@@ -206,7 +211,9 @@ export function App(): React.JSX.Element {
   };
 
   const loadPlanFile = async (file: File): Promise<void> => {
+    setImportError("");
     if (file.size > WORKSPACE_MAX_BYTES) {
+      setImportError("Recovery file is larger than 128 MiB. Keep the existing workspace open.");
       setNotice("Recovery file is larger than 128 MiB. Keep the existing workspace open.");
       return;
     }
@@ -215,7 +222,9 @@ export function App(): React.JSX.Element {
       const incoming = parsed.kind === "plan" ? { plan: parsed.plan } : { workspace: parsed.workspace };
       setPendingImport(incoming);
     } catch (error: unknown) {
-      setNotice(error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.");
+      const message = error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.";
+      setImportError(message);
+      setNotice(message);
     }
   };
 
@@ -273,21 +282,28 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const welcomeProps = {
+    actors: actorsQuery.data?.actors ?? [],
+    csrfToken: session?.csrf_token ?? "",
+    domains,
+    importError,
+    onAttachProcedures: attachProcedureEvidence,
+    onBegin: beginPlan,
+    onImport: loadPlanFile,
+    onIntelligenceImport: previewIntelligenceImport,
+    onNotice: setNotice,
+    onResume: resumePlan,
+    resumeActor: maxStep >= 2 ? selectedActor : null,
+    savedEngagements: <SavedEngagements onNotice={setNotice} onRestore={restoreEngagement} />,
+  };
   let content: React.JSX.Element;
   let focusKey = "welcome";
   if (startupPhase === "failed" && !canUseSavedPlan) {
-    content = <Welcome actors={actorsQuery.data?.actors ?? []} csrfToken={session?.csrf_token ?? ""} domains={domains} onAttachProcedures={(procedures: ProcedureEvidence[]) => attachProcedureEvidence(procedures)} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} resumeActor={maxStep >= 2 ? selectedActor : null} setupError={startupError} />;
+    content = <Welcome {...welcomeProps} onRetrySetup={() => setStartupAttempt((value) => value + 1)} ready={false} setupError={startupError} />;
   } else if (startupPhase !== "ready" && !canUseSavedPlan) {
-    content = (
-      <section className="screen setup-screen">
-        <LoadingState
-          detail={startupPhase === "preparing" ? "The first run downloads and validates the live STIX 2.1 bundle." : "Checking the local service and authorization boundary."}
-          label={startupPhase === "preparing" ? "Preparing MITRE ATT&CK data…" : "Connecting to AdversaryFlow…"}
-        />
-      </section>
-    );
+    content = <Welcome {...welcomeProps} ready={false} setupPending={startupPhase === "authentication" ? undefined : startupPhase === "preparing" ? "preparing" : "connecting"} />;
   } else if (currentStep === 0) {
-    content = <Welcome actors={actorsQuery.data?.actors ?? []} catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} csrfToken={session?.csrf_token ?? ""} domains={domains} onAttachProcedures={(procedures: ProcedureEvidence[]) => attachProcedureEvidence(procedures)} onBegin={beginPlan} onImport={loadPlanFile} onIntelligenceImport={previewIntelligenceImport} onNotice={setNotice} onResume={resumePlan} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} resumeActor={maxStep >= 2 ? selectedActor : null} />;
+    content = <Welcome {...welcomeProps} catalogError={catalogRetryError || actorsQuery.error?.message} catalogRetrying={actorsQuery.isFetching} onRetryCatalog={() => { void retryCatalog(); }} ready={Boolean(actorsQuery.data)} />;
   } else if (currentStep === 1 || !selectedActor) {
     focusKey = "actors";
     content = (
@@ -334,14 +350,15 @@ export function App(): React.JSX.Element {
       setupFailed={startupPhase === "failed" || actorsQuery.isError}
     >
       {storageHealth.status === "failed" ? <div className="callout workspace-notice" role="alert"><p>{storageHealth.message}</p><Button onClick={backup}>Download workspace recovery copy</Button></div> : null}
-      <div className="workspace-notice"><Button onClick={backup} variant="ghost">Download workspace recovery copy</Button>{importedWorkflow && selectedActor ? <Button disabled={reloading || !session} onClick={() => setReloadOpen(true)}>Reload catalog and review changes</Button> : null}</div>
+      {connectionRequired ? <div className="callout workspace-notice" role="status"><p>Connect to this service to load live data and save server records. You can still review saved work and download JSON.</p><Button onClick={() => setAuthOpen(true)}>Connect to service</Button></div> : null}
+      {maxStep > 0 || procedureEvidence.length > 0 ? <div className="workspace-notice"><Button onClick={backup} variant="ghost">Download workspace recovery copy</Button>{importedWorkflow && selectedActor ? <Button disabled={reloading || !session} onClick={() => setReloadOpen(true)}>Reload catalog and review changes</Button> : null}</div> : null}
       {canUseSavedPlan && startupPhase === "failed" ? <div className="callout workspace-notice" role="status"><p>Working from your saved plan. You can review evidence and save JSON while ATT&amp;CK setup is unavailable.</p><Button onClick={() => setStartupAttempt((value) => value + 1)}>Retry connection</Button></div> : null}
       {currentStep >= 2 ? <EvidenceSnapshots /> : null}
-      {currentStep === 0 ? <SavedEngagements onNotice={setNotice} onRestore={restoreEngagement} /> : null}
       {content}
       <AuthDialog
         message={authAttempted ? "That token was not accepted. Check it and try again." : ""}
         onConnect={connect}
+        onClose={() => setAuthOpen(false)}
         open={authOpen}
       />
       <Dialog title="Begin a new plan?" description="Your scope, recorded evidence, and recovery history will be cleared. Accepted procedure citations are kept. Download a recovery copy first if needed." open={beginOpen} onClose={() => setBeginOpen(false)}>

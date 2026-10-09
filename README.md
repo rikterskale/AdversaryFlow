@@ -150,6 +150,9 @@ explains the operator-controlled runner.
 
 ## Save and resume your work
 
+- **Return to the welcome tools:** choose **Home** (the house icon in the
+  header) to browse saved engagements or compare intelligence while keeping
+  your current plan. Choose **Resume <actor> plan** to return to it.
 - **Keep a backup:** use **Finish & export → Save JSON plan** before stopping,
   changing browsers, or clearing browser data. JSON files can contain private
   notes and command text; store and share them appropriately.
@@ -169,9 +172,15 @@ Workspace safety: existing work is confirmed before replacement, and persistent
 storage failures stay visible until a successful save. **Download workspace
 recovery copy** preserves scope, workflow, archives and unfinished evidence even
 when a plan cannot export. Welcome also provides **Browse saved engagements**
-for server revisions. See [export and recovery contracts](docs/EXPORTS.md) for
+for server revisions. See [command coverage and proof verification](docs/COMMAND_COVERAGE.md)
+for executor availability, variant selection and audit limitations. See [export and recovery contracts](docs/EXPORTS.md) for
 UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
 offline Unicode PDF support.
+
+You can review and report a scoped plan even when no commands are runnable.
+The report documents the coverage gaps; command copying and execution-kit
+downloads remain unavailable until the scope includes runnable commands.
+Saved plans and JSON recovery remain accessible while the service prepares.
 
 ## Stop and restart
 

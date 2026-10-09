@@ -3,6 +3,7 @@ import type { Command, Technique, WorkflowResponse, WorkflowStage } from "../../
 export type CommandPlatform = "windows" | "linux" | "macos";
 
 export interface ScopeSettings {
+  commandSelections?: Record<string, string>;
   commandPlatform: CommandPlatform;
   tactics: string[];
   includePre: boolean;
@@ -23,6 +24,7 @@ export interface ScopedStage extends Omit<WorkflowStage, "techniques"> {
 }
 
 export interface PlanPreview {
+  notApplicable?: number;
   stages: ScopedStage[];
   total: number;
   runnable: number;
@@ -89,13 +91,35 @@ export function defaultScope(): ScopeSettings {
   };
 }
 
+export function commandRestrictions(command: Command, scope: ScopeSettings): string[] {
+  const reasons: string[] = [];
+  if (command.requires_network && !scope.allowNetwork) reasons.push("network-active commands are disabled");
+  if (command.requires_admin && !scope.allowAdmin) reasons.push("administrator commands are disabled");
+  if (command.risk === "high" && !scope.allowHighRisk) reasons.push("high-risk commands are disabled");
+  return reasons;
+}
+
+export function selectCatalogCommand(technique: Technique, scope: ScopeSettings): Command | undefined {
+  const compatible = technique.commands.filter((command) => command.platform === scope.commandPlatform);
+  const selectedId = scope.commandSelections?.[technique.attack_id];
+  if (selectedId) return compatible.find((command) => command.command_id === selectedId);
+  return compatible.find((command) => !command.unsupported && !commandRestrictions(command, scope).length) ?? compatible[0];
+}
+
 export function resolveCommand(technique: Technique, scope: ScopeSettings): Command {
-  const exact = technique.commands.find((command) => command.platform === scope.commandPlatform);
+  const exact = selectCatalogCommand(technique, scope);
   if (!exact) {
     const platform = titlePlatform(scope.commandPlatform);
+    const endpointPlatforms = (technique.platforms ?? []).map((item) => item.toLowerCase()).filter((item) => ["windows", "linux", "macos"].includes(item));
+    const notApplicable = !scope.commandSelections?.[technique.attack_id] && endpointPlatforms.length > 0 && !endpointPlatforms.includes(scope.commandPlatform)
+      && technique.commands.every((command) => !command.environment || command.environment === "endpoint");
+    const message = scope.commandSelections?.[technique.attack_id]
+      ? "The selected command is no longer available for this platform. Choose a current variant."
+      : notApplicable ? `Not applicable to ${platform}: ATT&CK maps this technique to ${endpointPlatforms.join(", ")}.`
+        : `No ${platform} test is available for this technique.`;
     return {
       platform: scope.commandPlatform,
-      command: `No ${platform} test is available for this technique.`,
+      command: message,
       note: "Choose another platform or contribute an exact-platform test.",
       cleanup: "",
       risk: "none",
@@ -111,20 +135,26 @@ export function resolveCommand(technique: Technique, scope: ScopeSettings): Comm
       cleanup_required: false,
       acknowledgment_required: false,
       unsupported: true,
+      availability_status: notApplicable ? "not_applicable" : "unsupported",
+      availability_reasons: [message],
     };
   }
 
-  const restrictions: string[] = [];
-  if (exact.requires_network && !scope.allowNetwork) restrictions.push("network-active commands are disabled");
-  if (exact.requires_admin && !scope.allowAdmin) restrictions.push("administrator commands are disabled");
-  if (exact.risk === "high" && !scope.allowHighRisk) restrictions.push("high-risk commands are disabled");
-  if (!restrictions.length) return exact;
+  const restrictions = commandRestrictions(exact, scope);
+  if (!restrictions.length) {
+    const prerequisites = [...(exact.required_tools ?? []).map((tool) => `Confirm ${tool} is installed on the execution host.`),
+      ...(exact.required_credentials ?? []).map((credential) => `Confirm access: ${credential}.`)];
+    return { ...exact, availability_status: exact.unsupported ? "unsupported" : prerequisites.length ? "prerequisites_unverified" : "runnable",
+      availability_reasons: exact.unsupported ? [exact.note || "Catalog marks this block unsupported."] : prerequisites };
+  }
   return {
     ...exact,
     command: `Restricted by scope: ${restrictions.join("; ")}.`,
-    note: "Enable the corresponding guardrail after reviewing its impact.",
+    note: `${exact.note} Enable the corresponding guardrail after reviewing its impact.`,
     unsupported: true,
     restricted: true,
+    availability_status: "permission_required",
+    availability_reasons: restrictions,
   };
 }
 
@@ -139,6 +169,7 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
   const adminIds = new Set<string>();
   const highRiskIds = new Set<string>();
   const catalogIds = new Set<string>();
+  const notApplicableIds = new Set<string>();
   const stages: ScopedStage[] = [];
 
   for (const stage of workflow.stages) {
@@ -152,16 +183,18 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
         continue;
       }
 
-      const exact = technique.commands.find((command) => command.platform === scope.commandPlatform);
+      const exact = selectCatalogCommand(technique, scope);
+      const resolved = resolveCommand(technique, scope);
       if (!exact) {
-        platformIds.add(technique.attack_id);
+        if (resolved.availability_status === "not_applicable") notApplicableIds.add(technique.attack_id);
+        else platformIds.add(technique.attack_id);
       } else {
         if (exact.unsupported) catalogIds.add(technique.attack_id);
         if (exact.requires_network && !scope.allowNetwork) networkIds.add(technique.attack_id);
         if (exact.requires_admin && !scope.allowAdmin) adminIds.add(technique.attack_id);
         if (exact.risk === "high" && !scope.allowHighRisk) highRiskIds.add(technique.attack_id);
       }
-      techniques.push({ ...technique, selectedCommand: resolveCommand(technique, scope) });
+      techniques.push({ ...technique, selectedCommand: resolved });
     }
     if (!techniques.length) continue;
 
@@ -178,6 +211,7 @@ export function buildPlanPreview(workflow: WorkflowResponse, scope: ScopeSetting
   }
 
   return {
+    notApplicable: notApplicableIds.size,
     stages,
     total: techniqueIds.size,
     runnable: runnableIds.size,

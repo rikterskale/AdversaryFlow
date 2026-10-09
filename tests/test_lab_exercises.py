@@ -6,8 +6,8 @@ from backend.lab_exercises import SCENARIOS, TECHNIQUE_SCENARIOS, get_spec, run_
 
 
 class LabExerciseTests(unittest.TestCase):
-    def test_all_146_techniques_have_a_declared_scenario(self):
-        self.assertEqual(len(TECHNIQUE_SCENARIOS), 146)
+    def test_all_320_techniques_have_a_declared_scenario(self):
+        self.assertEqual(len(TECHNIQUE_SCENARIOS), 320)
         self.assertTrue(set(TECHNIQUE_SCENARIOS.values()).issubset(SCENARIOS))
 
     def test_every_exercise_runs_cleans_up_and_emits_a_valid_receipt(self):

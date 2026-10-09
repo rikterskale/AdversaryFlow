@@ -67,6 +67,13 @@ function commandForExport(command: Command): Command {
   if (command.telemetry_acceptance) copy.telemetry_acceptance = command.telemetry_acceptance;
   if (typeof command.unsupported === "boolean") copy.unsupported = command.unsupported;
   if (typeof command.restricted === "boolean") copy.restricted = command.restricted;
+  if (command.command_id) copy.command_id = command.command_id;
+  if (command.environment) copy.environment = command.environment;
+  if (command.execution_role) copy.execution_role = command.execution_role;
+  if (command.required_tools) copy.required_tools = [...command.required_tools];
+  if (command.required_credentials) copy.required_credentials = [...command.required_credentials];
+  if (command.availability_status) copy.availability_status = command.availability_status;
+  if (command.availability_reasons) copy.availability_reasons = [...command.availability_reasons];
   return copy;
 }
 
@@ -103,6 +110,7 @@ export function buildExportBundle(
     actor: { ...actor, aliases: [...actor.aliases] },
     scope: {
       command_platform: scope.commandPlatform,
+      ...(scope.commandSelections ? { command_selections: { ...scope.commandSelections } } : {}),
       include_pre: scope.includePre,
       curated_only: scope.curatedOnly,
       allow_network: scope.allowNetwork,
@@ -197,6 +205,10 @@ export function toMarkdown(bundle: ExportBundle): string {
       if (evidence.telemetry_refs?.length) output += `**Independent telemetry:** ${evidence.telemetry_refs.join(", ")}\n\n`;
       if (technique.data_sources?.length) output += `**ATT&CK data sources:** ${technique.data_sources.join(", ")}\n\n`;
       if (technique.detection) output += `**ATT&CK detection:** ${plainText(technique.detection)}\n\n`;
+      output += `**Execution context:** ${technique.command.environment ?? "endpoint"} / ${technique.command.execution_role ?? "endpoint_test"}\n\n`;
+      output += `**Tools:** ${(technique.command.required_tools ?? []).join(", ") || "None declared"} · **Required access:** ${(technique.command.required_credentials ?? []).join("; ") || "None declared"}\n\n`;
+      if (technique.command.availability_status) output += `**Availability:** ${technique.command.availability_status} — ${(technique.command.availability_reasons ?? []).join("; ")}\n\n`;
+      if (technique.command.command_id) output += `**Catalog command:** ${technique.command.command_id}\n\n`;
       if (!technique.supported) {
         output += `**Unsupported on ${titlePlatform(plan.scope.command_platform)}.** ${technique.command.note}\n\n`;
         return;
@@ -212,7 +224,7 @@ export function toMarkdown(bundle: ExportBundle): string {
 }
 
 function runbookSafe(value: unknown): string {
-  return String(value ?? "").replace(/[\r\n&|<>^]+/g, " ").trim();
+  return String(value ?? "").replace(/[\r\n&|<>^%!]+/g, " ").trim();
 }
 
 export function toRunbook(bundle: ExportBundle): string {
@@ -231,12 +243,16 @@ export function toRunbook(bundle: ExportBundle): string {
       const fidelity = technique.command.fidelity === "bounded_synthetic" ? "bounded synthetic" : technique.command.fidelity === "lab_proxy" ? "lab proxy" : "direct";
       output += `\n${comment} ${runbookSafe(technique.id)} ${runbookSafe(technique.name)} [${runbookSafe(technique.command.platform)}]${technique.run ? " (run)" : ""}\n`;
       output += `${comment} Fidelity: ${fidelity}\n`;
+      output += `${comment} Execution context: ${runbookSafe(technique.command.environment ?? "endpoint")} / ${runbookSafe(technique.command.execution_role ?? "endpoint_test")}\n`;
+      output += `${comment} Tools: ${runbookSafe((technique.command.required_tools ?? []).join(", "))}; Required access: ${runbookSafe((technique.command.required_credentials ?? []).join("; "))}\n`;
+      output += `${comment} Catalog command: ${runbookSafe(technique.command.command_id ?? "Legacy record")}\n`;
       output += `${comment} Outcome: ${evidence.outcome}${evidence.updated_at ? ` at ${evidence.updated_at}` : ""}\n`;
       output += `${comment} Detection: ${evidence.detection_result ?? "not_assessed"}\n`;
       if (evidence.notes) output += `${comment} Evidence: ${runbookSafe(evidence.notes)}\n`;
       if (evidence.run_id) output += `${comment} Run ID: ${runbookSafe(evidence.run_id)}\n`;
       if (evidence.receipt_sha256) output += `${comment} Receipt SHA-256: ${runbookSafe(evidence.receipt_sha256)} (${evidence.receipt_verified ? "digest verified; self-reported" : "not verified"})\n`;
       evidence.telemetry_refs?.forEach((reference) => { output += `${comment} Telemetry: ${runbookSafe(reference)}\n`; });
+      if (technique.command.availability_status) output += `${comment} Availability: ${runbookSafe(technique.command.availability_status)}; ${runbookSafe((technique.command.availability_reasons ?? []).join("; "))}\n`;
       if (!technique.supported) {
         output += `${comment} UNSUPPORTED: ${runbookSafe(technique.command.note)}\n`;
         return;

@@ -28,8 +28,8 @@ class TelemetryAcceptanceTests(unittest.TestCase):
         self.assertIn("invalid choice: 'T9999'", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
-    def test_all_146_exercises_have_explicit_acceptance_criteria(self):
-        self.assertEqual(len(TECHNIQUE_ACCEPTANCE), 146)
+    def test_all_320_exercises_have_explicit_acceptance_criteria(self):
+        self.assertEqual(len(TECHNIQUE_ACCEPTANCE), 320)
         for technique_id, criteria in TECHNIQUE_ACCEPTANCE.items():
             with self.subTest(technique_id=technique_id):
                 self.assertEqual(criteria.technique_id, technique_id)

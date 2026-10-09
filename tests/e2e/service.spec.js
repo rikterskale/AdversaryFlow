@@ -71,6 +71,94 @@ async function savePlan(page) {
   return JSON.parse(fs.readFileSync(await download(page, "Save JSON plan"), "utf8"));
 }
 
+async function capabilityPlan(page, platform) {
+  await connect(page);
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
+  await page.getByRole("button", { name: /Capability Group/ }).click();
+  await page.getByRole("button", { name: /^Continue/ }).click();
+  await page.getByRole("button", { name: platform, exact: true }).click();
+}
+
+test("cloud, planning and container blocks expose execution requirements and survive Linux kit export", async ({ page }) => {
+  await capabilityPlan(page, "Linux");
+  await page.locator("label.toggle", { hasText: "Allow network-active commands" }).click();
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  const cloud = page.getByRole("region", { name: "What this will touch" }).filter({ hasText: "Azure CLI authenticated" });
+  await expect(cloud).toContainText("Cloud");
+  await expect(cloud).toContainText("Prerequisites Unverified");
+  await expect(cloud).toContainText("Environment Validation");
+  await expect(page.getByRole("region", { name: "What this will touch" }).filter({ hasText: "Linux container context" })).toContainText("Container");
+  await expect(page.getByText("This is a planning step. Its outcome does not establish endpoint detection coverage.")).toBeVisible();
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  const plan = await savePlan(page);
+  const commands = plan.stages.flatMap(s => s.techniques).map(t => t.command);
+  expect(commands.find(c => c.environment === "cloud")).toMatchObject({ platform: "linux", required_tools: ["az"], availability_status: "prerequisites_unverified" });
+  const kit = await download(page, /Download Linux execution kit/);
+  const rows = JSON.parse(execFileSync(python, ["-c", "import csv,io,json,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=next(n for n in z.namelist() if n.endswith('.csv')); print(json.dumps(list(csv.DictReader(io.StringIO(z.read(n).decode('utf-8-sig'))))))", kit], { encoding: "utf8" }));
+  const cloudRow = rows.find(r => r.technique_id === "T1059.009");
+  expect(cloudRow.environment).toBe("cloud");
+  expect(cloudRow.command_id).toBe(commands.find(c => c.environment === "cloud").command_id);
+  expect(cloudRow.required_tools).toBe("az");
+});
+
+test("explicit same-OS variants archive earlier evidence and persist through local recovery", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await capabilityPlan(page, "Windows");
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await page.getByLabel("Outcome for T1001", { exact: true }).selectOption("passed");
+  await page.getByLabel("Evidence note for T1001", { exact: true }).fill("Original variant evidence");
+  const selector = page.getByLabel("Command variant for T1001", { exact: true });
+  const options = await selector.locator("option").evaluateAll(items => items.map(i => i.value));
+  expect(options).toHaveLength(2);
+  const bounds = await selector.boundingBox();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+  await selector.selectOption(options[1]);
+  await page.getByRole("button", { name: "Change command variant", exact: true }).click();
+  await expect(page.getByLabel("Evidence note for T1001", { exact: true })).toHaveValue("");
+  await page.reload();
+  await page.getByRole("button", { name: "Resume Capability Group plan" }).click();
+  await expect(page.getByLabel("Command variant for T1001", { exact: true })).toHaveValue(options[1]);
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  const plan = await savePlan(page);
+  expect(plan.scope.command_selections.T1001).toBe(options[1]);
+  expect(plan.stages.flatMap(s => s.techniques).find(t => t.id === "T1001").command.fidelity).toBe("bounded_synthetic");
+});
+
+test("Home keeps the active engagement while opening saved records and intelligence tools", async ({ page }) => {
+  await reviewPlan(page);
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await page.getByRole("button", { name: "Save engagement", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save new revision" })).toBeEnabled();
+  await page.getByRole("button", { name: "Return to workspace home" }).click();
+  await expect(page.getByRole("button", { name: "Browse saved engagements" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Import and compare" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Resume Zeta Group plan" }).click();
+  await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Windows evidence preserved");
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await expect(page.getByRole("button", { name: "Save new revision" })).toBeEnabled();
+  const plan = await savePlan(page);
+  expect(plan.stages.flatMap(stage => stage.techniques).find(technique => technique.id === "T1059.001").execution.notes).toBe("Windows evidence preserved");
+});
+
+test("a missing service token still permits saved-plan review and local JSON backup", async ({ page, request }) => {
+  await reviewPlan(page);
+  await request.post(`${baseURL}/test-control`, { data: { action: "token" } });
+  await page.reload();
+  await page.getByRole("button", { name: "Continue with saved work" }).click();
+  await page.getByRole("button", { name: "Resume Zeta Group plan" }).click();
+  await expect(page.getByLabel("Evidence note for T1059.001")).toHaveValue("Windows evidence preserved");
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  const plan = await savePlan(page);
+  expect(plan.stages.flatMap(stage => stage.techniques).find(technique => technique.id === "T1059.001").execution.notes).toBe("Windows evidence preserved");
+  await page.getByRole("button", { name: "Connect to service" }).click();
+  await page.getByLabel("API token").fill("rotated-fixture-token");
+  await page.getByRole("button", { name: "Connect securely" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save engagement", exact: true })).toBeEnabled();
+});
+
 test("real service Atomic export persists editable backlog ownership", async ({ page }) => {
   await reviewPlan(page);
   await page.getByRole("button", { name: "Finish & export" }).click();
