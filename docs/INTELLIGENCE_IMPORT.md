@@ -48,6 +48,8 @@ not assertions that the entries have passed a new content-review process.
 Attached procedures use compound actor/candidate identity, so comparing the
 same source against two actors retains independent reviewed evidence. Rejection
 immediately revokes that actor/source attachment, including recovery snapshots.
+Restoring a platform or data-version snapshot replaces that actor's procedures
+with the saved set while retaining attachments for other actors.
 Acceptance never autoattaches a new candidate: choose **Attach accepted
 procedures**. Reimport reflects existing accepted attachments, and an all-rejected
 review can still synchronize an empty accepted set.

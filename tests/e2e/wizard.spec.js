@@ -315,17 +315,19 @@ test(`mobile screens never create page-level horizontal scrolling at ${width}px`
   await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  // Reserve a classic scrollbar gutter even on hosts using overlay scrollbars.
+  await page.evaluate(() => { document.documentElement.style.scrollbarGutter = "stable"; });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Select Test Actor/ }).click();
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Build plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   await page.getByRole("button", { name: /Finish & export/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
 }
 
@@ -725,7 +727,7 @@ test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
   await expect(page.locator("#progressPct")).toHaveText("33%");
 });
 
-test("plan keyboard shortcuts move focus and copy the command", async ({ page, browserName }) => {
+test("plan keyboard shortcuts move focus and copy the command", async ({ page }) => {
   await observeClipboard(page);
   const second = {
     stix_id: "attack-pattern--t1059", attack_id: "T1059", name: "Command and Scripting Interpreter",
@@ -752,7 +754,7 @@ test("plan keyboard shortcuts move focus and copy the command", async ({ page, b
   expect(await cards.nth(0).evaluate(element => document.activeElement === element)).toBe(true);
   await page.keyboard.press("c");
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await copiedText(page, browserName)).toBe("whoami");
+  expect(await copiedText(page)).toBe("whoami");
 });
 
 test("the plan opens on the first stage that has a runnable command", async ({ page }) => {

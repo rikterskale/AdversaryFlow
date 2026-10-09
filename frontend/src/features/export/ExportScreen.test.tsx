@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Actor, Command, WorkflowResponse } from "../../api/contract";
-import { useWizardStore } from "../../state/wizardStore";
+import { evidenceIdentity, useWizardStore } from "../../state/wizardStore";
 import { ExportScreen } from "./ExportScreen";
 
 const actor: Actor = {
@@ -95,6 +95,111 @@ describe("ExportScreen report generation", () => {
     expect(screen.getByText("No report generated yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate report" })).toBeEnabled();
     expect(screen.queryByTitle("Engagement report preview")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Download Windows execution kit", "Execution kit"],
+    ["Atomic Red Team draft + gap backlog", "Atomic export"],
+    ["Save engagement", "Engagement save"],
+    ["Manage ability backlog", "Ability backlog"],
+  ])("keeps %s failures visible beside enabled retry actions", async (button, action) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "Service unavailable; retry after reconnecting" }), {
+      status: 503, headers: { "Content-Type": "application/json" },
+    })));
+    renderScreen();
+    const control = screen.getByRole("button", { name: new RegExp(button.replace("+", "\\+")) });
+    fireEvent.click(control);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(`${action} needs attention`));
+    expect(screen.getByRole("alert")).toHaveTextContent("Service unavailable");
+    expect(control).toBeEnabled();
+  });
+
+  it("clears a failed engagement save after a successful retry", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ message: "Database unavailable" }), {
+      status: 503, headers: { "Content-Type": "application/json" },
+    })).mockResolvedValue(new Response(JSON.stringify({ engagement_id: "current-plan", revision: 1, plan_sha256: "a".repeat(64), created_at: "2026-10-09T00:00:00Z" }), {
+      status: 201, headers: { "Content-Type": "application/json" },
+    })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));
+    await screen.findByRole("button", { name: "Save new revision" });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("loads backlog pages beyond 200 without dropping edits to already loaded rows", async () => {
+    const item = (index: number) => ({ id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, technique_id: `T${1000 + index}`,
+      platform: "windows", gap: "not_accepted", reason: "Review required", ability_id: null, procedure_candidate_ids: [], owner: null, status: "open",
+      created_at: "2026-10-09T00:00:00Z", updated_at: "2026-10-09T00:00:00Z" });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (path: string) => new Response(JSON.stringify(path.endsWith("offset=200")
+      ? { items: [item(200)], next_offset: null }
+      : { items: Array.from({ length: 200 }, (_, index) => item(index)), next_offset: 200 }), { headers: { "Content-Type": "application/json" } })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Manage ability backlog" }));
+    const more = await screen.findByRole("button", { name: "Load more backlog items" });
+    fireEvent.change(screen.getAllByLabelText("Owner")[0]!, { target: { value: "Draft owner" } });
+    fireEvent.click(more);
+    await waitFor(() => expect(screen.getAllByLabelText("Owner")).toHaveLength(201));
+    expect(screen.getAllByLabelText("Owner")[0]).toHaveValue("Draft owner");
+    expect(screen.queryByRole("button", { name: "Load more backlog items" })).not.toBeInTheDocument();
+  });
+
+  it("shows an actionable error for malformed backlog responses instead of crashing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{}] }), { headers: { "Content-Type": "application/json" } })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Manage ability backlog" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("invalid ability backlog item"));
+    expect(screen.getByRole("button", { name: "Manage ability backlog" })).toBeEnabled();
+  });
+
+  it("preserves later backlog edits when an earlier save response arrives", async () => {
+    const item = { id: "00000000-0000-4000-8000-000000000001", technique_id: "T1033", platform: "windows", gap: "not_accepted",
+      reason: "Review required", ability_id: null, procedure_candidate_ids: [], owner: null, status: "open",
+      created_at: "2026-10-09T00:00:00Z", updated_at: "2026-10-09T00:00:00Z" };
+    let finishSave: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_path: string, init: RequestInit) => init.method === "PATCH"
+      ? new Promise<Response>((resolve) => { finishSave = resolve; })
+      : new Response(JSON.stringify({ items: [item], next_offset: null }), { headers: { "Content-Type": "application/json" } })));
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Manage ability backlog" }));
+    const owner = await screen.findByLabelText("Owner");
+    const status = screen.getByLabelText("Status");
+    fireEvent.change(owner, { target: { value: "First owner" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.change(owner, { target: { value: "Newer draft owner" } });
+    fireEvent.change(status, { target: { value: "in_progress" } });
+    finishSave?.(new Response(JSON.stringify({ ...item, owner: "First owner" }), { headers: { "Content-Type": "application/json" } }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    expect(owner).toHaveValue("Newer draft owner");
+    expect(status).toHaveValue("in_progress");
+  });
+
+  it("keeps a local JSON download error visible without crashing or losing the plan", async () => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => { throw new Error("Download unavailable"); });
+    const store = useWizardStore.getState();
+    store.selectActor(actor);
+    store.updateScope({ commandPlatform: "windows", tactics: ["execution"] });
+    store.ensureEvidenceKey(evidenceIdentity(actor.stix_id, workflow, "windows"), workflow);
+    store.updateEvidence("T1033", { outcome: "passed" });
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Save JSON plan" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON plan download needs attention");
+    expect(screen.getByRole("alert")).toHaveTextContent("Download unavailable");
+    expect(screen.getByRole("button", { name: "Save JSON plan" })).toBeEnabled();
+    expect(useWizardStore.getState().records.T1033?.outcome).toBe("passed");
+  });
+
+  it("keeps HTML download failures attached to the ready report so downloading can be retried", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html><body>Report</body></html>")));
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => { throw new Error("Download unavailable"); });
+    renderScreen();
+    fireEvent.click(screen.getByRole("button", { name: "Generate report" }));
+    const download = await screen.findByRole("button", { name: "Download HTML engagement report" });
+    fireEvent.click(download);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Download unavailable"));
+    expect(download).toBeEnabled();
+    expect(screen.getByTitle("Engagement report preview")).toBeInTheDocument();
   });
 
   it("moves from loading to a self-contained preview with all download formats", async () => {

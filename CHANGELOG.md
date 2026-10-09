@@ -4,6 +4,18 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Paginate saved engagements and ability backlogs beyond 200 records, expose
+  validated `offset`/`next_offset` API navigation, and keep backlog ordering stable
+  while owners and statuses change.
+- Keep save/export/backlog failures visible with retry guidance; validate backlog
+  responses and handle local JSON/HTML download errors without an interface crash.
+  Preserve edits made while an earlier backlog save is still in flight.
+- Preserve other actors' accepted intelligence attachments when restoring an
+  evidence snapshot, including compatibility with older snapshots.
+- Fit narrow browser windows with classic scrollbars by allowing the document
+  to shrink to the available content width.
+- Observe successful real clipboard writes per browser page in parallel checks
+  so shared OS clipboard reads cannot report another test's copied command.
 - Keep the latest JSON recovery selection when older file reads finish late;
   discard pending imports after workspace replacement. Refresh saved engagement
   lists and revision menus immediately after a save and on explicit refresh.

@@ -1,6 +1,6 @@
-// Keep the real clipboard write and its browser permission behavior. Firefox
-// and WebKit do not expose Chromium's clipboard-read permission grant, so
-// observe the successfully written value without attempting a second read.
+// Keep the real clipboard write and its browser permission behavior. Observe
+// each page's successfully written value: the OS clipboard is shared between
+// parallel headed workers, so a later read can see another test's write.
 async function observeClipboard(page) {
   await page.addInitScript(() => {
     const writeText = navigator.clipboard.writeText.bind(navigator.clipboard);
@@ -11,10 +11,8 @@ async function observeClipboard(page) {
   });
 }
 
-async function copiedText(page, browserName) {
-  return browserName === "chromium"
-    ? page.evaluate(() => navigator.clipboard.readText())
-    : page.evaluate(() => window.__copiedText);
+async function copiedText(page) {
+  return page.evaluate(() => window.__copiedText);
 }
 
 module.exports = { observeClipboard, copiedText };

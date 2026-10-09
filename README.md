@@ -167,6 +167,8 @@ explains the operator-controlled runner.
   saved revision. It is local storage, not an online backup. Keep your JSON
   copy too. If the ATT&CK version or platform changes, use **Saved evidence
   from other platforms or data versions** to recover the earlier snapshot.
+  **Browse saved engagements** includes **Older engagements** and **Newer
+  engagements** controls when more than 200 records are saved.
 
 Workspace safety: existing work is confirmed before replacement, and persistent
 storage failures stay visible until a successful save. **Download workspace
@@ -222,7 +224,7 @@ row below. These steps do not require deleting your saved work.
 | Preparation fails, or downloads report a proxy/certificate/network error | Check your internet connection. Open the status button in the app's header, then **System health → Host self-test**. On a managed network, ask IT to permit the official download and dependency hosts listed in the [troubleshooting guide](docs/TROUBLESHOOTING.md#downloads-or-preparation-fail). |
 | A plan has no runnable steps | Try another actor or the correct destination platform. Keep the three Allow options off for your first session. Some techniques have no exercise for the selected platform. |
 | Notes disappeared or the browser cannot save progress | Return to the original browser and address, or restore your JSON file with **Resume JSON plan**. Changing the port, using private mode, or clearing browser data creates a different or empty browser workspace. |
-| A report or download fails | Use **Save JSON plan** first, check the inline error and **System health**, restore the service/token, then choose **Retry report generation** or retry the download. |
+| A save, report, or download fails | The error stays visible on Export. Use **Save JSON plan** first, check the error and **System health**, restore the service/token, then choose **Retry report generation** or retry the failed action. |
 
 For a deeper check, open a **second** command window in the same application
 folder while the container is running:

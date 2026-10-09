@@ -3,7 +3,7 @@
 AdversaryFlow exports a portable execution kit, command-free purple-team
 reports, and schema-versioned planning records. Execution kits and human
 reports are serialized only after the submitted plan is rebound to the local
-bounded catalog. JSON preserves the submitted schema 2.0 record as the
+bounded catalog. JSON preserves the submitted schema 2.0 or 3.0 record as the
 canonical machine-readable source. The web service never executes a command.
 
 ## Operator execution kit
@@ -44,7 +44,7 @@ Import preserves the saved guardrails and withheld steps. Imported command text
 requires explicit review before copying; this does not enable high-risk scope.
 Kit rebinding cannot enable a step that the submitted plan withheld.
 
-**Save JSON plan** downloads the current schema 2.0 plan directly in the browser,
+**Save JSON plan** downloads the current schema 2.0 or 3.0 plan directly in the browser,
 including its evidence, without report generation or a working ATT&CK feed.
 Changing the command platform or data version saves earlier evidence separately.
 Use **Saved evidence from other platforms or data versions** to restore or
@@ -82,6 +82,13 @@ generating state, then embeds the returned self-contained HTML in a sandboxed
 preview. A failed request leaves an error and **Retry report generation**
 control in place. Once the preview is ready, the HTML, PDF, and JSON download
 buttons become available.
+
+Failures from engagement saves, execution kits, Atomic drafts, backlog actions,
+and local planning downloads also stay visible on Export until retry or a plan
+change. Retry the failed action after restoring the service or token; local JSON
+and workspace recovery copies remain available. **Manage ability backlog** uses
+**Load more backlog items** to reach records beyond the first 200 while retaining
+edits to already loaded rows.
 
 The CSRF-protected `POST /api/report/{format}` endpoint accepts `html`, `pdf`,
 or `json`. HTML and PDF contain:

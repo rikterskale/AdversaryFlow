@@ -135,6 +135,27 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(revision.get_json()["plan"], document)
         self.assertEqual(self.client.get("/api/audit-events").get_json()["event_count"], 2)
 
+    def test_saved_lists_expose_next_page_and_validate_offsets(self):
+        store = app_module.engagement_store
+        for _ in range(3):
+            store.save_revision(plan_fixture())
+        store.upsert_ability_gaps([{"technique_id": f"T100{index}", "platform": "linux", "gap": "not_accepted",
+                                   "reason": "Needs review", "ability_id": None, "procedure_candidate_ids": []}
+                                  for index in range(3)])
+        for endpoint, collection in [("engagements", "engagements"), ("ability-backlog", "items")]:
+            with self.subTest(endpoint=endpoint):
+                first = self.client.get(f"/api/{endpoint}?limit=2").get_json()
+                self.assertEqual(len(first[collection]), 2)
+                self.assertEqual(first["next_offset"], 2)
+                last = self.client.get(f"/api/{endpoint}?limit=2&offset=2").get_json()
+                self.assertEqual(len(last[collection]), 1)
+                self.assertIsNone(last["next_offset"])
+                self.assertEqual(len({item["id"] for item in first[collection] + last[collection]}), 3)
+                full = self.client.get(f"/api/{endpoint}?limit=3").get_json()
+                self.assertIsNone(full["next_offset"])
+                for invalid in ["-1", "wrong", "99999999999999999999999999"]:
+                    self.assertEqual(self.client.get(f"/api/{endpoint}?offset={invalid}").status_code, 400)
+
     def test_atomic_export_links_a_persisted_backlog(self):
         response = self.client.post("/api/playbook/atomic", json=plan_fixture("linux", duplicate=True),
                                     headers={"X-AdversaryFlow-CSRF": app_module._csrf_token})

@@ -264,10 +264,12 @@ def save_revision(plan: Mapping[str, Any], engagement_id: Optional[str] = None) 
             "content_pack_sha256": content_pack_sha256, "content_packs": content_packs, "created_at": now}
 
 
-def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
+def list_engagements(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
     _ensure_initialized()
     if not 1 <= limit <= 200:
         raise EngagementStoreError("Engagement list limit must be between 1 and 200")
+    if not 0 <= offset <= 2**53 - 1:
+        raise EngagementStoreError("Engagement list offset must be a non-negative safe integer")
     with _session() as connection:
         rows = connection.execute("""
             SELECT e.id, e.actor_id, e.actor_name, e.data_version, e.created_at, e.updated_at,
@@ -275,9 +277,9 @@ def list_engagements(limit: int = 50) -> List[Dict[str, Any]]:
             FROM engagements AS e
             JOIN plan_revisions AS r ON r.engagement_id = e.id
             WHERE r.revision = (SELECT MAX(r2.revision) FROM plan_revisions AS r2 WHERE r2.engagement_id = e.id)
-            ORDER BY e.updated_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+            ORDER BY e.updated_at DESC, e.id DESC
+            LIMIT ? OFFSET ?
+        """, (limit, offset)).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -714,17 +716,19 @@ def _backlog_record(row: sqlite3.Row) -> Dict[str, Any]:
     return result
 
 
-def list_ability_gaps(limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_ability_gaps(limit: int = 100, status: Optional[str] = None, offset: int = 0) -> List[Dict[str, Any]]:
     _ensure_initialized()
     if not 1 <= limit <= 200:
         raise EngagementStoreError("Backlog limit must be between 1 and 200")
+    if not 0 <= offset <= 2**53 - 1:
+        raise EngagementStoreError("Backlog offset must be a non-negative safe integer")
     if status is not None and status not in {"open", "in_progress", "accepted", "closed"}:
         raise EngagementStoreError("Invalid backlog status")
     with _session() as connection:
         if status:
-            rows = connection.execute("SELECT * FROM ability_backlog WHERE status = ? ORDER BY updated_at DESC LIMIT ?", (status, limit)).fetchall()
+            rows = connection.execute("SELECT * FROM ability_backlog WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", (status, limit, offset)).fetchall()
         else:
-            rows = connection.execute("SELECT * FROM ability_backlog ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+            rows = connection.execute("SELECT * FROM ability_backlog ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
     return [_backlog_record(row) for row in rows]
 
 

@@ -455,7 +455,11 @@ def engagements():
     if request.method == "GET":
         try:
             limit = int(request.args.get("limit", "50"))
-            return jsonify({"engagements": engagement_store.list_engagements(limit)})
+            offset = int(request.args.get("offset", "0"))
+            items = engagement_store.list_engagements(limit, offset)
+            next_offset = offset + len(items)
+            has_more = len(items) == limit and bool(engagement_store.list_engagements(1, next_offset))
+            return jsonify({"engagements": items, "next_offset": next_offset if has_more else None})
         except (ValueError, engagement_store.EngagementStoreError) as exc:
             abort(400, description=str(exc))
 
@@ -670,8 +674,12 @@ def atomic_playbook_download():
 def ability_backlog_list():
     try:
         limit = int(request.args.get("limit", "100"))
+        offset = int(request.args.get("offset", "0"))
         status = request.args.get("status")
-        return jsonify({"items": engagement_store.list_ability_gaps(limit, status)})
+        items = engagement_store.list_ability_gaps(limit, status, offset)
+        next_offset = offset + len(items)
+        has_more = len(items) == limit and bool(engagement_store.list_ability_gaps(1, status, next_offset))
+        return jsonify({"items": items, "next_offset": next_offset if has_more else None})
     except (ValueError, engagement_store.EngagementStoreError) as exc:
         abort(400, description=str(exc))
 

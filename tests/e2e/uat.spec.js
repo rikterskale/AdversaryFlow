@@ -269,7 +269,7 @@ test("J24 — the operator can walk stages forwards and backwards", async ({ pag
   await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
 });
 
-test("J25 — copying a risky command requires acknowledgement", async ({ page, browserName }) => {
+test("J25 — copying a risky command requires acknowledgement", async ({ page }) => {
   await observeClipboard(page);
   await toScope(page, { commands: [highRisk] });
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -280,7 +280,7 @@ test("J25 — copying a risky command requires acknowledgement", async ({ page, 
   await expect(dialog).toContainText("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
   await dialog.getByRole("button", { name: "Copy command" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await copiedText(page, browserName))
+  expect(await copiedText(page))
     .toBe("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
 });
 
@@ -688,6 +688,10 @@ test("J61 — an execution-kit failure is actionable and leaves retry enabled", 
   await kit.click();
 
   await expect(page.getByRole("status").filter({ hasText: "Plan contains no executable Windows steps" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Execution kit needs attention" })).toContainText("Plan contains no executable Windows steps");
+  // The actionable error must outlive the temporary success/error notification.
+  await expect(page.getByRole("status").filter({ hasText: "Plan contains no executable Windows steps" })).toBeHidden({ timeout: 7000 });
+  await expect(page.getByRole("alert").filter({ hasText: "Execution kit needs attention" })).toBeVisible();
   await expect(kit).toBeEnabled();
   expect(downloads).toBe(0);
 });

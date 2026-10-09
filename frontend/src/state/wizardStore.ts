@@ -168,7 +168,10 @@ export const useWizardStore = create<WizardState>()(
           ...switchEvidence(state, key), selectedActor: snapshot.actor, domains: snapshot.domains,
           scope: snapshot.scope, scopeInitializedFor: snapshot.actor.stix_id,
           importedWorkflow: snapshot.workflow, savedWorkflow: snapshot.workflow, currentStep: 3, maxStep: 4,
-          procedureEvidence: snapshot.procedureEvidence ?? [],
+          procedureEvidence: [
+            ...state.procedureEvidence.filter((item) => item.actor_stix_id !== snapshot.actor?.stix_id),
+            ...(snapshot.procedureEvidence ?? state.procedureEvidence.filter((item) => item.actor_stix_id === snapshot.actor?.stix_id)),
+          ],
           engagementId: null, engagementRevision: null,
         };
       }),

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, Mapping
 from unittest.mock import Mock, patch
 
 from backend import engagement_store as store
@@ -79,6 +80,33 @@ class EngagementStoreTests(unittest.TestCase):
         self.assertEqual(runs[0]["result"], "passed")
         self.assertEqual(runs[0]["telemetry_refs"], ["siem:event-42"])
         self.assertEqual(store.list_audit_events()["event_count"], 2)
+
+    def test_engagement_pagination_reaches_records_beyond_the_page_limit(self):
+        with patch.object(store, "_utc_now", return_value="2026-10-09T00:00:00Z"):
+            saved = [store.save_revision(plan_fixture())["engagement_id"] for _ in range(201)]
+        first = store.list_engagements(200)
+        second = store.list_engagements(200, offset=200)
+        self.assertEqual(len(first), 200)
+        self.assertEqual(len(second), 1)
+        self.assertEqual({item["id"] for item in first + second}, set(saved))
+        self.assertEqual([item["id"] for item in first + second], sorted(saved, reverse=True))
+        self.assertEqual(store.list_engagements(200, offset=400), [])
+        with self.assertRaisesRegex(store.EngagementStoreError, "offset"):
+            store.list_engagements(offset=-1)
+
+    def test_backlog_pagination_is_stable_when_owners_are_updated(self):
+        gaps: list[Mapping[str, Any]] = [{"technique_id": f"T{1000 + index}", "platform": "linux", "gap": "not_accepted",
+                 "ability_id": f"fixture-{index}", "procedure_candidate_ids": [], "reason": "Needs review"}
+                for index in range(201)]
+        store.upsert_ability_gaps(gaps)
+        first = store.list_ability_gaps(200)
+        store.update_ability_gap(first[-1]["id"], owner="Team", status="in_progress")
+        second = store.list_ability_gaps(200, offset=200)
+        self.assertEqual(len(second), 1)
+        self.assertEqual(len({item["id"] for item in first + second}), 201)
+        self.assertEqual(store.list_ability_gaps(200, "in_progress")[0]["owner"], "Team")
+        with self.assertRaisesRegex(store.EngagementStoreError, "offset"):
+            store.list_ability_gaps(offset=-1)
 
     def test_failed_revision_rolls_back_plan_and_audit_together(self):
         first = store.save_revision(plan_fixture())
