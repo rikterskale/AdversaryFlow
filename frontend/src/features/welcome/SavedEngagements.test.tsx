@@ -14,6 +14,19 @@ function mount(onRestore = vi.fn()): void {
 }
 
 describe("saved engagement browser", () => {
+  it("refreshes the selected engagement's revision menu along with the list", async () => {
+    let revision = 1;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (path: string) => path.includes("?")
+      ? json({ engagements: [{ id: "saved-1", actor_name: actor.name, revision, data_version: "fixture" }] })
+      : json({ id: "saved-1", revisions: [{ revision, plan_sha256: "a".repeat(64) }] })));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /Fixture Actor · revision 1/ }));
+    await screen.findByRole("option", { name: /Revision 1/ });
+    revision = 2;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh saved engagements" }));
+    await screen.findByRole("button", { name: /Fixture Actor · revision 2/ });
+    expect(await screen.findByRole("option", { name: /Revision 2/ })).toBeInTheDocument();
+  });
   it("F05 works from a fresh browser, exposes revisions and returns the selected server identity for append", async () => {
     const plan = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
     const onRestore = vi.fn();

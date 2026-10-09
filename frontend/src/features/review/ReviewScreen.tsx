@@ -58,6 +58,8 @@ function cardForTechnique(techniqueId: string): HTMLElement | null {
 export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: ReviewScreenProps): React.JSX.Element {
   const scope = useWizardStore((state) => state.scope);
   const records = useWorkspaceEvidence(actor, workflow);
+  const evidenceKey = useWizardStore((state) => state.evidenceKey);
+  const workspaceGeneration = useWizardStore((state) => state.workspaceGeneration);
   const updateEvidence = useWizardStore((state) => state.updateEvidence);
   const plan = useMemo(() => buildPlanPreview(workflow, scope), [scope, workflow]);
   const firstLab = useMemo(() => firstLabCommand(plan, scope.commandPlatform), [plan, scope.commandPlatform]);
@@ -113,6 +115,9 @@ export function ReviewScreen({ actor, workflow, onBack, onFinish, onNotice }: Re
   const focusedTechnique = stageTechniques[focusedIndex] ?? null;
 
   const persistEvidence = (techniqueId: string, patch: Partial<ExecutionEvidence>): void => {
+    const current = useWizardStore.getState();
+    if (current.workspaceGeneration !== workspaceGeneration || current.evidenceKey !== evidenceKey
+        || current.selectedActor?.stix_id !== actor.stix_id) return;
     updateEvidence(techniqueId, patch);
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../components/Button";
 import { Icon } from "../../components/Icon";
@@ -56,6 +56,7 @@ function fidelityLabel(technique: ScopedTechnique): { className: string; label: 
 
 export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus, onUpdate, onCopy, onNotice, onSelectCommand }: TechniqueCardProps): React.JSX.Element {
   const [receipt, setReceipt] = useState("");
+  const receiptAttempt = useRef(0);
   const [telemetryText, setTelemetryText] = useState(() => evidence?.telemetry_refs_draft ?? (evidence?.telemetry_refs ?? []).join("\n"));
   const [stdoutHash, setStdoutHash] = useState(evidence?.stdout_sha256 ?? "");
   const [stderrHash, setStderrHash] = useState(evidence?.stderr_sha256 ?? "");
@@ -70,6 +71,7 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
     });
   }, [telemetryValue]);
   const command = technique.selectedCommand;
+  useEffect(() => () => { receiptAttempt.current += 1; }, [technique.attack_id, command.command_id, command.platform, command.command]);
   const variants = technique.commands.filter((item) => item.platform === command.platform && item.command_id);
   const unsupported = Boolean(command.unsupported);
   const marked = isMarkedRun(evidence);
@@ -78,11 +80,15 @@ export function TechniqueCard({ technique, evidence, focused, firstLab, onFocus,
   const detection = evidence?.detection_result ?? "not_assessed";
 
   const importReceipt = async (): Promise<void> => {
+    const attempt = ++receiptAttempt.current;
     try {
-      onUpdate(await evidenceFromReceipt(receipt, technique.attack_id));
+      const patch = await evidenceFromReceipt(receipt, technique.attack_id);
+      if (attempt !== receiptAttempt.current) return;
+      onUpdate(patch);
       setReceipt("");
       onNotice(`Verified and imported ${technique.attack_id} receipt`);
     } catch (error: unknown) {
+      if (attempt !== receiptAttempt.current) return;
       onNotice(error instanceof Error ? error.message : "Receipt import failed.");
     }
   };

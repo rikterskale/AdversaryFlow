@@ -271,7 +271,7 @@ test("changed ATT&CK data preserves a restorable evidence snapshot", async ({ pa
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.getByRole("button", { name: "Restore snapshot" })).toBeInViewport();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth === 0)).toBe(true);
     expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`evidence-recovery-${width}.png`) });
   }

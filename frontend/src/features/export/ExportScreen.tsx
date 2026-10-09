@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, apiFetch, responseJson } from "../../api/client";
 import type { AbilityBacklogItem, AbilityGapStatus, Actor, AttackDomain, WorkflowResponse } from "../../api/contract";
@@ -53,6 +54,7 @@ function contentDispositionFilename(value: string | null, fallback: string): str
 }
 
 export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNotice, onRestart }: ExportScreenProps): React.JSX.Element {
+  const queryClient = useQueryClient();
   const scope = useWizardStore((state) => state.scope);
   const engagementId = useWizardStore((state) => state.engagementId);
   const engagementRevision = useWizardStore((state) => state.engagementRevision);
@@ -194,6 +196,8 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       if (current.workspaceGeneration !== workspace.workspaceGeneration || current.selectedActor?.stix_id !== workspace.selectedActor?.stix_id
           || current.evidenceKey !== workspace.evidenceKey || current.engagementId !== workspace.engagementId) return;
       setEngagementRecord(saved.engagement_id, saved.revision);
+      void queryClient.invalidateQueries({ queryKey: ["engagements"] });
+      void queryClient.invalidateQueries({ queryKey: ["engagement", saved.engagement_id] });
       const packPin = saved.content_pack_sha256 ? ` · pack set ${saved.content_pack_sha256.slice(0, 12)}` : "";
       onNotice(`Engagement saved · revision ${saved.revision} · plan SHA-256 ${saved.plan_sha256.slice(0, 12)}${packPin}`);
     } catch (error: unknown) {

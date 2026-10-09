@@ -4,6 +4,14 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Keep the latest JSON recovery selection when older file reads finish late;
+  discard pending imports after workspace replacement. Refresh saved engagement
+  lists and revision menus immediately after a save and on explicit refresh.
+- Prevent delayed exercise receipt verification from recording an outcome in
+  another workspace, platform, or command variant.
+- Show readable actor, platform, and data-version labels for recovery snapshots
+  instead of internal command hashes. Wait for browser layout to settle after
+  viewport changes in the recovery browser check.
 - Exempt loopback-only catalog blocks from the network-active guardrail: only
   commands that can reach beyond loopback keep `requires_network`, loopback
   blocks are labelled `loopback_network_activity`, and word-boundary matching

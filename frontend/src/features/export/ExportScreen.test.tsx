@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Actor, Command, WorkflowResponse } from "../../api/contract";
@@ -57,15 +58,17 @@ const workflow: WorkflowResponse = {
 
 function renderScreen(): void {
   render(
-    <ExportScreen
-      actor={actor}
-      csrfToken="csrf-fixture"
-      domains={["enterprise"]}
-      onBack={vi.fn()}
-      onNotice={vi.fn()}
-      onRestart={vi.fn()}
-      workflow={workflow}
-    />,
+    <QueryClientProvider client={new QueryClient()}>
+      <ExportScreen
+        actor={actor}
+        csrfToken="csrf-fixture"
+        domains={["enterprise"]}
+        onBack={vi.fn()}
+        onNotice={vi.fn()}
+        onRestart={vi.fn()}
+        workflow={workflow}
+      />
+    </QueryClientProvider>,
   );
 }
 

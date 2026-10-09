@@ -60,7 +60,7 @@ export function SavedEngagements({ onRestore, onNotice }: { onRestore: (saved: S
     <p>Available from a fresh browser. Restore any revision or download its plan; saving again appends to the same engagement.</p>
     <Button onClick={() => setOpen((value) => !value)}>{open ? "Close saved engagements" : "Browse saved engagements"}</Button>
     {open ? <>
-      <Button onClick={() => { void list.refetch(); }}>Refresh saved engagements</Button>
+      <Button onClick={() => { void list.refetch(); if (selected) void detail.refetch(); }}>Refresh saved engagements</Button>
       {list.isFetching || detail.isFetching || saved.isFetching ? <p role="status">Loading saved engagements…</p> : null}
       {error ? <div role="alert"><p>{error.message}</p><Button onClick={() => { if (list.error) void list.refetch(); else if (detail.error) void detail.refetch(); else void saved.refetch(); }}>Retry saved engagements</Button></div> : null}
       {list.data?.length === 0 ? <p>No saved engagements yet.</p> : null}

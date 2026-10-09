@@ -60,6 +60,7 @@ export function App(): React.JSX.Element {
   const [reloading, setReloading] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ plan: PlanExport; saved?: SavedRevision } | { workspace: WorkspaceState } | null>(null);
   const [importError, setImportError] = useState("");
+  const importAttempt = useRef(0);
   const storageHealth = useStorageHealth();
   const operation = useRef<AbortController | null>(null);
   const workspaceGeneration = useWizardStore((state) => state.workspaceGeneration);
@@ -104,6 +105,7 @@ export function App(): React.JSX.Element {
   }, [start, startupAttempt]);
 
   useEffect(() => () => { operation.current?.abort(); }, [workspaceGeneration]);
+  useEffect(() => () => { importAttempt.current += 1; }, []);
 
   useEffect(() => {
     if (initialWorkspaceStep.current > 0) useWizardStore.getState().setStep(0);
@@ -218,7 +220,11 @@ export function App(): React.JSX.Element {
   };
 
   const loadPlanFile = async (file: File): Promise<void> => {
+    const attempt = ++importAttempt.current;
+    const generation = useWizardStore.getState().workspaceGeneration;
+    const isCurrent = (): boolean => attempt === importAttempt.current && generation === useWizardStore.getState().workspaceGeneration;
     setImportError("");
+    setPendingImport(null);
     if (file.size > WORKSPACE_MAX_BYTES) {
       setImportError("Recovery file is larger than 128 MiB. Keep the existing workspace open.");
       setNotice("Recovery file is larger than 128 MiB. Keep the existing workspace open.");
@@ -226,8 +232,10 @@ export function App(): React.JSX.Element {
     }
     try {
       const parsed = await parseWorkspaceFile(await file.text());
+      if (!isCurrent()) return;
       requestImport(parsed.kind === "plan" ? { plan: parsed.plan } : { workspace: parsed.workspace });
     } catch (error: unknown) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.";
       setImportError(message);
       setNotice(message);
@@ -248,7 +256,10 @@ export function App(): React.JSX.Element {
     if (hasWorkspaceContent(true)) setPendingImport(incoming);
     else applyImport(incoming);
   };
-  const restoreEngagement = (saved: SavedRevision): void => requestImport({ plan: saved.plan, saved });
+  const restoreEngagement = (saved: SavedRevision): void => {
+    importAttempt.current += 1;
+    requestImport({ plan: saved.plan, saved });
+  };
   const confirmImport = (): void => {
     if (pendingImport) applyImport(pendingImport);
   };
