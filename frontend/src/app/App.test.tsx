@@ -134,6 +134,31 @@ describe("workspace replacement UX", () => {
     expect(savedBody).toMatchObject({ engagement_id: "server-engagement", plan: { actor: { stix_id: actor.stix_id } } });
   });
 
+  it("a first-run browser restores a JSON plan without a replace-workspace prompt", async () => {
+    const plan = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
+    useWizardStore.getState().restart();
+    expect(useWizardStore.getState().selectedActor).toBeNull();
+    mount();
+    const text = JSON.stringify(plan);
+    const file = Object.assign(new File([text], "plan.json"), { text: async () => text });
+    await act(async () => { fireEvent.change(screen.getByLabelText("Resume JSON plan"), { target: { files: [file] } }); });
+    expect(screen.queryByRole("dialog", { name: "Replace this browser workspace?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(useWizardStore.getState().selectedActor?.stix_id).toBe(actor.stix_id));
+  });
+
+  it("restoring over existing work still asks before replacing it", async () => {
+    const plan = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
+    mount();
+    await screen.findByRole("button", { name: "Resume Fixture Actor plan" });
+    const before = workspaceSnapshot(useWizardStore.getState());
+    const text = JSON.stringify(plan);
+    const file = Object.assign(new File([text], "plan.json"), { text: async () => text });
+    await act(async () => { fireEvent.change(screen.getByLabelText("Resume JSON plan"), { target: { files: [file] } }); });
+    expect(await screen.findByRole("dialog", { name: "Replace this browser workspace?" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel restore" }));
+    expect(workspaceSnapshot(useWizardStore.getState())).toEqual(before);
+  });
+
   it("F12 obsolete startup is cancelled on unmount and never advances ready state", async () => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal("fetch", vi.fn().mockImplementation((_path: string, init: RequestInit) => {

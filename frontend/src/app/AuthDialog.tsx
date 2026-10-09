@@ -3,6 +3,20 @@ import { useState, type FormEvent } from "react";
 import { Button } from "../components/Button";
 import { Dialog } from "../components/Dialog";
 
+// docker/entrypoint.sh prints `  API token: <value> (<note>)`. Copying the
+// whole line is an easy mistake, so strip exactly that label, the two notes it
+// can print, and wrapping quotes. Anything else is passed through unchanged.
+const TOKEN_LABEL = /^API token:\s*/i;
+const TOKEN_NOTE = /\s+\((?:generated for this container start|supplied through ADVERSARYFLOW_API_TOKEN)\)$/i;
+const WRAPPING_QUOTES = /^(["'`])(.*)\1$/;
+
+export function normalizeApiToken(raw: string): string {
+  let token = raw.trim().replace(TOKEN_LABEL, "").replace(TOKEN_NOTE, "").trim();
+  const quoted = WRAPPING_QUOTES.exec(token);
+  if (quoted?.[2] !== undefined) token = quoted[2].trim();
+  return token;
+}
+
 interface AuthDialogProps {
   open: boolean;
   message: string;
@@ -16,7 +30,7 @@ export function AuthDialog({ open, message, onConnect, onClose }: AuthDialogProp
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const next = token.trim();
+    const next = normalizeApiToken(token);
     if (!next) {
       setValidation("Enter the API token to continue.");
       return;

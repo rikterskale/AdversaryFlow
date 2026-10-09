@@ -108,7 +108,8 @@ stdout/stderr hashes, receipt digests, endpoint/SIEM references,
 operator/target context, notes, and cleanup verification are stored locally.
 Exercise receipts are self-reported; correlate their run IDs and timestamps
 with the endpoint or SIEM before treating execution as independently verified.
-Export a schema 2.0 JSON plan for backup, handoff, or resume. The export screen
+Export a JSON plan (schema 2.0, or 3.0 when accepted procedures or receipts are
+attached) for backup, handoff, or resume. The export screen
 uses **Generate report** to produce a sandboxed HTML preview, then enables
 command-free HTML/PDF downloads plus the canonical JSON record. Human reports
 include telemetry, ATT&CK detection mappings, evidence status, and coverage
@@ -157,7 +158,9 @@ does not enable OS auditing; a missing signal fails the gate. See
   online. Preserve the sidecar first if support needs provenance evidence.
 - **Offline cache missing:** seed the requested domain online or point
   --cache-dir to a verified cache.
-- **Port already in use:** use adversaryflow --port 5050 --open.
+- **Port already in use:** start on another port, for example
+  `./run.sh --port 5050`; see [Use another port](TROUBLESHOOTING.md#use-another-port)
+  for Windows and Docker.
 - **Refresh conflict:** wait for bootstrap or the existing refresh to finish.
 - **Permission denied:** choose a writable per-user --cache-dir.
 

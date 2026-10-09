@@ -2,6 +2,9 @@
 data/*.json
 data/*.tmp
 
+# Local Docker Compose overrides (port, token); see docs/TROUBLESHOOTING.md
+.env
+
 # Python
 __pycache__/
 *.pyc

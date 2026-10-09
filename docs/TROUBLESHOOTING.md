@@ -24,15 +24,20 @@ Use the matching block in the application folder:
 **Docker, Windows PowerShell:**
 
 ```powershell
-$env:ADVERSARYFLOW_PORT = "5050"
+Set-Content -Path .env -Value "ADVERSARYFLOW_PORT=5050"
 docker compose up
 ```
 
 **Docker, Mac or Linux:**
 
 ```bash
-ADVERSARYFLOW_PORT=5050 docker compose up
+echo "ADVERSARYFLOW_PORT=5050" > .env
+docker compose up
 ```
+
+Docker Compose reads the `.env` file in the application folder at every start,
+so later plain `docker compose up` commands keep using port `5050`. To return
+to the default port, delete the `.env` file and start again.
 
 **Python, Windows PowerShell:**
 
@@ -49,8 +54,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 --port 5050
 Open **http://127.0.0.1:5050** and, for Docker, use the new startup token.
 Browser autosave belongs to its original address: if progress looks empty,
 restore your JSON file with **Resume JSON plan**. Reuse the same port when
-restarting. To return a Windows Docker session to its default, stop it, run
-`Remove-Item Env:ADVERSARYFLOW_PORT`, then `docker compose up`.
+restarting; for Python, repeat the same `--port` value each time.
 
 ## Downloads or preparation fail
 

@@ -59,4 +59,5 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "AdversaryFlow doctor failed. Fix the reported issue, then retry."
 }
-Write-Host "AdversaryFlow installed and verified. Start it with .\run.ps1"
+Write-Host "AdversaryFlow installed and verified. Start it with:"
+Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File .\run.ps1"

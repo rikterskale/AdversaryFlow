@@ -199,9 +199,16 @@ export function App(): React.JSX.Element {
     useWizardStore.getState().setStep(1);
     setBeginOpen(false);
   };
-  const beginPlan = (): void => {
+  // A browser with no actor, progress, or evidence has nothing a restore or new
+  // plan could overwrite, so it should not ask the user to confirm replacing it.
+  const hasWorkspaceContent = (includeProcedures: boolean): boolean => {
     const state = useWizardStore.getState();
-    if (selectedActor || maxStep > 0 || Object.keys(state.records).length || Object.keys(state.evidenceArchive).length) setBeginOpen(true);
+    return Boolean(state.selectedActor || state.maxStep > 0 || Object.keys(state.records).length
+      || Object.keys(state.evidenceArchive).length || (includeProcedures && state.procedureEvidence.length));
+  };
+  const beginPlan = (): void => {
+    // Begin carries accepted procedures forward (see confirmBegin), so they do not count here.
+    if (hasWorkspaceContent(false)) setBeginOpen(true);
     else confirmBegin();
   };
 
@@ -219,8 +226,7 @@ export function App(): React.JSX.Element {
     }
     try {
       const parsed = await parseWorkspaceFile(await file.text());
-      const incoming = parsed.kind === "plan" ? { plan: parsed.plan } : { workspace: parsed.workspace };
-      setPendingImport(incoming);
+      requestImport(parsed.kind === "plan" ? { plan: parsed.plan } : { workspace: parsed.workspace });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Plan import failed. Choose a schema 2.0 or 3.0 JSON export.";
       setImportError(message);
@@ -228,16 +234,23 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const restoreEngagement = (saved: SavedRevision): void => setPendingImport({ plan: saved.plan, saved });
-  const confirmImport = (): void => {
-    if (!pendingImport) return;
-    if ("workspace" in pendingImport) useWizardStore.getState().importWorkspace(pendingImport.workspace);
+  const applyImport = (incoming: NonNullable<typeof pendingImport>): void => {
+    if ("workspace" in incoming) useWizardStore.getState().importWorkspace(incoming.workspace);
     else {
-      importPlan(pendingImport.plan);
-      if (pendingImport.saved) useWizardStore.getState().setEngagementRecord(pendingImport.saved.engagement_id, pendingImport.saved.revision);
+      importPlan(incoming.plan);
+      if (incoming.saved) useWizardStore.getState().setEngagementRecord(incoming.saved.engagement_id, incoming.saved.revision);
     }
     setPendingImport(null);
-    setNotice("workspace" in pendingImport ? "Workspace recovered with saved settings. Review commands before use." : "Plan imported with its saved guardrails; verify commands and data version before use");
+    setNotice("workspace" in incoming ? "Workspace recovered with saved settings. Review commands before use." : "Plan imported with its saved guardrails; verify commands and data version before use");
+  };
+  // Only ask before replacing when there is something to lose.
+  const requestImport = (incoming: NonNullable<typeof pendingImport>): void => {
+    if (hasWorkspaceContent(true)) setPendingImport(incoming);
+    else applyImport(incoming);
+  };
+  const restoreEngagement = (saved: SavedRevision): void => requestImport({ plan: saved.plan, saved });
+  const confirmImport = (): void => {
+    if (pendingImport) applyImport(pendingImport);
   };
   const backup = (): void => {
     try { downloadWorkspace(); setNotice("Recovery download requested. Confirm the file is saved before clearing any work."); }

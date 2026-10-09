@@ -125,10 +125,10 @@ If preparation fails, follow [Something went wrong](#something-went-wrong).
 Your first session creates a report without running any exercise:
 
 1. Select **Begin emulation plan**.
-2. Choose a threat group or campaign. You can type a name in the search box.
-   Select **Continue to scope**.
-3. Keep the default **Enterprise** data and choose the platform you want the
-   plan to describe: Windows, Linux, or macOS. Leave **Allow network-active
+2. Keep the default **Enterprise** data and choose a threat group or campaign.
+   You can type a name in the search box. Select **Continue to scope**.
+3. Choose the platform you want the plan to describe: Windows, Linux, or
+   macOS. Leave **Allow network-active
    commands**, **Allow administrator commands**, and **Allow high-risk
    commands** off. Select **Build plan**.
 4. Read a technique card and its explanation. Leave command outcomes at
@@ -195,6 +195,7 @@ folder as in step 3, then run:
 docker compose up
 ```
 
+If you set another port with a `.env` file, it is reused automatically.
 Reopen the printed browser address and use the token printed for this start.
 The token can change after restarting. Existing ATT&CK downloads and
 server-saved engagements remain in Docker's saved data volume. Avoid deleting

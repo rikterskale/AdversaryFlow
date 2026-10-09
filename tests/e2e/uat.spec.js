@@ -410,7 +410,7 @@ test("J31 — imported multiline fields cannot add executable runbook lines", as
     cleanup: "echo cleanup\necho CLEANUP_INJECTION",
   };
   await page.setInputFiles("#importPlan", planFile(plan));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await page.getByRole("button", { name: /Finish & export/ }).click();
   const { text } = await exportAndRead(page, /Runbook/);
   const executableLines = text.split(/\r?\n/).filter(line => line.trim() && !line.startsWith("REM"));
@@ -422,7 +422,7 @@ test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
   await expect(page.getByLabel("Outcome for T1059.001")).toHaveValue("passed");
