@@ -851,6 +851,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-dir", default=os.environ.get("ADVERSARYFLOW_CACHE_DIR"))
     parser.add_argument("--offline", action="store_true", default=os.environ.get("ADVERSARYFLOW_OFFLINE", "").lower() in {"1", "true", "yes"}, help="use cached ATT&CK data without downloading")
     parser.add_argument("--no-preload", action="store_true", help="start before loading ATT&CK data")
+    parser.add_argument("--skip-port-check", action="store_true", help="defer doctor's port check until service startup (used by installers)")
     parser.add_argument("--open", action="store_true", dest="open_browser", help="open the browser when the service is ready")
     parser.add_argument("--allow-remote", action="store_true", help="explicitly permit a non-loopback bind address")
     parser.add_argument("--api-token", default=os.environ.get("ADVERSARYFLOW_API_TOKEN", ""),
@@ -872,7 +873,7 @@ def main(argv: List[str] | None = None) -> int:
     attack_data.configure_offline(args.offline)
 
     if args.command == "doctor":
-        return _doctor(args.host, args.port)
+        return _doctor(args.host, args.port, check_port=not args.skip_port_check)
     if args.command == "cache-status":
         print(json.dumps(attack_data.cache_status(), indent=2, sort_keys=True))
         return 0
@@ -911,30 +912,37 @@ def main(argv: List[str] | None = None) -> int:
     if args.api_token and os.environ.get("ADVERSARYFLOW_API_TOKEN") != args.api_token:
         print("WARNING: --api-token is visible in process listings; prefer ADVERSARYFLOW_API_TOKEN.")
 
-    if not args.no_preload:
-        _start_bootstrap()
+    from waitress import create_server
 
-    webhook.start_worker()
-
-    from waitress import serve
+    try:
+        server = create_server(
+            app, host=args.host, port=args.port, threads=8,
+            channel_timeout=120, ident=f"AdversaryFlow/{__version__}",
+        )
+    except OSError as exc:
+        print(f"AdversaryFlow could not listen on {args.host}:{args.port}: {exc}", file=sys.stderr)
+        print("Stop the other service or choose another port with --port 5001 or ADVERSARYFLOW_PORT. "
+              "See docs/TROUBLESHOOTING.md#use-another-port.", file=sys.stderr)
+        return 1
 
     url_host = "127.0.0.1" if args.host in {"0.0.0.0", "::"} else args.host
     if ":" in url_host and not url_host.startswith("["):
         url_host = f"[{url_host}]"
     url = f"http://{url_host}:{args.port}"
-    print(f"AdversaryFlow {__version__}: {url}")
-    if not _is_loopback_host(args.host):
-        print("WARNING: remote binding is enabled; every API request requires the configured bearer token.")
-    if args.open_browser:
-        threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
-    serve(
-        app,
-        host=args.host,
-        port=args.port,
-        threads=8,
-        channel_timeout=120,
-        ident=f"AdversaryFlow/{__version__}",
-    )
+    try:
+        if not args.no_preload:
+            _start_bootstrap()
+        webhook.start_worker()
+        print(f"AdversaryFlow {__version__}: {url}", flush=True)
+        if not _is_loopback_host(args.host):
+            print("WARNING: remote binding is enabled; every API request requires the configured bearer token.")
+        if args.open_browser:
+            threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.close()
     return 0
 
 
@@ -967,9 +975,6 @@ def _port_number(value: str) -> int:
 def _open_when_ready(url: str) -> None:
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
-        if _runtime["ready"] or _runtime["phase"] == "failed":
-            webbrowser.open(url)
-            return
         # The UI can show download progress and trigger bootstrap itself when
         # --no-preload is used. Open once HTTP is serving instead of waiting
         # for data that may require the browser to start loading.
@@ -983,8 +988,8 @@ def _open_when_ready(url: str) -> None:
         time.sleep(0.2)
 
 
-def _doctor(host: str = "127.0.0.1", port: int = 5000) -> int:
-    report = diagnostics.collect_diagnostics(FRONTEND_DIR, host=host, port=port)
+def _doctor(host: str = "127.0.0.1", port: int = 5000, *, check_port: bool = True) -> int:
+    report = diagnostics.collect_diagnostics(FRONTEND_DIR, host=host, port=port, check_port=check_port)
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["ok"] else 1
 

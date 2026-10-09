@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import socket
 import tempfile
 import unittest
 import zipfile
@@ -643,15 +644,27 @@ class BrowserLaunchTests(unittest.TestCase):
 
     def test_the_browser_opens_once_data_is_ready(self):
         app_module._runtime.update(ready=True, phase="ready")
-        with patch("backend.app.webbrowser.open") as opener:
+        with patch("backend.app.webbrowser.open") as opener, patch("backend.app.urllib.request.urlopen") as probe:
+            probe.return_value.__enter__.return_value.status = 200
             app_module._open_when_ready("http://127.0.0.1:5000")
         opener.assert_called_once_with("http://127.0.0.1:5000")
 
     def test_the_browser_still_opens_so_a_failure_is_visible(self):
         app_module._runtime.update(ready=False, phase="failed")
-        with patch("backend.app.webbrowser.open") as opener:
+        with patch("backend.app.webbrowser.open") as opener, patch("backend.app.urllib.request.urlopen") as probe:
+            probe.return_value.__enter__.return_value.status = 200
             app_module._open_when_ready("http://127.0.0.1:5000")
         opener.assert_called_once()
+
+    def test_ready_data_does_not_open_a_browser_before_http_is_available(self):
+        app_module._runtime.update(ready=True, phase="ready")
+        with patch("backend.app.webbrowser.open") as opener, \
+                patch("backend.app.urllib.request.urlopen", side_effect=OSError("not listening yet")) as probe, \
+                patch("backend.app.time.sleep"), \
+                patch("backend.app.time.monotonic", side_effect=[0.0, 0.1, 1000.0]):
+            app_module._open_when_ready("http://127.0.0.1:5000")
+        probe.assert_called_once()
+        opener.assert_not_called()
 
     def test_no_preload_opens_the_serving_ui_to_start_setup(self):
         app_module._runtime.update(ready=False, loading=False, phase="not_started")
@@ -698,9 +711,45 @@ class CommandLineTests(unittest.TestCase):
 
     def test_ipv6_launch_prints_a_usable_browser_url(self):
         stream = io.StringIO()
-        with patch("waitress.serve"), patch("backend.app.webhook.start_worker"), contextlib.redirect_stdout(stream):
+        with patch("waitress.create_server"), patch("backend.app.webhook.start_worker"), contextlib.redirect_stdout(stream):
             self.assertEqual(app_module.main(["--host", "::1", "--no-preload"]), 0)
         self.assertIn("http://[::1]:5000", stream.getvalue())
+
+    def test_an_occupied_port_reports_recovery_without_starting_background_work(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+            error = io.StringIO()
+            with patch("backend.app._start_bootstrap") as bootstrap, \
+                    patch("backend.app.webhook.start_worker") as worker, contextlib.redirect_stderr(error):
+                code = app_module.main(["--port", str(port), "--open"])
+        self.assertEqual(code, 1)
+        self.assertIn(f"127.0.0.1:{port}", error.getvalue())
+        self.assertIn("--port", error.getvalue())
+        self.assertNotIn("Traceback", error.getvalue())
+        bootstrap.assert_not_called()
+        worker.assert_not_called()
+
+    def test_ctrl_c_closes_the_server_without_a_traceback(self):
+        with patch("waitress.create_server") as create, patch("backend.app.webhook.start_worker"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            create.return_value.run.side_effect = KeyboardInterrupt
+            self.assertEqual(app_module.main(["--no-preload"]), 0)
+        create.return_value.close.assert_called_once()
+
+    def test_installation_diagnostics_allow_a_busy_port_but_normal_doctor_checks_it(self):
+        with tempfile.TemporaryDirectory() as directory, socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            args = ["doctor", "--port", str(listener.getsockname()[1]), "--cache-dir", directory, "--offline"]
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                self.assertEqual(app_module.main([*args, "--skip-port-check"]), 0)
+            report = json.loads(stream.getvalue())
+            port_check = next(item for item in report["checks"] if item["id"] == "port")
+            self.assertFalse(port_check["required"])
+            self.assertIn("deferred", port_check["detail"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(app_module.main(args), 1)
 
     def test_doctor_reports_a_healthy_source_checkout(self):
         with tempfile.TemporaryDirectory() as directory:

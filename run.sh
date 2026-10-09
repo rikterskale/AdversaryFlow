@@ -11,10 +11,10 @@ if [ "$script_dir" = "$script_path" ]; then
 fi
 cd "$script_dir"
 
-if [ ! -x .venv/bin/adversaryflow ]; then
-  echo "[AdversaryFlow] first-run installation…"
-  ./install.sh
+if [ ! -x .venv/bin/adversaryflow ] || [ ! -x .venv/bin/python ] || ! .venv/bin/python scripts/check_install.py; then
+  echo "[AdversaryFlow] installing or repairing the local environment…"
+  bash ./install.sh
 fi
 
-echo "[AdversaryFlow] starting; the browser will open when ATT&CK data is ready"
+echo "[AdversaryFlow] starting; the browser will open when the local service is ready"
 exec .venv/bin/adversaryflow --open "$@"

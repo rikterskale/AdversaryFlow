@@ -27,7 +27,16 @@ if (-not $PythonCommand) {
     throw "AdversaryFlow requires Python 3.10 or newer. Install Python, ensure py or python is on PATH, then retry."
 }
 
-if (-not (Test-Path ".venv")) {
+$EnvironmentReady = $false
+if (Test-Path ".venv\Scripts\python.exe") {
+    try {
+        & .\.venv\Scripts\python.exe -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"
+        $EnvironmentReady = $LASTEXITCODE -eq 0
+    } catch {
+        Write-Host "[AdversaryFlow] recreating the Python environment."
+    }
+}
+if (-not $EnvironmentReady) {
     & $PythonCommand @PythonPrefix -m venv .venv
     if ($LASTEXITCODE -ne 0) {
         throw "Creating the AdversaryFlow virtual environment failed with exit code $LASTEXITCODE."
@@ -46,7 +55,7 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Installing AdversaryFlow failed with exit code $LASTEXITCODE."
 }
-& .\.venv\Scripts\adversaryflow.exe doctor
+& .\.venv\Scripts\adversaryflow.exe doctor --skip-port-check
 if ($LASTEXITCODE -ne 0) {
     throw "AdversaryFlow doctor failed. Fix the reported issue, then retry."
 }

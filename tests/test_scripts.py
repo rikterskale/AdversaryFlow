@@ -63,6 +63,7 @@ def load(name: str):
 build_sbom = load("build_sbom")
 validate_release = load("validate_release")
 verify_distribution_assets = load("verify_distribution_assets")
+check_install = load("check_install")
 
 LOCK = """\
 # comment line
@@ -340,6 +341,44 @@ class ShippedReleaseArtifactsTests(unittest.TestCase):
         self.assertIn(f"version: {__version__}", contract)
 
 
+class InstallationReadinessTests(unittest.TestCase):
+    def setUp(self):
+        from backend import __version__
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "requirements.lock").write_text("jsonschema==4.26.0\n", encoding="utf-8")
+        self.versions = {"adversaryflow": __version__, "jsonschema": "4.26.0"}
+
+    def version(self, name):
+        if name not in self.versions:
+            raise check_install.importlib.metadata.PackageNotFoundError(name)
+        return self.versions[name]
+
+    def test_a_missing_runtime_dependency_triggers_repair(self):
+        del self.versions["jsonschema"]
+        with patch.object(check_install.importlib.metadata, "version", side_effect=self.version):
+            self.assertIn("missing jsonschema", check_install.check_install(self.root))
+
+    def test_checkout_version_or_dependency_changes_trigger_repair(self):
+        for name in self.versions:
+            with self.subTest(name=name), patch.object(check_install.importlib.metadata, "version", side_effect=self.version):
+                expected = self.versions[name]
+                self.versions[name] = "0.0.0"
+                self.assertIn(f"this checkout needs {expected}", check_install.check_install(self.root))
+                self.versions[name] = expected
+
+    def test_corrupt_packages_are_detected_even_with_matching_metadata(self):
+        with patch.object(check_install.importlib.metadata, "version", side_effect=self.version), \
+                patch.object(check_install.importlib, "import_module", side_effect=ImportError("broken binary module")):
+            self.assertIn("broken binary module", check_install.check_install(self.root))
+
+    def test_a_healthy_environment_requires_no_repair(self):
+        with patch.object(check_install.importlib.metadata, "version", side_effect=self.version):
+            self.assertIsNone(check_install.check_install(self.root))
+
+
 class LauncherScriptTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -368,19 +407,31 @@ class LauncherScriptTests(unittest.TestCase):
             encoding="utf-8", newline="\n",
         )
         command.chmod(0o755)
-        for exit_code in (0, 23):
-            with self.subTest(exit_code=exit_code):
+        python = command.parent / "python"
+        python.write_text('#!/bin/sh\nexit "${AF_CHECK_EXIT:-0}"\n', encoding="utf-8", newline="\n")
+        python.chmod(0o755)
+        (self.root / "install.sh").write_text('#!/bin/sh\nexit 0\n', encoding="utf-8", newline="\n")
+        for check_exit, exit_code in ((0, 0), (0, 23), (1, 0)):
+            with self.subTest(check_exit=check_exit, exit_code=exit_code):
                 result = subprocess.run(
                     [BASH, str(self.root / "run.sh"), "--port", "6000", "--cache-dir", "cache with spaces"],
-                    env=_bash_env({"AF_LAUNCHER_EXIT_CODE": str(exit_code)}),
+                    env=_bash_env({"AF_LAUNCHER_EXIT_CODE": str(exit_code), "AF_CHECK_EXIT": str(check_exit)}),
                     capture_output=True, text=True, check=False, timeout=20,
                 )
                 self.assertEqual(result.returncode, exit_code, result.stderr)
                 self.assertIn("[AdversaryFlow] starting", result.stdout)
                 self.assertEqual(
-                    result.stdout.splitlines()[1:],
+                    [line for line in result.stdout.splitlines() if line.startswith("<")],
                     ["<--open>", "<--port>", "<6000>", "<--cache-dir>", "<cache with spaces>"],
                 )
+                self.assertEqual("installing or repairing" in result.stdout, check_exit != 0)
+
+    def test_run_script_stops_if_environment_repair_fails(self):
+        shutil.copy2(ROOT / "run.sh", self.root / "run.sh")
+        (self.root / "install.sh").write_text("#!/bin/sh\nexit 42\n", encoding="utf-8", newline="\n")
+        result = subprocess.run([BASH, str(self.root / "run.sh")], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 42)
+        self.assertNotIn("[AdversaryFlow] starting", result.stdout)
 
     def test_powershell_run_script_preserves_arguments_and_exit_status(self):
         shells = [shell for name in ("powershell", "pwsh") if (shell := shutil.which(name))]
@@ -398,6 +449,8 @@ class LauncherScriptTests(unittest.TestCase):
             source = self.root / "child.cs"
             source.write_text(
                 'class LauncherChild { static int Main(string[] args) { '
+                'if (args.Length > 0 && args[0] == "scripts/check_install.py") '
+                'return int.Parse(System.Environment.GetEnvironmentVariable("AF_CHECK_EXIT")); '
                 'foreach (string arg in args) System.Console.WriteLine("<" + arg + ">"); '
                 'return int.Parse(System.Environment.GetEnvironmentVariable("AF_LAUNCHER_EXIT_CODE")); '
                 '} }', encoding="utf-8",
@@ -416,22 +469,44 @@ class LauncherScriptTests(unittest.TestCase):
                 encoding="utf-8", newline="\n",
             )
             command.chmod(0o755)
+        if os.name == "nt":
+            shutil.copy2(command, scripts / "python.exe")
+        else:
+            python = scripts / "python.exe"
+            python.write_text('#!/bin/sh\nexit "$AF_CHECK_EXIT"\n', encoding="utf-8", newline="\n")
+            python.chmod(0o755)
+        (launcher / "install.ps1").write_text("$ErrorActionPreference = 'Stop'\n", encoding="utf-8")
         for shell in shells:
-            for exit_code in (0, 23):
-                with self.subTest(shell=shell, exit_code=exit_code):
+            for check_exit, exit_code in ((0, 0), (0, 23), (1, 0)):
+                with self.subTest(shell=shell, check_exit=check_exit, exit_code=exit_code):
                     result = subprocess.run(
                         [shell, "-NoProfile", "-NonInteractive", "-File", str(launcher / "run.ps1"),
                          "--port", "6000", "--cache-dir", "cache with spaces"],
                         cwd=self.root,
-                        env={**os.environ, "AF_LAUNCHER_EXIT_CODE": str(exit_code)},
+                        env={**os.environ, "AF_LAUNCHER_EXIT_CODE": str(exit_code), "AF_CHECK_EXIT": str(check_exit)},
                         capture_output=True, text=True, check=False, timeout=20,
                     )
                     self.assertEqual(result.returncode, exit_code, result.stderr)
                     self.assertIn("[AdversaryFlow] starting", result.stdout)
                     self.assertEqual(
-                        result.stdout.splitlines()[1:],
+                        [line for line in result.stdout.splitlines() if line.startswith("<")],
                         ["<--open>", "<--port>", "<6000>", "<--cache-dir>", "<cache with spaces>"],
                     )
+                    self.assertEqual("installing or repairing" in result.stdout, check_exit != 0)
+
+    def test_powershell_run_stops_if_environment_repair_fails(self):
+        shell = shutil.which("pwsh") or shutil.which("powershell")
+        if not shell:
+            self.skipTest("PowerShell is not installed")
+        shutil.copy2(ROOT / "run.ps1", self.root / "run.ps1")
+        (self.root / "install.ps1").write_text("throw 'Fixture repair failed'\n", encoding="utf-8")
+        result = subprocess.run(
+            [shell, "-NoProfile", "-NonInteractive", "-File", str(self.root / "run.ps1")],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Fixture repair failed", result.stderr)
+        self.assertNotIn("[AdversaryFlow] starting", result.stdout)
 
     def test_install_script_runs_every_locked_install_and_doctor(self):
         shutil.copy2(ROOT / "install.sh", self.root / "install.sh")
@@ -456,7 +531,7 @@ class LauncherScriptTests(unittest.TestCase):
         self.assertIn("--require-hashes --requirement requirements.lock", calls)
         self.assertIn("--require-hashes --requirement requirements-build.lock", calls)
         self.assertIn("--no-build-isolation --no-deps --editable .", calls)
-        self.assertIn("doctor", calls)
+        self.assertIn("doctor --skip-port-check", calls)
 
     def test_install_script_rejects_missing_and_old_python(self):
         shutil.copy2(ROOT / "install.sh", self.root / "install.sh")

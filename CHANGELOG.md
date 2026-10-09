@@ -4,6 +4,11 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Check native environments offline at launch and repair missing, mismatched, or
+  unloadable runtime dependencies automatically. Defer installer port checks to
+  startup, report bind failures with recovery instructions, wait for HTTP before
+  opening the browser, and close the service cleanly on Ctrl+C.
+- Explain Docker token retrieval directly in the connection dialog.
 - Confirm destructive welcome/replacement actions; surface persistent browser
   storage failures and provide versioned whole-workspace recovery, including
   original crash wrappers and explicit saved-file confirmation before reset.
