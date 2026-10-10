@@ -56,7 +56,7 @@ const workflow: WorkflowResponse = {
   metadata: { domains: ["enterprise"], data_version: "enterprise:fixture", version: "0.4.0" },
 };
 
-function renderScreen(): void {
+function renderScreen(onNotice: (message: string) => void = vi.fn()): void {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <ExportScreen
@@ -64,7 +64,7 @@ function renderScreen(): void {
         csrfToken="csrf-fixture"
         domains={["enterprise"]}
         onBack={vi.fn()}
-        onNotice={vi.fn()}
+        onNotice={onNotice}
         onRestart={vi.fn()}
         workflow={workflow}
       />
@@ -282,5 +282,21 @@ describe("ExportScreen report generation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save engagement" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save new revision" })).toBeEnabled());
     expect(useWizardStore.getState().engagementId).toBe("current-plan-id");
+  });
+
+  it.each([
+    ["0", "12", /0 tests included because no reviewed abilities from a signed content pack match this plan · 12 items/],
+    ["3", "9", /Atomic Red Team draft ready · 3 reviewed tests included · 9 items/],
+  ])("explains an Atomic export with %s included tests", async (included, gaps, expected) => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:atomic");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new Blob(["PK"]), {
+      headers: { "X-AdversaryFlow-Atomic-Included": included, "X-AdversaryFlow-Atomic-Gaps": gaps },
+    })));
+    const onNotice = vi.fn();
+    renderScreen(onNotice);
+    fireEvent.click(screen.getByRole("button", { name: /Atomic Red Team draft \+ gap backlog/ }));
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith(expect.stringMatching(expected)));
   });
 });

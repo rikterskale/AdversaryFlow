@@ -159,6 +159,18 @@ async function interceptDoctor(page, onRequest = () => {}) {
   });
 }
 
+// Measure overflow against the root's laid-out width. Under Chromium's classic
+// scrollbars a reserved gutter shrinks the root box (and scrollWidth) below
+// clientWidth, so comparing against clientWidth alone would report a negative
+// value and could hide overflow narrower than the gutter.
+async function expectNoHorizontalOverflow(page) {
+  await expect.poll(() => page.evaluate(() => {
+    const root = document.documentElement;
+    const layoutWidth = Math.min(root.clientWidth, Math.ceil(root.getBoundingClientRect().width));
+    return root.scrollWidth - layoutWidth;
+  })).toBe(0);
+}
+
 async function buildPlan(page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
@@ -317,17 +329,17 @@ test(`mobile screens never create page-level horizontal scrolling at ${width}px`
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   // Reserve a classic scrollbar gutter even on hosts using overlay scrollbars.
   await page.evaluate(() => { document.documentElement.style.scrollbarGutter = "stable"; });
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Select Test Actor/ }).click();
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Finish & export/ }).click();
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
 });
 }
 

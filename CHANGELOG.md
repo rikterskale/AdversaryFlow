@@ -4,6 +4,18 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Explain a manifest-only Atomic export: when no reviewed, signed content-pack
+  abilities match the plan, the notice now states that 0 tests were included and
+  why, instead of reporting "0 reviewed tests included" without context.
+- Remove the run-specific image when `scripts/compose_smoke.py` finishes, so
+  repeated smoke runs no longer leave ~300 MB images behind. Images passed with
+  `--image` are never removed.
+- Measure mobile horizontal overflow against the root's laid-out width in the
+  browser suite, so Chromium's reserved classic-scrollbar gutter is no longer
+  reported as a failure while real overflow of any width is still caught.
+- Update the dev-only `source-map-js` transitive dependency to 1.2.2
+  (GHSA-68fv-2mgg-jv7q).
+
 - Paginate saved engagements and ability backlogs beyond 200 records, expose
   validated `offset`/`next_offset` API navigation, and keep backlog ordering stable
   while owners and statuses change.

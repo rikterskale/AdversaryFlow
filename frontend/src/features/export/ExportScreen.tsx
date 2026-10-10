@@ -192,7 +192,11 @@ export function ExportScreen({ actor, workflow, domains, csrfToken, onBack, onNo
       const blob = await response.blob();
       if (signal.aborted) return;
       downloadBlob(blob, filename);
-      onNotice(`Atomic Red Team draft ready · ${included} reviewed tests included · ${gaps} items in the manifest gap backlog`);
+      onNotice(included > 0
+        ? `Atomic Red Team draft ready · ${included} reviewed tests included · ${gaps} items in the manifest gap backlog`
+        // Only reviewed abilities from a verified signed content pack become
+        // Atomic tests. Say so, rather than leaving a manifest-only ZIP unexplained.
+        : `Atomic gap manifest ready · 0 tests included because no reviewed abilities from a signed content pack match this plan · ${gaps} items added to the gap backlog`);
     } catch (error: unknown) {
       if (signal.aborted || (error instanceof ApiError && error.code === "cancelled")) return;
       actionFailed("Atomic export", error instanceof Error ? `Atomic export failed: ${error.message}` : "Atomic playbook generation failed.");

@@ -82,7 +82,14 @@ def smoke(*, fresh: bool, image: str | None) -> int:
     finally:
         # Both project and volume names are unique to this run. Never touch the
         # operator's regular Compose stack or its persistent ATT&CK cache.
-        compose(["down", "--volumes", "--remove-orphans"])
+        # The run-specific image tag is removed too, otherwise every smoke run
+        # leaves a ~300 MB image behind. "--rmi local" would not match it
+        # because the override assigns an explicit tag. A caller-supplied
+        # --image is never removed.
+        teardown = ["down", "--volumes", "--remove-orphans"]
+        if not image:
+            teardown += ["--rmi", "all"]
+        compose(teardown)
 
 
 def main() -> int:

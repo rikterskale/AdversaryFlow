@@ -634,5 +634,37 @@ exit 0
                 self.assertNotIn("AdversaryFlow installed and verified.", result.stdout)
 
 
+class ComposeSmokeTeardownTests(unittest.TestCase):
+    """The smoke test must clean up its own image, never a caller's image."""
+
+    def _teardown_for(self, *, fresh: bool, image):
+        compose_smoke = load("compose_smoke")
+        calls = []
+
+        def fake_compose(arguments, *, capture=False):
+            calls.append(list(arguments))
+            # Fail `up` so the run proceeds straight to the teardown branch.
+            return subprocess.CompletedProcess(arguments, 1 if arguments[0] == "up" else 0, "", "")
+
+        with patch.object(compose_smoke, "compose", side_effect=fake_compose), \
+                patch("sys.stderr", new_callable=io.StringIO):
+            self.assertEqual(compose_smoke.smoke(fresh=fresh, image=image), 1)
+        return calls[-1]
+
+    def test_a_built_smoke_image_is_removed_with_its_volume(self):
+        for fresh in (True, False):
+            with self.subTest(fresh=fresh):
+                self.assertEqual(
+                    self._teardown_for(fresh=fresh, image=None),
+                    ["down", "--volumes", "--remove-orphans", "--rmi", "all"],
+                )
+
+    def test_a_caller_supplied_image_is_never_removed(self):
+        self.assertEqual(
+            self._teardown_for(fresh=False, image="adversaryflow:release"),
+            ["down", "--volumes", "--remove-orphans"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
