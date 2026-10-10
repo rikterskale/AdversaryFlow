@@ -4,6 +4,11 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Update the PDF runtime and its test tooling: `reportlab` 5.0.1, `markupsafe`
+  3.0.4, `pypdf` 6.19.0 and `pypdfium2` 5.14.0, with `requirements.lock` and
+  `requirements-test.lock` regenerated with hashes. A real 95-page report renders
+  pixel-identically to `reportlab` 4.4.4, including Chinese and Cyrillic text.
+
 - Fix the Windows CI test jobs: the native-catalog syntax test and the
   command-coverage audit invoked a bare `bash`, which on Windows resolves to the
   System32 WSL launcher and exits 1 without a distribution. Both now use a
