@@ -5,10 +5,15 @@ from backend.command_catalog import CURATED
 from backend.lab_exercises import PORTABLE_EXERCISE_IDS
 from backend.native_catalog import NATIVE_RECIPES
 from backend.platform_support import PORTABLE_GAPS
+from tests.test_catalog_safety import BASH
 
 
 class NativeCatalogTests(unittest.TestCase):
     def test_every_pinned_applicable_gap_has_an_explicit_native_or_bounded_recipe(self):
+        # A bare "bash" resolves to System32's WSL launcher on Windows before
+        # PATH is searched; without an installed distro it exits 1 silently.
+        # Use the verified interpreter (Git Bash on Windows) instead.
+        self.assertTrue(BASH, "A working Bash runtime is required to validate POSIX catalog commands")
         self.assertEqual(len(PORTABLE_GAPS), 229)
         self.assertEqual(set(PORTABLE_GAPS), set(NATIVE_RECIPES) | set(PORTABLE_EXERCISE_IDS))
         self.assertFalse(set(NATIVE_RECIPES) & set(PORTABLE_EXERCISE_IDS))
@@ -21,7 +26,7 @@ class NativeCatalogTests(unittest.TestCase):
                     for command in records:
                         self.assertTrue(command['prerequisites'])
                         self.assertTrue(command['expected_telemetry'])
-                        result = subprocess.run(['bash','-n','-c',command['command']],capture_output=True,text=True,timeout=5,check=False)
+                        result = subprocess.run([BASH,'-n','-c',command['command']],capture_output=True,text=True,timeout=5,check=False)
                         self.assertEqual(result.returncode,0,result.stderr)
 
     def test_bounded_alternatives_are_distinct_and_explicit_on_all_platforms(self):

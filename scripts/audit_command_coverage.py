@@ -9,6 +9,8 @@ import argparse
 import hashlib
 import itertools
 import json
+import os
+import shutil
 import subprocess
 from collections import Counter
 from pathlib import Path
@@ -23,6 +25,23 @@ from backend.command_catalog import CURATED
 from backend.execution_kit import _apply_scope
 from backend.lab_exercises import SCENARIOS, TECHNIQUE_SCENARIOS, run_exercise
 from backend.platform_support import PORTABLE_GAPS
+
+
+def _bash() -> str:
+    """Return a working Bash. On Windows a bare "bash" can resolve to the WSL
+    launcher in System32, which exits 1 without a distro; prefer Git Bash."""
+    candidates = [shutil.which("bash")]
+    if os.name == "nt":
+        candidates += [r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            if subprocess.run([candidate, "--version"], capture_output=True, timeout=5, check=False).returncode == 0:
+                return candidate
+        except OSError:
+            continue
+    raise RuntimeError("A working Bash runtime is required to validate POSIX catalog commands")
 
 
 def sha(data: bytes) -> str:
@@ -50,6 +69,7 @@ def audit(cache: Path, output: Path, run_bounded: bool = False) -> dict[str, Any
     ability_validator = Draft202012Validator(json.loads((root / "schemas/adversaryflow-ability.schema.json").read_text()))
     records = []
     syntax_count = 0
+    bash = _bash()
     for tid, commands in sorted(CURATED.items()):
         for command in commands:
             if command != identify_command(command):
@@ -59,7 +79,7 @@ def audit(cache: Path, output: Path, run_bounded: bool = False) -> dict[str, Any
             validator.validate(json.loads(json.dumps(command)))
             ability_validator.validate(json.loads(json.dumps(catalog_ability(tid, command).to_dict())))
             if command["platform"] != "windows":
-                parsed = subprocess.run(["bash", "-n", "-c", command["command"]], capture_output=True, text=True, timeout=5, check=False)
+                parsed = subprocess.run([bash, "-n", "-c", command["command"]], capture_output=True, text=True, timeout=5, check=False)
                 if parsed.returncode:
                     raise ValueError(f"Invalid Bash syntax: {tid}: {parsed.stderr}")
                 syntax_count += 1

@@ -4,6 +4,11 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Fix the Windows CI test jobs: the native-catalog syntax test and the
+  command-coverage audit invoked a bare `bash`, which on Windows resolves to the
+  System32 WSL launcher and exits 1 without a distribution. Both now use a
+  verified Bash (Git Bash on Windows), as the catalog safety tests already did.
+
 - Explain a manifest-only Atomic export: when no reviewed, signed content-pack
   abilities match the plan, the notice now states that 0 tests were included and
   why, instead of reporting "0 reviewed tests included" without context.
