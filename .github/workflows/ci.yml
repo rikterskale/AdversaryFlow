@@ -84,7 +84,7 @@ jobs:
       - if: always()
         run: python -m coverage xml -o test-results/coverage.xml
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-coverage
           path: |
@@ -123,7 +123,7 @@ jobs:
       - run: python scripts/verify_distribution_assets.py
       - run: python scripts/build_sbom.py
       - run: cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: distributions
           path: dist/*
@@ -150,7 +150,7 @@ jobs:
       # during clicks (https://github.com/microsoft/playwright/issues/33057).
       - run: xvfb-run --auto-servernum npm run test:e2e -- --headed
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: |
@@ -170,7 +170,7 @@ jobs:
       - run: python scripts/safari_smoke.py
         timeout-minutes: 10
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: safari-native
           path: test-results/safari-native/
