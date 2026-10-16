@@ -1,4 +1,4 @@
 # Optional local quality tooling. Not required to run AdversaryFlow.
 # Pinned artifact hashes live in requirements-dev.lock.
 mypy==2.4.0
-ruff==0.16.10
+ruff==0.17.0
