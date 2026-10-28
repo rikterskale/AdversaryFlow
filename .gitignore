@@ -22,6 +22,7 @@ test-results/
 frontend/choose-actor-preview.png
 tmp/pdfs/*.pdf
 tmp/pdfs/*.png
+/AdversaryForge_Updated_Spec.md
 
 # Lint and type-checker caches (both tools also self-ignore, but be explicit)
 .mypy_cache/
