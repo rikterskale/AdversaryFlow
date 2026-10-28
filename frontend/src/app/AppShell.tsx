@@ -247,6 +247,9 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
         </nav>
 
         <div className="header-actions">
+          <button aria-label="Return to workspace home" className="icon-button" disabled={currentStep === 0} onClick={() => setStep(0)} title="Home · saved engagements and imports" type="button">
+            <Icon className="icon" name="home" />
+          </button>
           {session?.version ? <span className="version-chip">v{session.version}</span> : null}
           <button aria-label="Open system health" className={`health-chip health-chip--${healthTone}`} id="dataStatus" onClick={() => setHealthOpen(true)} type="button">
             <span aria-hidden="true" className="health-dot" />
@@ -301,6 +304,9 @@ export function AppShell({ children, session, health, healthFailed, setupFailed,
           <li><span>3</span><div><strong>Review and track</strong><p>Preview every action and record outcome and detection evidence.</p></div></li>
           <li><span>4</span><div><strong>Export the kit</strong><p>Download an offline, operator-gated package for the lab host.</p></div></li>
         </ol>
+        <div className="callout"><strong>Continue and recover work</strong><p>Use Home to browse saved engagements, resume JSON plans, or compare structured intelligence without clearing your current plan. Save JSON for a portable backup, or save an engagement to keep revisions on this service.</p></div>
+        <div className="callout"><strong>Reports and integrations</strong><p>Export offers HTML and PDF reports, JSON, Markdown, a commented runbook, an execution kit, and an Atomic Red Team draft with an editable ability backlog. Plans with no runnable commands can still document coverage gaps.</p></div>
+        <div className="callout"><strong>Validate observations</strong><p>Each bounded exercise shows its independent telemetry requirements in Execution proof. Import its receipt, then record endpoint or SIEM references; a verified receipt alone is self-reported evidence.</p></div>
         <div className="callout"><strong>Safety boundary</strong><p>The web service never executes catalog commands, contacts a target, or acts as C2.</p></div>
         <div className="dialog-actions"><button className="button button--primary" onClick={() => setHelpOpen(false)} type="button">Got it</button></div>
       </Dialog>

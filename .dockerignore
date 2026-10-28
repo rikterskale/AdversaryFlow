@@ -2,6 +2,7 @@
 .github
 .agents
 .codex
+.env
 .audit-cache
 .claude
 .doctor-debug-cache

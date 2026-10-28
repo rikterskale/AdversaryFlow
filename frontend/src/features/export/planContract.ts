@@ -1,8 +1,10 @@
 import type { Actor, AttackDomain, Command, ProcedureEvidence, ReceiptEvidence, WorkflowResponse } from "../../api/contract";
 import { validDateTime, validReceiptFields, verifyReceiptDigest, type ExecutionEvidence } from "../review/evidence";
 import type { ScopeSettings } from "../scope/scopeModel";
+import { executionMetadataKeys, validExecutionMetadata, validCommandSelections } from "../../api/executionMetadata";
 
 export interface PlanScope {
+  command_selections?: Record<string, string>;
   command_platform: "windows" | "linux" | "macos";
   include_pre: boolean;
   curated_only: boolean;
@@ -114,7 +116,8 @@ export function validateActor(value: unknown): asserts value is Actor {
 
 export function validateCommand(value: unknown, techniqueId: string): void {
   const commandKeys = ["platform", "command", "note", "cleanup", "risk", "side_effects", "requires_admin", "requires_network", "network_targets", "prerequisites", "expected_telemetry", "expected_output", "timeout_seconds", "rollback", "cleanup_required", "acknowledgment_required"];
-  if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance", "interpreter"])
+  if (!onlyKeys(value, commandKeys, ["unsupported", "restricted", "exercise_kind", "fidelity", "evidence_source", "telemetry_acceptance", "interpreter", ...executionMetadataKeys])
+    || !validExecutionMetadata(value)
     || !["platform", "command", "note", "cleanup", "expected_telemetry", "expected_output", "rollback"].every((key) => typeof value[key] === "string")
     || (value.command as string).length > 10_000
     || typeof value.risk !== "string" || !["none", "low", "medium", "high"].includes(value.risk)
@@ -200,7 +203,7 @@ export function validateImportedPlan(data: unknown): asserts data is PlanExport 
 
   const scopeKeys = ["command_platform", "include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk", "stages"];
   const scope = data.scope;
-  if (!onlyKeys(scope, scopeKeys) || typeof scope.command_platform !== "string" || !["windows", "linux", "macos"].includes(scope.command_platform)
+  if (!onlyKeys(scope, scopeKeys, ["command_selections"]) || (scope.command_selections !== undefined && !validCommandSelections(scope.command_selections)) || typeof scope.command_platform !== "string" || !["windows", "linux", "macos"].includes(scope.command_platform)
     || !uniqueStrings(scope.stages)
     || ["include_pre", "curated_only", "allow_network", "allow_admin", "allow_high_risk"].some((key) => typeof scope[key] !== "boolean")) throw new Error("Plan scope is invalid");
 
@@ -299,6 +302,7 @@ export function scopeFromImportedPlan(plan: PlanExport): ScopeSettings {
     allowNetwork: plan.scope.allow_network,
     allowAdmin: plan.scope.allow_admin,
     allowHighRisk: plan.scope.allow_high_risk,
+    ...(plan.scope.command_selections ? { commandSelections: { ...plan.scope.command_selections } } : {}),
     operator: plan.execution_context.operator,
     target: plan.execution_context.target,
   };

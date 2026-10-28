@@ -4,6 +4,58 @@ All notable changes to AdversaryFlow are documented here.
 
 ## Unreleased
 
+- Update the PDF runtime and its test tooling: `reportlab` 5.0.1, `markupsafe`
+  3.0.4, `pypdf` 6.19.0 and `pypdfium2` 5.14.0, with `requirements.lock` and
+  `requirements-test.lock` regenerated with hashes. A real 95-page report renders
+  pixel-identically to `reportlab` 4.4.4, including Chinese and Cyrillic text.
+
+- Fix the Windows CI test jobs: the native-catalog syntax test and the
+  command-coverage audit invoked a bare `bash`, which on Windows resolves to the
+  System32 WSL launcher and exits 1 without a distribution. Both now use a
+  verified Bash (Git Bash on Windows), as the catalog safety tests already did.
+
+- Explain a manifest-only Atomic export: when no reviewed, signed content-pack
+  abilities match the plan, the notice now states that 0 tests were included and
+  why, instead of reporting "0 reviewed tests included" without context.
+- Remove the run-specific image when `scripts/compose_smoke.py` finishes, so
+  repeated smoke runs no longer leave ~300 MB images behind. Images passed with
+  `--image` are never removed.
+- Measure mobile horizontal overflow against the root's laid-out width in the
+  browser suite, so Chromium's reserved classic-scrollbar gutter is no longer
+  reported as a failure while real overflow of any width is still caught.
+- Update the dev-only `source-map-js` transitive dependency to 1.2.2
+  (GHSA-68fv-2mgg-jv7q).
+
+- Paginate saved engagements and ability backlogs beyond 200 records, expose
+  validated `offset`/`next_offset` API navigation, and keep backlog ordering stable
+  while owners and statuses change.
+- Keep save/export/backlog failures visible with retry guidance; validate backlog
+  responses and handle local JSON/HTML download errors without an interface crash.
+  Preserve edits made while an earlier backlog save is still in flight.
+- Preserve other actors' accepted intelligence attachments when restoring an
+  evidence snapshot, including compatibility with older snapshots.
+- Fit narrow browser windows with classic scrollbars by allowing the document
+  to shrink to the available content width.
+- Observe successful real clipboard writes per browser page in parallel checks
+  so shared OS clipboard reads cannot report another test's copied command.
+- Keep the latest JSON recovery selection when older file reads finish late;
+  discard pending imports after workspace replacement. Refresh saved engagement
+  lists and revision menus immediately after a save and on explicit refresh.
+- Prevent delayed exercise receipt verification from recording an outcome in
+  another workspace, platform, or command variant.
+- Show readable actor, platform, and data-version labels for recovery snapshots
+  instead of internal command hashes. Wait for browser layout to settle after
+  viewport changes in the recovery browser check.
+- Exempt loopback-only catalog blocks from the network-active guardrail: only
+  commands that can reach beyond loopback keep `requires_network`, loopback
+  blocks are labelled `loopback_network_activity`, and word-boundary matching
+  stops prose such as "dumping" or "stopping" being misread as a `ping` probe.
+  Require explicit credentials for every network-active cloud/container recipe.
+- Check native environments offline at launch and repair missing, mismatched, or
+  unloadable runtime dependencies automatically. Defer installer port checks to
+  startup, report bind failures with recovery instructions, wait for HTTP before
+  opening the browser, and close the service cleanly on Ctrl+C.
+- Explain Docker token retrieval directly in the connection dialog.
 - Confirm destructive welcome/replacement actions; surface persistent browser
   storage failures and provide versioned whole-workspace recovery, including
   original crash wrappers and explicit saved-file confirmation before reset.

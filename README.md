@@ -1,14 +1,8 @@
 # AdversaryFlow
 
-Workspace safety: existing work is confirmed before replacement, and persistent
-storage failures stay visible until a successful save. **Download workspace
-recovery copy** preserves scope, workflow, archives and unfinished evidence even
-when a plan cannot export. Welcome also provides **Browse saved engagements**
-for server revisions. See [export and recovery contracts](docs/EXPORTS.md) for
-UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
-offline Unicode PDF support.
-
-**Make a security exercise plan, follow it in a guided browser interface, and save your results.**
+**AdversaryFlow is a local, browser-based security exercise planner that turns
+MITRE ATT&CK threat-group and campaign techniques into guided lab plans, with
+evidence notes, detection tracking, and exportable reports.**
 
 Choose a threat group or campaign from MITRE ATT&CK, a public reference of
 attacker techniques. AdversaryFlow puts its activities in order and provides
@@ -131,10 +125,10 @@ If preparation fails, follow [Something went wrong](#something-went-wrong).
 Your first session creates a report without running any exercise:
 
 1. Select **Begin emulation plan**.
-2. Choose a threat group or campaign. You can type a name in the search box.
-   Select **Continue to scope**.
-3. Keep the default **Enterprise** data and choose the platform you want the
-   plan to describe: Windows, Linux, or macOS. Leave **Allow network-active
+2. Keep the default **Enterprise** data and choose a threat group or campaign.
+   You can type a name in the search box. Select **Continue to scope**.
+3. Choose the platform you want the plan to describe: Windows, Linux, or
+   macOS. Leave **Allow network-active
    commands**, **Allow administrator commands**, and **Allow high-risk
    commands** off. Select **Build plan**.
 4. Read a technique card and its explanation. Leave command outcomes at
@@ -156,6 +150,9 @@ explains the operator-controlled runner.
 
 ## Save and resume your work
 
+- **Return to the welcome tools:** choose **Home** (the house icon in the
+  header) to browse saved engagements or compare intelligence while keeping
+  your current plan. Choose **Resume <actor> plan** to return to it.
 - **Keep a backup:** use **Finish & export → Save JSON plan** before stopping,
   changing browsers, or clearing browser data. JSON files can contain private
   notes and command text; store and share them appropriately.
@@ -170,6 +167,22 @@ explains the operator-controlled runner.
   saved revision. It is local storage, not an online backup. Keep your JSON
   copy too. If the ATT&CK version or platform changes, use **Saved evidence
   from other platforms or data versions** to recover the earlier snapshot.
+  **Browse saved engagements** includes **Older engagements** and **Newer
+  engagements** controls when more than 200 records are saved.
+
+Workspace safety: existing work is confirmed before replacement, and persistent
+storage failures stay visible until a successful save. **Download workspace
+recovery copy** preserves scope, workflow, archives and unfinished evidence even
+when a plan cannot export. Welcome also provides **Browse saved engagements**
+for server revisions. See [command coverage and proof verification](docs/COMMAND_COVERAGE.md)
+for executor availability, variant selection and audit limitations. See [export and recovery contracts](docs/EXPORTS.md) for
+UTF-8 limits, reference validation, catalog reload, executed/skipped counts and
+offline Unicode PDF support.
+
+You can review and report a scoped plan even when no commands are runnable.
+The report documents the coverage gaps; command copying and execution-kit
+downloads remain unavailable until the scope includes runnable commands.
+Saved plans and JSON recovery remain accessible while the service prepares.
 
 ## Stop and restart
 
@@ -184,6 +197,7 @@ folder as in step 3, then run:
 docker compose up
 ```
 
+If you set another port with a `.env` file, it is reused automatically.
 Reopen the printed browser address and use the token printed for this start.
 The token can change after restarting. Existing ATT&CK downloads and
 server-saved engagements remain in Docker's saved data volume. Avoid deleting
@@ -210,7 +224,7 @@ row below. These steps do not require deleting your saved work.
 | Preparation fails, or downloads report a proxy/certificate/network error | Check your internet connection. Open the status button in the app's header, then **System health → Host self-test**. On a managed network, ask IT to permit the official download and dependency hosts listed in the [troubleshooting guide](docs/TROUBLESHOOTING.md#downloads-or-preparation-fail). |
 | A plan has no runnable steps | Try another actor or the correct destination platform. Keep the three Allow options off for your first session. Some techniques have no exercise for the selected platform. |
 | Notes disappeared or the browser cannot save progress | Return to the original browser and address, or restore your JSON file with **Resume JSON plan**. Changing the port, using private mode, or clearing browser data creates a different or empty browser workspace. |
-| A report or download fails | Use **Save JSON plan** first, check the inline error and **System health**, restore the service/token, then choose **Retry report generation** or retry the download. |
+| A save, report, or download fails | The error stays visible on Export. Use **Save JSON plan** first, check the error and **System health**, restore the service/token, then choose **Retry report generation** or retry the failed action. |
 
 For a deeper check, open a **second** command window in the same application
 folder while the container is running:

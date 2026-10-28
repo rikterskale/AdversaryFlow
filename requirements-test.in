@@ -1,5 +1,5 @@
 # Optional signed-pack and HTTPS integration tests, plus backend coverage.
 coverage==7.16.2
 cryptography==50.0.2
-pypdf==6.1.1
-pypdfium2==4.30.0
+pypdf==6.19.0
+pypdfium2==5.14.0

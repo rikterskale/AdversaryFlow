@@ -187,10 +187,10 @@ test("J18 — switching platform never substitutes another OS", async ({ page })
   await page.getByRole("button", { name: "Linux", exact: true }).click();
   await expect(page.locator("#scopeSummary")).toContainText("Runnable on Linux");
   await expect(page.locator("#actionbarCtx")).toHaveText("0 runnable · 1 unsupported across 1 stages");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   await page.locator(".stepper__item", { hasText: "Emulation plan" }).click();
-  await expect(page.locator("pre.cmd__code")).toHaveText("No Linux test is available for this technique.");
+  await expect(page.locator("pre.cmd__code")).toHaveText("Not applicable to Linux: ATT&CK maps this technique to windows.");
   await expect(page.getByRole("button", { name: /Copy command/ })).toBeDisabled();
 });
 
@@ -206,7 +206,7 @@ test("J19 — clearing every stage empties the plan", async ({ page }) => {
 test("J20 — a command above the chosen risk scope is withheld", async ({ page }) => {
   await toScope(page, { commands: [highRisk] });
   await expect(page.locator("#actionbarCtx")).toHaveText("0 runnable · 1 unsupported across 1 stages");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   // Reach the plan with the risk allowed, then withdraw the allowance.
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -269,7 +269,7 @@ test("J24 — the operator can walk stages forwards and backwards", async ({ pag
   await expect(page.locator(".stagepanel__head h3")).toHaveText("Execution");
 });
 
-test("J25 — copying a risky command requires acknowledgement", async ({ page, browserName }) => {
+test("J25 — copying a risky command requires acknowledgement", async ({ page }) => {
   await observeClipboard(page);
   await toScope(page, { commands: [highRisk] });
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -280,7 +280,7 @@ test("J25 — copying a risky command requires acknowledgement", async ({ page, 
   await expect(dialog).toContainText("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
   await dialog.getByRole("button", { name: "Copy command" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await copiedText(page, browserName))
+  expect(await copiedText(page))
     .toBe("schtasks /Create /TN AFLab /TR cmd.exe /SC ONCE /ST 23:59 /F");
 });
 
@@ -410,7 +410,7 @@ test("J31 — imported multiline fields cannot add executable runbook lines", as
     cleanup: "echo cleanup\necho CLEANUP_INJECTION",
   };
   await page.setInputFiles("#importPlan", planFile(plan));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await page.getByRole("button", { name: /Finish & export/ }).click();
   const { text } = await exportAndRead(page, /Runbook/);
   const executableLines = text.split(/\r?\n/).filter(line => line.trim() && !line.startsWith("REM"));
@@ -422,7 +422,7 @@ test("J32 — a saved plan is restored with its evidence", async ({ page }) => {
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", planFile(validPlan()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "UAT Actor · G0001" })).toBeVisible();
   await expect(page.getByLabel("Outcome for T1059.001")).toHaveValue("passed");
@@ -513,14 +513,15 @@ test("J38 — a failed setup is reported with a retry", async ({ page }) => {
   await page.route("**/api/actors?*", r => r.fulfill({ json: { actors: ACTORS, domains: ["enterprise"], data_version: "enterprise:bundle--uat", version: "0.3.0" } }));
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByText("ATT&CK cache is unreadable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeDisabled();
   await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
   await expect(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
 
   // J39 — the same session recovers once the fault clears.
   fail = false;
   await page.getByRole("button", { name: "Retry setup" }).click();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByRole("button", { name: /UAT Actor/ })).toBeVisible();
   await expect(page.locator("#dataStatus")).toHaveText(/^\d+ actors? · Enterprise$/);
 });
@@ -687,6 +688,10 @@ test("J61 — an execution-kit failure is actionable and leaves retry enabled", 
   await kit.click();
 
   await expect(page.getByRole("status").filter({ hasText: "Plan contains no executable Windows steps" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Execution kit needs attention" })).toContainText("Plan contains no executable Windows steps");
+  // The actionable error must outlive the temporary success/error notification.
+  await expect(page.getByRole("status").filter({ hasText: "Plan contains no executable Windows steps" })).toBeHidden({ timeout: 7000 });
+  await expect(page.getByRole("alert").filter({ hasText: "Execution kit needs attention" })).toBeVisible();
   await expect(kit).toBeEnabled();
   expect(downloads).toBe(0);
 });

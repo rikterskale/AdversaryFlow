@@ -115,7 +115,7 @@ You should see:
 
 ```text
 AdversaryFlow installed and verified. Start it with ...
-[AdversaryFlow] starting; the browser will open when ATT&CK data is ready
+[AdversaryFlow] starting; the browser will open when the local service is ready
 AdversaryFlow 0.5.3: http://127.0.0.1:5000
 ```
 
@@ -129,6 +129,12 @@ Now follow [Create your first plan](../README.md#create-your-first-plan).
 Save a JSON backup before stopping. To stop, click the command window and
 press **Ctrl+C**. To restart, reopen a command window in the same application
 folder and rerun the same startup block; it reuses the installed environment.
+
+The launcher checks the local runtime without contacting the internet. If a
+dependency is missing or differs from this checkout, it reruns the installer
+automatically; that repair needs an internet connection. Installation can finish
+while the default port is occupied. If startup reports an occupied port, use
+[another port](TROUBLESHOOTING.md#use-another-port).
 
 ### Check a native installation
 
@@ -165,7 +171,7 @@ you installed it. New browser plans can use schema 2.0 or 3.0; older schema
 | **ZIP + Docker** | Download and extract the new ZIP. Open a command window in the new application folder. Run `docker compose up --build`. Keep Docker's existing saved volume; do not use `docker compose down --volumes` to update. |
 | **ZIP + Python** | Download and extract the new ZIP. Open a command window in the new folder and follow the native startup steps above. The new folder gets its own Python environment; the normal per-user ATT&CK cache and engagement database are retained. Resume your JSON backup. |
 | **Git + Docker** | In the existing checkout, run `git pull`, then `docker compose up --build`. |
-| **Git + Python** | In the checkout, run `git pull`, then rerun the installer below. The startup launcher alone does not reinstall an existing environment. |
+| **Git + Python** | In the checkout, run `git pull`, then rerun the launcher. It repairs missing or outdated runtime dependencies automatically. You can also rerun the installer explicitly as shown below. |
 | **Release wheel** | Follow the [wheel install/update reference](INSTALL.md#isolated-install-from-a-wheel). Install the downloaded file; do not use `pipx install adversaryflow`. |
 
 **Reinstall after a Git update, Windows PowerShell:**

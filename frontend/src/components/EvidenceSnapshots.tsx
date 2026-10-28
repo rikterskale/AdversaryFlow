@@ -12,7 +12,7 @@ export function EvidenceSnapshots(): React.JSX.Element | null {
   return <details className="callout workspace-notice"><summary>Saved evidence from other platforms or data versions ({entries.length})</summary>
     <p>Earlier results are preserved separately. Restore a snapshot to review it, or download it for safekeeping.</p>
     {entries.map(([key, snapshot]) => <div className="evidence-snapshot" key={key}>
-      <span>{titlePlatform(snapshot.scope.commandPlatform)} · {key.split("|").slice(2, -1).join("|")} · {Object.keys(snapshot.records).length} {Object.keys(snapshot.records).length === 1 ? "record" : "records"}</span>
+      <span>{snapshot.actor?.name ?? "Saved plan"} · {titlePlatform(snapshot.scope.commandPlatform)} · {snapshot.workflow?.metadata.data_version ?? key.split("|")[2] ?? "Data version unavailable"} · {Object.keys(snapshot.records).length} {Object.keys(snapshot.records).length === 1 ? "record" : "records"}{Object.keys(snapshot.scope.commandSelections ?? {}).length ? ` · ${Object.keys(snapshot.scope.commandSelections ?? {}).length} selected command variants` : ""}</span>
       <Button disabled={!snapshot.workflow || !snapshot.actor} onClick={() => restore(key)}>Restore snapshot</Button>
       <Button onClick={() => {
         const document = snapshot.actor && snapshot.workflow

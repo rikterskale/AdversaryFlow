@@ -21,6 +21,9 @@ export function TouchPreview({ command, techniqueId }: TouchPreviewProps): React
     <section aria-labelledby={headingId} className={`preaction ${command.unsupported ? "preaction--unsupported" : ""}`}>
       <div className="preaction__head"><h4 id={headingId}>What this will touch</h4><strong>Review before copy</strong></div>
       <dl className="preaction__grid">
+        {command.environment ? <div><dt>Environment</dt><dd>{titleMetadataValue(command.environment)}</dd></div> : null}
+        {command.execution_role ? <div><dt>Purpose</dt><dd>{titleMetadataValue(command.execution_role)}</dd></div> : null}
+        {command.availability_status ? <div className="preaction__wide"><dt>Availability</dt><dd>{titleMetadataValue(command.availability_status)}{command.availability_reasons?.length ? <ul>{command.availability_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}</dd></div> : null}
         <div><dt>Interpreter</dt><dd>{command.interpreter ?? (command.platform === "windows" ? "cmd" : "bash")}</dd></div>
         {command.untrusted ? <div><dt>Source</dt><dd>Unverified import — review every command before copying</dd></div> : null}
         <div><dt>Risk</dt><dd><span className={`riskvalue riskvalue--${command.risk}`}>{titleMetadataValue(command.risk)}</span></dd></div>
@@ -28,10 +31,13 @@ export function TouchPreview({ command, techniqueId }: TouchPreviewProps): React
         <div><dt>Network</dt><dd>{command.requires_network ? command.network_targets.join(", ") || "Network active" : "No network required"}</dd></div>
         <div><dt>Expected telemetry</dt><dd>{command.expected_telemetry || "Relevant endpoint telemetry"}</dd></div>
         <div className="preaction__wide"><dt>Prerequisites</dt><dd>{command.prerequisites.length ? command.prerequisites.join("; ") : "No additional prerequisites"}</dd></div>
+        {command.required_tools?.length ? <div><dt>Tools on execution host</dt><dd>{command.required_tools.join(", ")}</dd></div> : null}
+        {command.required_credentials?.length ? <div className="preaction__wide"><dt>Required access</dt><dd>{command.required_credentials.join("; ")}</dd></div> : null}
         <div><dt>Rollback</dt><dd>{command.rollback || "No rollback action specified"}</dd></div>
         <div><dt>Cleanup</dt><dd>{cleanupText(command)}</dd></div>
       </dl>
       {command.side_effects.length ? <p><strong>Side effects</strong>{command.side_effects.map(titleMetadataValue).join(" · ")}</p> : null}
+      {command.execution_role && command.execution_role !== "endpoint_test" ? <p>This is a {command.execution_role === "planning" ? "planning" : "environment validation"} step. Its outcome does not establish endpoint detection coverage.</p> : null}
     </section>
   );
 }

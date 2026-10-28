@@ -102,15 +102,16 @@ def build_atomic_pack(document: Mapping[str, Any]) -> Tuple[bytes, Dict[str, Any
             continue
 
         if signed is not None:
-            ability_fields = {key: signed.ability[key] for key in ability_model.Ability.__dataclass_fields__}
-            for field in ("requirements", "network_targets", "side_effects"):
-                ability_fields[field] = tuple(ability_fields[field])
+            ability_fields = {key: signed.ability[key] for key in ability_model.Ability.__dataclass_fields__ if key in signed.ability}
+            for field in ("requirements", "network_targets", "side_effects", "required_tools", "required_credentials"):
+                if field in ability_fields:
+                    ability_fields[field] = tuple(ability_fields[field])
             ability = ability_model.Ability(**ability_fields)
             command = None
             ability_source = {"pack_id": signed.pack_id, "pack_version": signed.pack_version,
                               "signer_key_id": signed.signer_key_id}
         else:
-            command = candidates[0]
+            command = next((item for item in candidates if item.get("command_id") == step.command_id), candidates[0])
             ability = ability_model.catalog_ability(step.technique_id, command)
             ability_source = None
         accepted_procedure_ids = procedures_by_technique.get(step.technique_id, [])

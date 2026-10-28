@@ -159,6 +159,18 @@ async function interceptDoctor(page, onRequest = () => {}) {
   });
 }
 
+// Measure overflow against the root's laid-out width. Under Chromium's classic
+// scrollbars a reserved gutter shrinks the root box (and scrollWidth) below
+// clientWidth, so comparing against clientWidth alone would report a negative
+// value and could hide overflow narrower than the gutter.
+async function expectNoHorizontalOverflow(page) {
+  await expect.poll(() => page.evaluate(() => {
+    const root = document.documentElement;
+    const layoutWidth = Math.min(root.clientWidth, Math.ceil(root.getBoundingClientRect().width));
+    return root.scrollWidth - layoutWidth;
+  })).toBe(0);
+}
+
 async function buildPlan(page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
@@ -254,7 +266,7 @@ test("welcome catalog retry preserves the saved plan and evidence", async ({ pag
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
   let fail = true;
   await page.route("**/api/actors?*", route => fail
@@ -281,7 +293,7 @@ test("welcome catalog failure still allows importing a plan", async ({ page }) =
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("Actor catalog is unavailable");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByLabel("Evidence note for T1033")).toHaveValue("Imported evidence");
   await expect(page.getByText("Unverified import — review every command before copying")).toBeVisible();
 });
@@ -309,23 +321,27 @@ test("system health exposes the guided doctor report and fixes", async ({ page }
   expect(results.violations).toEqual([]);
 });
 
-test("mobile screens never create page-level horizontal scrolling", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+for (const width of [320, 390]) {
+test(`mobile screens never create page-level horizontal scrolling at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
   await interceptApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  // Reserve a classic scrollbar gutter even on hosts using overlay scrollbars.
+  await page.evaluate(() => { document.documentElement.style.scrollbarGutter = "stable"; });
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Begin emulation plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Select Test Actor/ }).click();
   await page.getByRole("button", { name: /^Continue/ }).click();
   await expect(page.getByRole("heading", { name: "Scope the engagement" })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Build plan/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: /Finish & export/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  await expectNoHorizontalOverflow(page);
 });
+}
 
 test("actor cards present clean copy and concise accessible names", async ({ page }) => {
   await interceptApi(page);
@@ -482,7 +498,7 @@ test("a saved plan can be resumed from the welcome screen", async ({ page }) => 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Turn a threat actor/ })).toBeVisible();
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Plan imported with its saved guardrails" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeFocused();
   await expect(page.getByText("System Owner/User Discovery")).toBeVisible();
@@ -496,7 +512,7 @@ test("a resumed plan re-exports against the published schema", async ({ page }) 
   await interceptApi(page);
   await page.goto("/");
   await page.setInputFiles("#importPlan", writePlan(planFixture()));
-  await page.getByRole("button", { name: "Replace and restore" }).click();
+  await expect(page.getByRole("dialog", { name: "Replace this browser workspace?" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Test Actor · G0001/ })).toBeVisible();
   await page.getByRole("button", { name: /Finish & export/ }).click();
   await page.getByRole("button", { name: "Generate report" }).click();
@@ -535,14 +551,20 @@ test("switching the command platform marks techniques unsupported", async ({ pag
   await expect(summary).toContainText("Runnable on Linux");
   await expect(page.locator("#actionbarCtx")).toContainText("0 runnable");
   await expect(page.locator("#actionbarCtx")).toContainText("1 unsupported");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
+  await page.getByRole("button", { name: /Build plan/ }).click();
+  await expect(page.getByRole("button", { name: /Copy command/ })).toBeDisabled();
+  await page.getByRole("button", { name: "Finish & export" }).click();
+  await expect(page.getByRole("button", { name: "Save JSON plan" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Generate report" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /Download Linux execution kit/ })).toBeDisabled();
 });
 
 test("safety scope blocks a network high-risk command until it is allowed", async ({ page }) => {
   await interceptApi(page, [highRiskCommand]);
   await buildPlan(page);
   await expect(page.locator("#actionbarCtx")).toContainText("0 runnable");
-  await expect(page.getByRole("button", { name: /Build plan/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Build plan/ })).toBeEnabled();
 
   await page.locator("label.toggle", { hasText: "Allow network-active commands" }).click();
   await page.locator("label.toggle", { hasText: "Allow high-risk commands" }).click();
@@ -682,11 +704,12 @@ test("a failed setup shows an actionable error and can be retried", async ({ pag
   } }));
 
   await page.goto("/");
-  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByText("ATT&CK cache is unreadable")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Begin emulation plan/ })).toBeDisabled();
   await expect(page.locator("#dataStatus")).toHaveText("setup needs attention");
 
   await page.getByRole("button", { name: "Retry setup" }).click();
+  await page.getByRole("button", { name: /Begin emulation plan/ }).click();
   await expect(page.getByRole("button", { name: /Test Actor/ })).toBeVisible();
   await expect(page.locator("#dataStatus")).toContainText("1 actor");
 });
@@ -716,7 +739,7 @@ test("a multi-stage plan can be walked stage by stage", async ({ page }) => {
   await expect(page.locator("#progressPct")).toHaveText("33%");
 });
 
-test("plan keyboard shortcuts move focus and copy the command", async ({ page, browserName }) => {
+test("plan keyboard shortcuts move focus and copy the command", async ({ page }) => {
   await observeClipboard(page);
   const second = {
     stix_id: "attack-pattern--t1059", attack_id: "T1059", name: "Command and Scripting Interpreter",
@@ -743,7 +766,7 @@ test("plan keyboard shortcuts move focus and copy the command", async ({ page, b
   expect(await cards.nth(0).evaluate(element => document.activeElement === element)).toBe(true);
   await page.keyboard.press("c");
   await expect(page.getByRole("status").filter({ hasText: "Command copied to clipboard" })).toBeVisible();
-  expect(await copiedText(page, browserName)).toBe("whoami");
+  expect(await copiedText(page)).toBe("whoami");
 });
 
 test("the plan opens on the first stage that has a runnable command", async ({ page }) => {

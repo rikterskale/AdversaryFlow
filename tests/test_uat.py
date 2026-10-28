@@ -351,7 +351,7 @@ class CommandLineUatTests(unittest.TestCase):
     def test_e03_remote_mode_warns_before_serving(self):
         output = io.StringIO()
         try:
-            with patch("waitress.serve"), contextlib.redirect_stdout(output):
+            with patch("waitress.create_server"), contextlib.redirect_stdout(output):
                 code = app_module.main([
                     "--host", "0.0.0.0", "--allow-remote", "--api-token", "uat-secret",
                     "--no-preload",

@@ -111,6 +111,23 @@ describe("all13 workspace regressions", () => {
     validateImportedPlan(plan);
   });
 
+  it("restoring an actor snapshot preserves other actors' procedure attachments", () => {
+    const store = useWizardStore.getState();
+    const otherActor = { ...procedure, actor_stix_id: "intrusion-set--second" };
+    const key = useWizardStore.getState().evidenceKey!;
+    store.attachProcedureEvidence([procedure, otherActor]);
+    store.updateEvidence("T1033", { notes: "Original evidence" });
+    store.updateScope({ commandPlatform: "linux" });
+    store.attachProcedureEvidence([{ ...procedure, candidate_id: "new-candidate" }]);
+    store.restoreEvidence(key);
+    expect(useWizardStore.getState().procedureEvidence).toEqual([otherActor, procedure]);
+    expect(useWizardStore.getState().records.T1033?.notes).toBe("Original evidence");
+    store.revokeProcedures(actor.stix_id, procedure.source_sha256, [procedure.candidate_id]);
+    store.updateScope({ commandPlatform: "linux" });
+    store.restoreEvidence(key);
+    expect(useWizardStore.getState().procedureEvidence).toEqual([otherActor]);
+  });
+
   it("F08 revokes only the rejected actor/source attachment including archived copies", () => {
     const unrelated = { ...procedure, candidate_id: "other", source_sha256: "b".repeat(64) };
     const otherActor = { ...procedure, actor_stix_id: "intrusion-set--second" };

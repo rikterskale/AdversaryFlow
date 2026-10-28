@@ -1,8 +1,8 @@
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 
 import type { Actor, AttackDomain, IntelligenceImportResponse, ProcedureEvidence } from "../../api/contract";
 import { Button } from "../../components/Button";
-import { ErrorState } from "../../components/Feedback";
+import { ErrorState, LoadingState } from "../../components/Feedback";
 import { Icon } from "../../components/Icon";
 import { IntelligenceImportPanel } from "./IntelligenceImportPanel";
 
@@ -23,9 +23,12 @@ interface WelcomeProps {
   catalogError?: string;
   catalogRetrying?: boolean;
   onRetryCatalog?: () => void;
+  setupPending?: "connecting" | "preparing";
+  importError?: string;
+  savedEngagements?: ReactNode;
 }
 
-export function Welcome({ onBegin, onImport, onIntelligenceImport, onAttachProcedures = () => undefined, actors, domains, csrfToken, onNotice, onResume, ready, resumeActor, setupError = "", onRetrySetup, catalogError = "", catalogRetrying = false, onRetryCatalog }: WelcomeProps): React.JSX.Element {
+export function Welcome({ onBegin, onImport, onIntelligenceImport, onAttachProcedures = () => undefined, actors, domains, csrfToken, onNotice, onResume, ready, resumeActor, setupError = "", onRetrySetup, catalogError = "", catalogRetrying = false, onRetryCatalog, setupPending, importError = "", savedEngagements }: WelcomeProps): React.JSX.Element {
   const importPlan = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -40,9 +43,10 @@ export function Welcome({ onBegin, onImport, onIntelligenceImport, onAttachProce
         <h1 id="welcome-title">Turn a threat actor into an <span>end-to-end emulation plan</span></h1>
         <p className="welcome-lead">Build a guided, ATT&amp;CK-mapped workflow for detection validation—then export an operator-gated kit to use offline on a disposable lab host.</p>
         <div className="welcome-actions">
-          <Button disabled={!ready && !setupError} onClick={onBegin} variant="primary">Begin emulation plan <Icon className="button-icon" name="arrow-right" /></Button>
+          <Button disabled={!ready} onClick={onBegin} variant="primary">Begin emulation plan <Icon className="button-icon" name="arrow-right" /></Button>
           <span role="status">{setupError ? "Setup needs attention" : catalogError ? catalogRetrying ? "Retrying catalog…" : "Catalog needs attention" : ready ? "Live ATT&CK catalog ready" : "Preparing the catalog…"}</span>
         </div>
+        {setupPending ? <LoadingState label={setupPending === "preparing" ? "Preparing MITRE ATT&CK data…" : "Connecting to AdversaryFlow…"} detail="You can resume a saved plan or import JSON while the service prepares." /> : null}
         {setupError ? <ErrorState message={setupError} onRetry={onRetrySetup} title="Could not prepare ATT&CK data" /> : null}
         {catalogError ? (
           <div className="error-state" role="alert">
@@ -58,6 +62,8 @@ export function Welcome({ onBegin, onImport, onIntelligenceImport, onAttachProce
             <input accept="application/json,.json" className="sr-only" id="importPlan" onChange={importPlan} type="file" />
           </div>
         </div>
+        {importError ? <div className="error-state" role="alert"><div><strong>Could not restore this file</strong><p>{importError}</p><p>Your current workspace is unchanged. Choose another plan or workspace recovery JSON file.</p></div></div> : null}
+        {savedEngagements}
         {ready && actors.length ? <IntelligenceImportPanel actors={actors} csrfToken={csrfToken} domains={domains} onAttachProcedures={onAttachProcedures} onImport={onIntelligenceImport} onNotice={onNotice} /> : null}
       </div>
       <div className="boundary-card">

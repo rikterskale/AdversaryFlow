@@ -40,12 +40,13 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
   const [reviewer, setReviewer] = useState("");
   const [result, setResult] = useState<IntelligenceImportResponse | null>(null);
   const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
   const attached = useWizardStore((state) => state.procedureEvidence);
   const domainKey = domains.join("+");
 
   useEffect(() => {
-    setResult(null); setWorking(false);
+    setResult(null); setWorking(false); setError("");
     return () => controller.current?.abort();
   }, [actorId, domainKey, file]);
 
@@ -55,9 +56,18 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
 
   const importFile = async (): Promise<void> => {
     if (!file || !actorId || working) return;
+    setError("");
     if (file.size > 16 * 1024 * 1024) {
-      onNotice("Structured input must be no larger than 16 MB");
+      setError("Structured input must be no larger than 16 MiB. Choose a smaller CSV or JSON file.");
       return;
+    }
+    if (sourceUrl.trim()) {
+      try {
+        if (new URL(sourceUrl.trim()).protocol !== "https:") throw new Error();
+      } catch {
+        setError("Source URL must be a complete HTTPS address. Correct it or leave the optional field empty.");
+        return;
+      }
     }
     setWorking(true);
     const request = new AbortController();
@@ -82,7 +92,7 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
       }) });
       onNotice(`Compared ${next.candidates.length} imported ATT&CK mappings`);
     } catch (error: unknown) {
-      if (!request.signal.aborted) onNotice(error instanceof Error ? error.message : "Structured intelligence import failed");
+      if (!request.signal.aborted) setError(error instanceof Error ? error.message : "Structured intelligence import failed");
     } finally {
       if (controller.current === request) setWorking(false);
     }
@@ -90,9 +100,10 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
 
   const decide = (candidateId: string, status: "accepted" | "rejected"): void => {
     if (!reviewer.trim()) {
-      onNotice("Enter the reviewer name before recording a mapping decision");
+      setError("Enter the reviewer name before recording a mapping decision.");
       return;
     }
+    setError("");
     if (!result) return;
     if (status === "rejected") {
       useWizardStore.getState().revokeProcedures(result.actor.stix_id, result.source.sha256, [candidateId]);
@@ -165,6 +176,7 @@ export function IntelligenceImportPanel({ actors, domains, csrfToken, onImport, 
             <input accept=".csv,.json,application/json,text/csv" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setResult(null); }} type="file" />
           </label>
           <div className="intelligence-import__actions"><Button disabled={!file || !actorId || working} onClick={() => { void importFile(); }} variant="primary">{working ? "Comparing…" : "Compare mappings"}</Button></div>
+          {error ? <div className="error-state" role="alert"><p>{error}</p></div> : null}
           {result ? (
             <div className="intelligence-review" aria-live="polite">
               <div className="intelligence-review__meta"><strong>{result.source.name}</strong><span>SHA-256 {result.source.sha256}</span><span>ATT&amp;CK {result.data_version}</span></div>

@@ -1,9 +1,9 @@
 # AdversaryFlow — User Journey
 
-> Every screen, command, message, and status code in this document was read out
-> of the source and observed running. Where a number appears (technique counts,
-> limits, timeouts) it was measured against the checked-in code or the live
-> ATT&CK bundle, not estimated.
+> This journey describes source-backed workflows. Catalog and actor counts
+> refer to the audited snapshot described below; the live ATT&CK feed can
+> change them. Validation coverage and platform limits belong to the associated
+> test or review report, rather than a guarantee for every environment.
 
 If you are installing or running AdversaryFlow for the first time, use
 [Getting started](GETTING_STARTED.md). This page is the observed journey map
@@ -26,12 +26,12 @@ harmful attack or its real-world impact.
 
 It is built for people who need to answer *"would we actually see this
 adversary?"* and want an answer grounded in evidence rather than a coverage
-spreadsheet. The audited catalog has **540 technique keys and 856 command
+spreadsheet. The audited catalog has **540 technique keys and 1,576 command
 records**. The audited enterprise dataset mapped 536 unique techniques across
 232 groups and campaigns, and those mapped techniques resolve to catalog
 records rather than the runtime fallback. This is coverage of catalog records,
-not proof of full attack-behaviour fidelity: **146 catalog techniques are
-explicitly marked bounded synthetic exercises** and mapped to 25
+not proof of full attack-behaviour fidelity: **320 catalog techniques are
+explicitly marked bounded synthetic exercises** and mapped to 31
 technique-relevant scenario families. Each emits a self-reported JSON receipt
 with a unique run ID, timestamps, scenario events, exit code, cleanup result,
 and SHA-256 digest. Receipt integrity proves what the runner reported; endpoint
@@ -42,9 +42,11 @@ telemetry you should expect, and how to undo it — and the interface refuses to
 hand you a command whose risk exceeds the scope you set.
 
 The AdversaryFlow web service **generates plans; it never executes commands**.
-It runs entirely on your own machine, binds to loopback by default, and stores nothing beyond a
-cached copy of the public ATT&CK bundle and your own progress in browser local
-storage. The finished plan exports as a one-click, offline operator kit with a
+It runs entirely on your own machine and binds to loopback by default. It keeps
+a cached copy of the public ATT&CK bundle and your progress in browser local
+storage. When you choose **Save engagement**, it also keeps saved plan
+revisions and an audit log in a local database (see
+[Operations](OPERATIONS.md)). The finished plan exports as a one-click, offline operator kit with a
 CSV and standalone PowerShell/Bash runner, as a command-free HTML or PDF
 engagement report, or as Markdown, schema-versioned JSON, and a commented text
 runbook. A JSON export can be loaded back in later to resume exactly where you
@@ -64,7 +66,7 @@ plan; it does not add candidates to an execution kit.
 |---|---|---|
 | **Detection engineer** — owns EDR/SIEM rules and needs evidence about a specific adversary | Review one actor's mapped exercises, run suitable commands in a lab, and record which detections fired | `./run.sh` → browser opens at `http://127.0.0.1:5000` |
 | **Purple-team lead** — plans and reports on a scheduled exercise | Scope an exercise to a platform and a set of kill-chain stages, then hand the team a runbook and keep an evidence record | Welcome screen → **Begin emulation plan** → **Export** |
-| **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume saved plan** or **Resume JSON plan** |
+| **Returning operator** — picked up a half-finished exercise, or received one from a colleague | Restore a previous plan with its outcomes and evidence notes intact | Welcome screen → **Resume &lt;actor&gt; plan** or **Resume JSON plan** |
 | **Threat intelligence reviewer** — compares a structured technique list with ATT&CK actor mappings | Review report-only, ATT&CK-only, and shared techniques with source provenance | Welcome screen → **Import and compare** |
 | **Automation / platform engineer** — feeds plans into other tooling | Pull the workflow as JSON without touching the UI | `curl http://127.0.0.1:5000/api/workflow/<stix_id>` |
 | **Lab operator** — runs the service for a team, or on an air-gapped host | Keep the service healthy, control where ATT&CK data comes from, and gate remote access | `adversaryflow doctor`, `cache-status`, `--offline`, `--allow-remote --api-token` |
@@ -91,7 +93,8 @@ then runs its own diagnostic.
 AdversaryFlow installed and verified. Start it with ./run.sh
 ```
 
-Windows uses `.\install.ps1`, which performs the same checks via `py -3`.
+Windows uses `powershell -NoProfile -ExecutionPolicy Bypass -File .\\install.ps1`,
+which performs the same checks via `py -3`.
 Each native PowerShell step is checked explicitly: virtual-environment
 creation, both pinned dependency installs, the editable package install, and
 `doctor` stop immediately with a step-specific error if the child process
@@ -107,19 +110,20 @@ installation, `adversaryflow --version` prints `AdversaryFlow 0.5.3`.
 ./run.sh
 ```
 
-`run.sh` runs `install.sh` first if `.venv/bin/adversaryflow` is missing
-(printing `[AdversaryFlow] first-run installation…`), then starts the service
-with `--open`.
+`run.sh` runs `install.sh` if the local environment is missing or fails the
+readiness check (printing `[AdversaryFlow] installing or repairing the local
+environment…`), then starts the service with `--open`.
 
 **Observable result:**
 
 ```
-[AdversaryFlow] starting; the browser will open when ATT&CK data is ready
+[AdversaryFlow] starting; the browser will open when the local service is ready
 AdversaryFlow 0.5.3: http://127.0.0.1:5000
 ```
 
 The HTTP service accepts requests immediately; ATT&CK data loads in a
-background thread. The browser opens once the data is ready or has failed.
+background thread. The browser opens once HTTP is serving, so the welcome
+screen can show setup status while saved-plan recovery remains available.
 
 ### Step 3 — First-run ATT&CK data preparation
 
@@ -128,14 +132,15 @@ polls `GET /api/bootstrap`. On a cold cache the first `GET` returns **503**, the
 page issues `POST /api/bootstrap` with the `X-AdversaryFlow-CSRF` header, and
 the background worker downloads the enterprise bundle.
 
-**Observable result:** a full-screen loader reads
+**Observable result:** setup status appears on the welcome screen. Saved-plan
+resume and JSON import remain available while preparation is pending.
+
+The status reads
 
 > **Preparing MITRE ATT&CK data…**
-> The first run downloads and validates the enterprise bundle. Downloaded
-> *N.N* MB of *N.N* MB. You can leave this tab open.
+> You can resume a saved plan or import JSON while the service prepares.
 
-The byte values are calculated from live cache metadata and only appear once
-download progress is available. The download is capped
+The download is capped
 at 128 MiB, checksummed, validated as a STIX bundle, and atomically promoted
 before it is used. Subsequent launches reuse the disk cache for 7 days.
 
@@ -143,9 +148,9 @@ before it is used. Subsequent launches reuse the disk cache for 7 days.
 
 **Observable result:** the heading *"Turn a threat actor into an end-to-end
 emulation plan"*, a **Begin emulation plan** button, a **Resume JSON plan**
-button, and the footer *"Built for disposable development labs.
-AdversaryFlow creates plans; it does not execute commands."* If this browser
-already has an in-progress plan, **Resume saved plan** is also shown with the actor name.
+button, and the banner *"Authorized lab use only. AdversaryFlow creates
+plans; it does not execute commands."* If this browser already has an
+in-progress plan, **Resume &lt;actor&gt; plan** is also shown.
 The header status chip turns green and reads `<count> actors · Enterprise`.
 The **?** control opens in-app help. If ATT&CK setup failed, a banner on every
 screen reads the failure and offers **Retry setup**.
@@ -187,6 +192,11 @@ target, and a curated/fallback split bar. The footer reads
 `<runnable> runnable · <unsupported> unsupported across <stages> stages`.
 
 ### Step 7 — Build and walk the plan
+
+**Build plan** remains available when scoped techniques have no runnable
+commands. Users can review and report those coverage gaps without enabling
+extra permissions. An empty scope still blocks progress, and unavailable
+commands and execution kits remain disabled.
 
 Click **Build plan** → the *Emulation plan* screen, headed
 `APT29 · G0016` with the subtitle *"development-lab emulation plan · commands
@@ -249,12 +259,12 @@ immediately, the stage rail shows `done/runnable` counts (and a check when a
 stage is complete), the save chip stays on **Saved in this browser**, and the
 state is written to browser local storage under a key derived from the actor,
 ATT&CK data version, domains, and command platform. Reloading the tab offers
-**Resume saved plan** on the welcome screen, labelled with the actor name.
+**Resume &lt;actor&gt; plan** on the welcome screen.
 
 ### Step 10 — Export
 
 Click **Finish & export** → *"Your emulation plan is ready"*, with stat tiles
-for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
+for **Techniques**, **Stages**, **Runnable tests**, and **Executed · N skipped**.
 
 | Card | File | Contents |
 |---|---|---|
@@ -262,9 +272,9 @@ for **Techniques**, **Stages**, **Runnable tests**, and **Marked run**.
 | **Generate report** | Preview in the Export step | Empty → generating → ready, or an actionable error with retry; the ready state embeds the self-contained HTML in a sandboxed preview |
 | **PDF** | `AdversaryFlow_G0016_APT29_report.pdf` | Command-free, leadership-ready coverage, telemetry, detection mappings, evidence, and categorized gaps, rendered from the preview HTML |
 | **HTML** | `AdversaryFlow_G0016_APT29_report.html` | The same self-contained, responsive document shown in the preview |
-| **JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical schema 2.0 plan validating against `schemas/adversaryflow-plan.schema.json`; this is the file you resume later |
+| **JSON** | `AdversaryFlow_G0016_APT29.json` | Canonical plan: schema 2.0 (`schemas/adversaryflow-plan.schema.json`), or schema 3.0 (`schemas/adversaryflow-plan-v3.schema.json`) when accepted procedures or receipts are attached; this is the file you resume later |
 | **Markdown report** | `AdversaryFlow_G0016_APT29.md` | Human-readable plan with outcomes, evidence, commands, notes, cleanup |
-| **Commented runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
+| **Commented runbook** | `AdversaryFlow_G0016_APT29_runbook.cmd.txt` (Windows) or `…_runbook.sh.txt` (Linux/macOS) | Review-only sequenced text with every metadata, command, and cleanup line commented (`REM` on Windows, `#` on Linux/macOS) |
 
 The runbook remains a deliberately non-executable review format. The execution
 kit is the controlled runnable handoff: each step requires an operator decision,
@@ -272,7 +282,7 @@ edited commands require a reason and second approval, and the destination runner
 writes HTML/Markdown reports plus CSV, JSON, JSONL, logs, and checksums.
 The service rebinds report content to the curated catalog before rendering the
 HTML and PDF engagement reports. Those reports never contain runnable commands.
-The JSON download preserves the submitted schema 2.0 record rather than
+The JSON download preserves the submitted schema 2.0 or 3.0 record rather than
 creating a second report schema.
 
 **Observable result:** report generation moves from **Generating report
@@ -281,6 +291,10 @@ ready"*. The HTML, PDF, and JSON download controls then become available.
 **Core value is delivered here.**
 
 ### Step 11 — Resume later
+
+The header's **Home** control returns to saved engagements and intelligence
+imports without resetting scope, evidence, recovery history, or the current
+server engagement identity. **Resume <actor> plan** returns to review.
 
 From the welcome screen choose **Resume JSON plan** and pick a previously
 exported JSON file.
@@ -292,7 +306,7 @@ commands and data version before use"*. Every imported command is marked
 unverified and requires acknowledgement before it can be copied. The plan's
 saved high-risk, administrator, and network permissions remain unchanged.
 
-The importer accepts only a bounded schema 2.0 document: 1–32 non-empty
+The importer accepts bounded schema 2.0 and 3.0 plans: 1–32 non-empty
 stages, at most 2,000 techniques in any one stage, at most 4,000 technique
 records across the plan, ATT&CK-formatted technique IDs, and commands no longer
 than 10,000 characters. Runbook export treats all imported text as data: line
@@ -309,8 +323,8 @@ prefix.
 | Situation | What the user sees | Recovery |
 |---|---|---|
 | Python missing or older than 3.10 | `AdversaryFlow requires Python 3.10 or newer.` (or `…; found Python 3.9.18.`) on stderr, exit 1 | Install Python 3.10+ and re-run `./install.sh` |
-| A native step in `.\install.ps1` fails | A step-specific terminating error names virtual-environment creation, runtime dependencies, build dependencies, package installation, or `doctor`; the success message is not printed | Correct the reported Python/package problem and re-run `.\install.ps1` |
-| Port already in use | `waitress` fails to bind | `adversaryflow --port 5050 --open` |
+| A native step in `.\install.ps1` fails | A step-specific terminating error names virtual-environment creation, runtime dependencies, build dependencies, package installation, or `doctor`; the success message is not printed | Correct the reported Python/package problem and re-run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\install.ps1` |
+| Port already in use | `AdversaryFlow could not listen on 127.0.0.1:5000: …` followed by a hint to choose another port | `./run.sh --port 5050` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File .\\run.ps1 --port 5050`); see [Use another port](TROUBLESHOOTING.md#use-another-port) |
 | Non-loopback bind without opt-in | `Refusing a non-loopback bind without --allow-remote. Read docs/OPERATIONS.md first.` exit 2 | Add `--allow-remote` **and** a token |
 | `--allow-remote` with no token | `Refusing a non-loopback bind without --api-token or ADVERSARYFLOW_API_TOKEN.` exit 2 | Supply `--api-token` or the environment variable |
 | Remote mode active | `WARNING: remote binding is enabled; every API request requires the configured bearer token.` | Expected; the in-app connection dialog requests the token and holds it only in session storage |
@@ -335,11 +349,11 @@ prefix.
 |---|---|---|
 | Search matches nothing | `No actors match your search.` | Clear the search with the ✕ button |
 | Last ATT&CK domain deselected | Toast *"Keep at least one ATT&CK domain selected"*; the domain stays on | Select a different domain first |
-| No technique has a command for the chosen OS | Card reads `No Linux test is available for this technique.` with the note *"Choose another platform or contribute an exact-platform test."*; **Build plan** is disabled | Switch platform, or contribute a test |
+| No technique has a command for the chosen OS | Card reads `No Linux test is available for this technique.` with the note *"Choose another platform or contribute an exact-platform test."*; **Build plan** stays available so the report can document the coverage gap, but command copying and the execution kit are unavailable | Switch platform, or contribute a test |
 | A command exceeds the scope you set | Card reads `Restricted by scope: high-risk commands are disabled.` with *"Enable the corresponding safety option in Scope after reviewing the risk."*; both **Copy command** and **Copy cleanup** are disabled | Enable the matching option in Scope |
 | All stages deselected | Footer reads `No techniques in scope — enable a stage`; **Build plan** disabled | Click **Select all** |
 | Clipboard blocked by the browser | Toast *"Clipboard access was denied"* | Select the command text manually |
-| Local storage unavailable (private mode, quota) | Toast *"Progress can't be saved in this browser — export the plan to keep your records"*, shown once | Export the JSON plan to preserve records |
+| Local storage unavailable (private mode, quota) | A persistent alert *"This workspace is not saved in this browser…"* with a **Download workspace recovery copy** button; it stays visible until a save succeeds | Download the recovery copy or export the JSON plan |
 | Operator execution kit generation fails | A toast shows the API's error message, or `Execution kit could not be generated (<status>)` when no JSON message is available; the export button is restored | Correct the reported plan/session problem and click the execution-kit card again |
 | Engagement report generation fails | The preview area shows **Report generation failed**, preserves the API message, and offers **Retry report generation**; the same message also appears in a toast | Correct the reported plan/session problem and retry generation |
 | PDF/JSON report download fails after preview | The preview remains visible, an inline error and toast show the API message, and all download controls are restored | Correct the reported service/session problem and retry the format |
@@ -355,7 +369,7 @@ half-imported.
 | Rejected because | Toast |
 |---|---|
 | Recovery file larger than 128 MiB, or plan content larger than 32 MiB UTF-8 | Size-limit error; current workspace remains intact and recovery download remains available |
-| Not a schema 2.0 export | `This is not an AdversaryFlow 2.0 plan export` |
+| Not a schema 2.0 or 3.0 AdversaryFlow export | `This is not an AdversaryFlow 2.0 plan export` |
 | Missing tool/data version | `Plan is missing its tool or ATT&CK data version` |
 | Actor record incomplete | `Plan actor record is invalid` |
 | Unknown ATT&CK domain | `Plan contains an invalid ATT&CK domain` |
@@ -474,7 +488,7 @@ table directly.
 | J51 | Reject an unknown CLI domain | `adversaryflow cache-refresh --domains bogus` | Refuses | Exit code 2 and stdout contains `Unknown ATT&CK domain(s): bogus` |
 | J52 | Operate offline | `adversaryflow --offline` with a seeded cache | Serves without network access | Actors load and no upstream request is made |
 | J53 | Offline with no cache | `--offline` against an empty cache directory | Fails with an actionable message | Error contains `offline mode requires a cached enterprise ATT&CK bundle at` |
-| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 856 command records, and exactly 146 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
+| J54 | Catalog coverage and disclosure | Resolve every technique used by the audited enterprise actors and inspect every catalog record | Every mapped technique resolves, while bounded exercises remain explicitly distinguishable from direct records | 536 unique actor-mapped techniques resolve with 0 runtime fallbacks; the catalog has 540 technique keys, 1,576 command records, and exactly 320 technique IDs marked `technique_relevant_bounded`; every bounded technique has Windows, Linux, and macOS runner records plus an explicit scenario and expected telemetry |
 | J55 | Accessibility | Walk forward and backward through the welcome, actor, scope, review, and export screens with the keyboard | Focus moves to each new screen heading and every step has no serious accessibility violations | The active element is the destination `h1` after forward, back, reached-step, resume/import, and restart transitions; axe-core reports zero `serious` or `critical` violations on every wizard screen |
 | J56 | Bound imported plans | Resume documents at and beyond each stage, per-stage technique, aggregate technique, command-length, and ATT&CK-ID boundary | Accepts valid boundary values and rejects values beyond them without changing screens | 1 and 32 non-empty stages, 2,000 techniques in a stage, 4,000 aggregate techniques, and a 10,000-character command are accepted; zero or 33 stages, an empty stage, 2,001 techniques in one stage, 4,001 in aggregate, a 10,001-character command, or a malformed technique ID produces the documented toast and leaves the welcome screen usable |
 | J57 | Enforce exact origins | Send a mutating request with a valid CSRF token and vary only `Origin` | Compares scheme, host, and effective port rather than hostname text alone | Foreign host, `null`, wrong scheme, and wrong port return HTTP 403 with `error = forbidden`; a matching `http://[::1]:5000` origin is accepted when the request host is `[::1]:5000` |

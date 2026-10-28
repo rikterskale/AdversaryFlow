@@ -32,4 +32,4 @@ recursive-include frontend *.html *.css *.js *.svg *.ts *.tsx *.json *.cjs
 prune frontend/node_modules
 prune frontend/src/node_modules
 recursive-include tests *.py *.js
-recursive-include scripts *.py
+recursive-include scripts *.py *.mjs

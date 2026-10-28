@@ -10,6 +10,7 @@ export type IconName =
   | "external"
   | "file"
   | "help"
+  | "home"
   | "moon"
   | "package"
   | "refresh"
@@ -28,6 +29,7 @@ const paths: Record<IconName, React.ReactNode> = {
   external: <><path d="M14 5h5v5" /><path d="m19 5-8 8" /><path d="M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6" /></>,
   file: <><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v5h5" /><path d="M9 13h6M9 17h6" /></>,
   help: <><circle cx="12" cy="12" r="9" /><path d="M9.6 9.2a2.5 2.5 0 1 1 3.3 2.4c-.8.4-1.4 1-1.4 2.1" /><path d="M12 17h.01" /></>,
+  home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" /><path d="M9 21v-8h6v8" /></>,
   moon: <path d="M20 15.2A8.3 8.3 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z" />,
   package: <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9M8 5.2l8 4.5" /></>,
   refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M6.1 8.7A7 7 0 0 1 18.8 7M5.2 17A7 7 0 0 0 17.9 15.3" /></>,

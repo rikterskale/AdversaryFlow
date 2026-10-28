@@ -2,7 +2,7 @@
 
 Exercise receipts are self-reported. AdversaryFlow only calls a run independently
 observed when endpoint or SIEM events satisfy the technique's acceptance contract.
-All 146 bounded techniques have a contract available in the plan UI and from:
+All 320 bounded techniques have a contract available in the plan UI and from:
 
 ```console
 adversaryflow-telemetry criteria T1110

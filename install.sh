@@ -22,7 +22,7 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) e
   exit 1
 fi
 
-if [ ! -d .venv ]; then
+if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
   python3 -m venv .venv
 fi
 
@@ -30,6 +30,6 @@ fi
 .venv/bin/python -m pip install --require-hashes --requirement requirements-build.lock
 .venv/bin/python -m pip install --no-build-isolation --no-deps --editable .
 
-.venv/bin/adversaryflow doctor
+.venv/bin/adversaryflow doctor --skip-port-check
 
 echo "AdversaryFlow installed and verified. Start it with ./run.sh"

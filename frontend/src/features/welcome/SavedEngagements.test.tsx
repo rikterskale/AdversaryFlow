@@ -14,6 +14,33 @@ function mount(onRestore = vi.fn()): void {
 }
 
 describe("saved engagement browser", () => {
+  it("browses older engagements past the first 200 and returns to the latest page", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (path: string) => path.endsWith("offset=200")
+      ? json({ engagements: [{ id: "old-record", actor_name: "Older Actor", revision: 1, data_version: "fixture" }], next_offset: null })
+      : json({ engagements: Array.from({ length: 200 }, (_, index) => ({ id: `saved-${index}`, actor_name: `Actor ${index}`, revision: 1, data_version: "fixture" })), next_offset: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Older engagements" }));
+    expect(await screen.findByRole("button", { name: /Older Actor · revision 1/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Older engagements" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Newer engagements" }));
+    expect(await screen.findByRole("button", { name: /Actor 0 · revision 1/ })).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith("/api/engagements?limit=200&offset=200", expect.anything());
+  });
+
+  it("refreshes the selected engagement's revision menu along with the list", async () => {
+    let revision = 1;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (path: string) => path.includes("?")
+      ? json({ engagements: [{ id: "saved-1", actor_name: actor.name, revision, data_version: "fixture" }] })
+      : json({ id: "saved-1", revisions: [{ revision, plan_sha256: "a".repeat(64) }] })));
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /Fixture Actor · revision 1/ }));
+    await screen.findByRole("option", { name: /Revision 1/ });
+    revision = 2;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh saved engagements" }));
+    await screen.findByRole("button", { name: /Fixture Actor · revision 2/ });
+    expect(await screen.findByRole("option", { name: /Revision 2/ })).toBeInTheDocument();
+  });
   it("F05 works from a fresh browser, exposes revisions and returns the selected server identity for append", async () => {
     const plan = buildExportBundle(actor, workflow, scope, {}, ["enterprise"]).plan;
     const onRestore = vi.fn();

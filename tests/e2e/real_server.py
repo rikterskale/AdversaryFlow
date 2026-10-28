@@ -32,6 +32,19 @@ def main() -> None:
                 {"type": "relationship", "id": "relationship--task", "relationship_type": "uses",
                  "source_ref": "intrusion-set--zeta", "target_ref": "attack-pattern--task"},
             ])
+            bundle["objects"].append({"type": "intrusion-set", "id": "intrusion-set--capability", "name": "Capability Group",
+                                      "external_references": [{"source_name": "mitre-attack", "external_id": "G0099"}]})
+            for tid, name, platforms in (("T1059.009", "Cloud API", ["IaaS"]), ("T1055", "Process Injection", ["Windows", "Linux", "macOS"]),
+                                         ("T1611", "Container Context", ["Windows", "Linux", "Containers"]), ("T1595", "Planning Probe", ["PRE"]),
+                                         ("T1001", "Data Obfuscation", ["Windows", "Linux", "macOS"])):
+                stix_id = f"attack-pattern--capability-{tid}"
+                bundle["objects"].extend([
+                    {"type": "attack-pattern", "id": stix_id, "name": name, "x_mitre_platforms": platforms,
+                     "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "execution"}],
+                     "external_references": [{"source_name": "mitre-attack", "external_id": tid}]},
+                    {"type": "relationship", "id": f"relationship--capability-{tid}", "relationship_type": "uses",
+                     "source_ref": "intrusion-set--capability", "target_ref": stix_id},
+                ])
             cache_file.write_text(json.dumps(bundle), encoding="utf-8")
             attack_data.clear_memory_cache()
             attack_data.get_index(["enterprise"])

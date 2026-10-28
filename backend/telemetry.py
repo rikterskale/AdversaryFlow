@@ -30,6 +30,12 @@ class AcceptanceCriteria:
 
 
 _SCENARIO_ACTIVITY: Dict[str, tuple[str, ...]] = {
+    "filesystem_artifact": ("file_create", "file_modify", "file_delete", "file_rename", "archive_create"),
+    "synthetic_capture": ("file_create", "file_read"),
+    "packet_artifact": ("file_create", "file_read"),
+    "configuration_change": ("configuration_change", "file_modify"),
+    "cryptography_artifact": ("file_create", "encoding_operation"),
+    "execution_guardrails": ("file_create", "file_delete"),
     "controlled_exception": ("process_error", "process_exit"),
     "mock_authentication": ("authentication_failure",),
     "password_cracking": ("process_start", "hash_operation"),

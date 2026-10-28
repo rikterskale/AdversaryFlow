@@ -305,6 +305,7 @@ def collect_diagnostics(
     host: str = "127.0.0.1",
     port: int = 5000,
     port_is_service: bool = False,
+    check_port: bool = True,
     network_timeout: float = NETWORK_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
     """Return a stable diagnostics contract without changing application state."""
@@ -316,7 +317,11 @@ def collect_diagnostics(
         _docker_check(containerized=containerized),
         _frontend_check(frontend_dir),
         dependency,
-        _port_check(host, port, port_is_service, containerized=containerized),
+        _port_check(host, port, port_is_service, containerized=containerized) if check_port else _result(
+            "port", "Service port", True,
+            "Port availability is deferred until service startup; installation does not reserve a port.",
+            "No action required.", required=False,
+        ),
         writable,
         _cache_integrity_check(),
         _disk_space_check(),

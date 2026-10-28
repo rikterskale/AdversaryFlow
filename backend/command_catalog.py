@@ -17,7 +17,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
+from .catalog_execution import identify_command, normalize_environment_record
 from .command_safety import command_record, technique_exercise_record
+from .native_catalog import extend_native_catalog
 
 ATTACK_TECHNIQUE_ID_PATTERN = re.compile(r"T[0-9]{4}(?:\.[0-9]{3})?")
 
@@ -212,10 +214,10 @@ CURATED: Dict[str, List[Dict[str, Any]]] = {
     # ---- Command and Control -------------------------------------------
     "T1071.001": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                      "Loopback-only app-layer C2 proxy. Does not contact the public internet.",
-                     requires_network=True, network_targets=["127.0.0.1"]),
+                     network_targets=["127.0.0.1"]),
                   _c("linux", "curl -s -o /dev/null --connect-timeout 1 http://127.0.0.1:9 || echo AdversaryFlow lab loopback fetch",
                      "Loopback-only fetch. Does not contact the public internet.",
-                     requires_network=True, network_targets=["127.0.0.1"])],
+                     network_targets=["127.0.0.1"])],
     "T1105": [_c("windows", "powershell -NoProfile -Command \"Set-Content -Path $env:TEMP\\af_download.html -Value 'AdversaryFlow lab transfer marker'\"",
                  "Writes a local transfer marker. Does not download from the network.",
                  "del %TEMP%\\af_download.html 2>nul"),
@@ -223,10 +225,10 @@ CURATED: Dict[str, List[Dict[str, Any]]] = {
                  "Writes a local transfer marker. Does not download from the network.")],
     "T1571": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                  "Loopback-only non-standard-port check. Does not contact the public internet.",
-                 requires_network=True, network_targets=["127.0.0.1"])],
+                 network_targets=["127.0.0.1"])],
     "T1573": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                  "Loopback-only encrypted-channel proxy. Does not contact the public internet.",
-                 requires_network=True, network_targets=["127.0.0.1"])],
+                 network_targets=["127.0.0.1"])],
     "T1090": [_c("windows", "netsh interface portproxy show all & echo AdversaryFlow lab proxy-config read",
                  "Read-only view of port-proxy configuration.")],
     "T1568": [_c("windows", "nslookup localhost", "Loopback DNS resolution (dynamic-resolution proxy).")],
@@ -234,7 +236,7 @@ CURATED: Dict[str, List[Dict[str, Any]]] = {
     # ---- Exfiltration ---------------------------------------------------
     "T1041": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                  "Loopback-only C2-channel exfil proxy. No data is posted off-host.",
-                 requires_network=True, network_targets=["127.0.0.1"])],
+                 network_targets=["127.0.0.1"])],
     "T1567.002": [_c("windows", "nslookup localhost & echo AdversaryFlow lab exfil-to-cloud proxy — no upload",
                      "Loopback DNS lookup as an exfil-to-cloud proxy. No upload is performed.")],
     "T1048": [_c("windows", "nslookup localhost & echo AdversaryFlow lab alt-protocol-exfil proxy",
@@ -259,14 +261,14 @@ CURATED: Dict[str, List[Dict[str, Any]]] = {
                      "Bounded lab simulation proxy for the delivery step (nothing is sent).")],
     "T1566.002": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                      "Loopback-only phishing-link click proxy. Does not contact the public internet.",
-                     requires_network=True, network_targets=["127.0.0.1"])],
+                     network_targets=["127.0.0.1"])],
     "T1078": [_c("windows", "whoami /all & echo AdversaryFlow lab valid-accounts proxy (read-only)",
                  "Read-only identity inspection — no credentials used.")],
     "T1190": [_c("windows", "cmd.exe /c \"echo AdversaryFlow lab exploit-public-app proxy - no exploit run\"",
                  "Bounded lab simulation only — no exploitation is performed.")],
     "T1189": [_c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                  "Loopback-only drive-by-compromise proxy. Does not contact the public internet.",
-                 requires_network=True, network_targets=["127.0.0.1"])],
+                 network_targets=["127.0.0.1"])],
 }
 
 
@@ -303,7 +305,7 @@ TACTIC_FALLBACK: Dict[str, Dict[str, str]] = {
                     "Read-only search for local documents."),
     "command-and-control": _c("windows", "powershell -NoProfile -Command \"Test-NetConnection 127.0.0.1 -Port 9 | Select ComputerName,TcpTestSucceeded\"",
                              "Loopback-only C2 proxy. Does not contact the public internet.",
-                             requires_network=True, network_targets=["127.0.0.1"]),
+                             network_targets=["127.0.0.1"]),
     "exfiltration": _c("windows", "nslookup localhost & echo AdversaryFlow lab exfiltration proxy for {tid} - no data sent",
                       "Loopback DNS lookup; no data leaves the host."),
     "impact": _c("windows", "cmd.exe /c \"echo AdversaryFlow lab impact proxy for {tid} - system unchanged\"",
@@ -335,6 +337,13 @@ for _tid, _cmds in CURATED.items():
             _expanded.append(_command)
     CURATED[_tid] = _expanded
 
+for _tid, _cmds in CURATED.items():
+    CURATED[_tid] = [record for command in _cmds
+                     for record in normalize_environment_record(_tid, command)]
+extend_native_catalog(CURATED)
+for _tid, _cmds in CURATED.items():
+    CURATED[_tid] = [identify_command(command) for command in _cmds]
+
 
 def get_commands(technique_id: str, technique_name: str, tactics: List[str],
                  target_domain: str = "example.com") -> Dict[str, Any]:
@@ -353,7 +362,7 @@ def get_commands(technique_id: str, technique_name: str, tactics: List[str],
     cmd = dict(template)
     cmd["command"] = _format_fallback(cmd["command"], technique_id, technique_name, target_domain)
     cmd["note"] = cmd["note"] + " (auto-generated bounded simulation for a technique introduced after this catalog release)"
-    return {"source": "fallback", "commands": [cmd]}
+    return {"source": "fallback", "commands": [identify_command(cmd)]}
 
 
 def _format_fallback(template: str, technique_id: str, technique_name: str, target_domain: str) -> str:

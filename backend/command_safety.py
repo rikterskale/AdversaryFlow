@@ -12,11 +12,29 @@ from typing import Any, Dict, List
 from .lab_exercises import get_spec
 from .telemetry import acceptance_record
 
-_NETWORK_MARKERS = (
-    "http://", "https://", "invoke-webrequest", "downloadstring", "curl ", "wget ", "nslookup",
-    "resolve-dnsname", "test-netconnection", "ping ", "git ls-remote",
-    "net view", "net use", "tracert", "traceroute", "ssh ",
+# Markers are anchored on word boundaries so ordinary prose ("dumping",
+# "stopping") is never mistaken for a network action. Loopback-only blocks are
+# classified separately below and are exempt from the external-network guardrail.
+_EXTERNAL_NETWORK_PATTERNS = (
+    r"https?://",
+    r"\binvoke-webrequest\b",
+    r"\bdownloadstring\b",
+    r"\bcurl\b",
+    r"\bwget\b",
+    r"\bnslookup\b",
+    r"\bresolve-dnsname\b",
+    r"\btest-netconnection\b",
+    r"\bping\b",
+    r"\bgit\s+ls-remote\b",
+    r"\bnet\s+view\b",
+    r"\bnet\s+use\b",
+    r"\btracert\b",
+    r"\btraceroute\b",
+    r"\bssh\b",
 )
+_NETWORK_PATTERN = re.compile("|".join(_EXTERNAL_NETWORK_PATTERNS), re.IGNORECASE)
+_LOOPBACK_PATTERN = re.compile(r"127\.0\.0\.1|\[?::1\]?|localhost", re.IGNORECASE)
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1", "[::1]")
 _WRITE_MARKERS = (
     "reg add", "reg save", "schtasks /create", "sc.exe create", "net user adversaryflow",
     "set-content", "add-content", "out-file", "copy ", "mkdir", "md ",
@@ -62,6 +80,30 @@ def _network_targets(command: str) -> List[str]:
     return list(dict.fromkeys(targets))
 
 
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host).strip().lower()
+    if normalized.startswith("["):
+        normalized = normalized[: normalized.index("]") + 1] if "]" in normalized else normalized
+    elif ":" in normalized:
+        normalized = normalized.split(":", 1)[0]
+    return normalized in _LOOPBACK_HOSTS or normalized.startswith("127.")
+
+
+def _network_classification(command: str, note: str, targets: List[str]) -> tuple[bool, bool]:
+    """Return (requires_external_network, loopback_only).
+
+    A block that can reach an external host needs the network guardrail. A block
+    that only touches loopback is local and is exempt from that guardrail, but is
+    still labelled so operators can see the loopback activity.
+    """
+    if any(not _is_loopback_host(target) for target in targets):
+        return True, False
+    text = f"{command} {note}"
+    if not _NETWORK_PATTERN.search(text):
+        return False, False
+    return (False, True) if _LOOPBACK_PATTERN.search(text) else (True, False)
+
+
 def _infer_fidelity(command: str, note: str, overrides: Dict[str, Any]) -> str:
     """Classify how faithfully a catalog record reproduces the ATT&CK technique."""
     if overrides.get("exercise_kind") == "technique_relevant_bounded":
@@ -72,7 +114,7 @@ def _infer_fidelity(command: str, note: str, overrides: Dict[str, Any]) -> str:
     text = f"{command} {note}".lower()
     if "technique-relevant bounded exercise" in text:
         return FIDELITY_BOUNDED
-    if any(marker in text for marker in _PROXY_NOTE_MARKERS):
+    if re.search(r"\bproxy\b", note.lower()) or any(marker in text for marker in _PROXY_NOTE_MARKERS):
         return FIDELITY_PROXY
     if any(marker in command.lower() for marker in _PROXY_COMMAND_MARKERS):
         return FIDELITY_PROXY
@@ -88,7 +130,8 @@ def command_record(
 ) -> Dict[str, Any]:
     """Return a command with conservative, machine-readable safety metadata."""
     text = f"{command} {note}".lower()
-    requires_network = any(marker in text for marker in _NETWORK_MARKERS)
+    network_targets = _network_targets(command)
+    requires_network, loopback_only = _network_classification(command, note, network_targets)
     writes_state = any(marker in text for marker in _WRITE_MARKERS)
     requires_admin = "requires admin" in text or any(
         marker in text for marker in ("reg save hklm", "sc.exe create", "hklm\\security")
@@ -101,6 +144,8 @@ def command_record(
         side_effects.append("changes_local_state")
     if requires_network:
         side_effects.append("network_activity")
+    elif loopback_only:
+        side_effects.append("loopback_network_activity")
     if "credential" in text or "password" in text or "sam" in text:
         side_effects.append("credential_store_access")
     if "lockworkstation" in text or "locks screen" in text:
@@ -120,14 +165,14 @@ def command_record(
         "side_effects": side_effects,
         "requires_admin": requires_admin,
         "requires_network": requires_network,
-        "network_targets": _network_targets(command),
+        "network_targets": network_targets,
         "prerequisites": [f"{platform} command environment", "authorized disposable lab"],
         "expected_telemetry": "Process and command-line telemetry aligned to the selected ATT&CK technique.",
         "expected_output": note or "Command-specific output; verify the expected telemetry in the detection platform.",
         "timeout_seconds": 60,
         "rollback": cleanup,
         "cleanup_required": bool(cleanup),
-        "acknowledgment_required": risk in {"medium", "high"},
+        "acknowledgment_required": risk in {"medium", "high"} or loopback_only,
         "fidelity": _infer_fidelity(command, note, overrides),
     }
     record.update(overrides)
@@ -142,7 +187,7 @@ def technique_exercise_record(technique_id: str, original: Dict[str, Any]) -> Di
     """Replace a generic proxy with its registered technique-relevant exercise."""
     spec = get_spec(technique_id)
     interpreter = "python3" if original["platform"] in {"linux", "macos"} else "python"
-    loopback = spec.scenario in {"mock_authentication", "loopback_transfer", "loopback_proxy"}
+    loopback = spec.scenario in {"mock_authentication", "loopback_transfer", "loopback_proxy", "web_content"}
     effects = ["temporary_local_artifacts", "child_process_activity"]
     if loopback:
         effects.append("loopback_network_activity")
@@ -158,7 +203,7 @@ def technique_exercise_record(technique_id: str, original: Dict[str, Any]) -> Di
         risk="medium" if loopback else "low",
         side_effects=effects,
         requires_admin=False,
-        requires_network=loopback,
+        requires_network=False,
         network_targets=["127.0.0.1"] if loopback else [],
         expected_telemetry=spec.expected_telemetry,
         expected_output=(

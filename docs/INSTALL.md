@@ -44,6 +44,12 @@ $env:ADVERSARYFLOW_PORT = "5050"
 docker compose up
 ~~~
 
+Variables set this way last only for that command or window. To keep a
+setting for every later `docker compose up`, put it in a `.env` file in the
+application folder, for example `ADVERSARYFLOW_PORT=5050`. The file is
+excluded from Git and from the image build context. Delete it to return to the
+defaults.
+
 Compose passes the supported launcher settings through with these safe
 defaults:
 
@@ -99,7 +105,7 @@ unless the cache-integrity row explicitly tells you to clear it.
 | --- | --- | --- |
 | `docker: command not found`, `docker is not recognized`, or `docker compose version` fails | Docker or the Compose v2 plugin is not installed | Install Docker Engine or Docker Desktop with Compose v2, open a new terminal, and confirm `docker version` plus `docker compose version`. |
 | `Cannot connect to the Docker daemon` or Docker Desktop reports that the engine is stopped | Docker is installed but its engine is not running | Start Docker Engine/Desktop, wait until it reports ready, then rerun `docker compose up`. |
-| `port is already allocated`, `address already in use`, or WinError 10048 | Another process owns port 5000 | Start with `ADVERSARYFLOW_PORT=5050 docker compose up` (PowerShell: `$env:ADVERSARYFLOW_PORT = "5050"` first), then open the printed URL. |
+| `port is already allocated`, `address already in use`, or WinError 10048 | Another process owns port 5000 | Write `ADVERSARYFLOW_PORT=5050` to a `.env` file in the application folder, run `docker compose up`, then open the printed URL. See [Use another port](TROUBLESHOOTING.md#use-another-port). |
 | Setup remains on ATT&CK preparation or `/api/health` reports a download error | DNS, proxy, TLS inspection, or firewall policy blocks the official feed | Allow HTTPS to `raw.githubusercontent.com`, correct the host/Docker proxy and CA settings, then restart. Use `ADVERSARYFLOW_OFFLINE=true` only after a validated cache has been seeded. |
 | `STIX cache integrity` is `FAIL`, or logs report malformed data or a SHA-256 mismatch | The named-volume bundle or metadata sidecar is stale, truncated, or corrupt | Preserve provenance if needed, run `docker compose down`, then `docker compose run --rm adversaryflow cache-clear --yes`, and restart online with `docker compose up`. |
 | `Cache disk space` is `FAIL`, `no space left on device`, or the download cannot be promoted | Docker's storage filesystem has less than 256 MiB free | Check `docker system df`, free at least 256 MiB without deleting required volumes, or move Docker's data storage to a larger disk; then rerun `docker compose up`. |

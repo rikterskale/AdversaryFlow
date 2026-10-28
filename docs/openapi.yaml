@@ -227,11 +227,16 @@ paths:
   /api/ability-backlog:
     get:
       summary: List persisted ability gap backlog items
+      description: Pages are ordered by creation time and ID, newest first. Owner/status edits do not move an item between unfiltered pages. Follow next_offset until it is null.
       parameters:
         - name: limit
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 9007199254740991, default: 0 }
         - name: status
           in: query
           required: false
@@ -241,7 +246,12 @@ paths:
           description: Backlog items with owners and workflow status
           content:
             application/json:
-              schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } }
+              schema:
+                type: object
+                required: [items, next_offset]
+                properties:
+                  items: { type: array, items: { type: object } }
+                  next_offset: { type: [integer, 'null'], minimum: 0, description: Offset of the next page, or null at the end. }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
   /api/content-packs:
@@ -355,11 +365,16 @@ paths:
   /api/engagements:
     get:
       summary: List saved engagement records
+      description: Pages are ordered by update time and ID, newest first. Follow next_offset until it is null. Refresh from offset 0 after saving revisions to see the latest ordering.
       parameters:
         - name: limit
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 9007199254740991, default: 0 }
       responses:
         "200":
           description: Latest revision metadata for each saved engagement
@@ -367,9 +382,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [engagements]
+                required: [engagements, next_offset]
                 properties:
                   engagements: { type: array, items: { $ref: "#/components/schemas/EngagementSummary" } }
+                  next_offset: { type: [integer, 'null'], minimum: 0, description: Offset of the next page, or null at the end. }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
     post:

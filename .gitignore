@@ -2,6 +2,9 @@
 data/*.json
 data/*.tmp
 
+# Local Docker Compose overrides (port, token); see docs/TROUBLESHOOTING.md
+.env
+
 # Python
 __pycache__/
 *.pyc
@@ -23,6 +26,10 @@ frontend/choose-actor-preview.png
 tmp/pdfs/*.pdf
 tmp/pdfs/*.png
 /AdversaryForge_Updated_Spec.md
+
+# Local project review reports
+PROJECT_REVIEW.md
+project_review.md
 
 # Lint and type-checker caches (both tools also self-ignore, but be explicit)
 .mypy_cache/

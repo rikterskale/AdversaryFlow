@@ -184,8 +184,8 @@ export function ScopeScreen({ actor, workflow, onBack, onBuild }: ScopeScreenPro
 
       <div className="actionbar scope-actionbar">
         <Button onClick={onBack} variant="ghost"><Icon className="button-icon" name="arrow-left" /> Back</Button>
-        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${preview.runnable ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{contextText}</span><small>{preview.runnable ? `Commands target ${titlePlatform(scope.commandPlatform)} · review remains required before copy` : "Adjust platform, stages, or guardrails to continue."}</small></div></div>
-        <Button disabled={preview.runnable === 0} onClick={onBuild} variant="primary">Build plan <Icon className="button-icon" name="arrow-right" /></Button>
+        <div aria-live="polite" className="actionbar__context"><span className={`context-dot ${preview.runnable ? "is-ready" : ""}`} aria-hidden="true" /><div><span id="actionbarCtx">{contextText}</span><small>{preview.runnable ? `Commands target ${titlePlatform(scope.commandPlatform)} · review remains required before copy` : preview.total ? "You can review and report coverage gaps. Commands remain unavailable under this scope." : "Enable a stage or adjust your filters to continue."}</small></div></div>
+        <Button disabled={preview.total === 0} onClick={onBuild} variant="primary">Build plan <Icon className="button-icon" name="arrow-right" /></Button>
       </div>
     </section>
   );

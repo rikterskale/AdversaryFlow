@@ -22,4 +22,6 @@ LOOPBACK_PING = "ping -n 1 127.0.0.1"
 
 
 def loopback_tcp(note: str = LOOPBACK_TCP_NOTE) -> Dict[str, Any]:
-    return c("windows", LOOPBACK_TCP, note, requires_network=True, network_targets=["127.0.0.1"])
+    # Loopback-only: exempt from the external-network guardrail but still
+    # labelled with a loopback target for operator review.
+    return c("windows", LOOPBACK_TCP, note, network_targets=["127.0.0.1"])

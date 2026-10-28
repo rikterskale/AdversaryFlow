@@ -53,6 +53,24 @@ function scope(overrides: Partial<ScopeSettings> = {}): ScopeSettings {
 }
 
 describe("scopeModel", () => {
+  it("selects an eligible same-OS alternative and preserves an explicit choice", () => {
+    const blocked = { ...baseCommand, command_id: "a".repeat(64), requires_network: true };
+    const safe = { ...baseCommand, command_id: "b".repeat(64), command: "hostname" };
+    const variants = technique({ commands: [blocked, safe] });
+    expect(resolveCommand(variants, scope()).command).toBe("hostname");
+    expect(resolveCommand(variants, scope({ commandSelections: { T1033: blocked.command_id } })).availability_status).toBe("permission_required");
+    expect(resolveCommand(variants, scope({ commandSelections: { T1033: "c".repeat(64) } })).unsupported).toBe(true);
+  });
+
+  it("distinguishes a known inapplicable OS from missing catalog coverage", () => {
+    expect(resolveCommand(technique({ platforms: ["Windows"] }), scope({ commandPlatform: "linux" })).availability_status).toBe("not_applicable");
+    expect(resolveCommand(technique({ platforms: ["Windows", "Linux"] }), scope({ commandPlatform: "linux" })).availability_status).toBe("unsupported");
+  });
+
+  it("shows unverified tools and credentials without claiming host readiness", () => {
+    const cloud = technique({ commands: [{ ...baseCommand, environment: "cloud", required_tools: ["az"], required_credentials: ["Authorized Azure account"] }] });
+    expect(resolveCommand(cloud, scope())).toMatchObject({ availability_status: "prerequisites_unverified", availability_reasons: ["Confirm az is installed on the execution host.", "Confirm access: Authorized Azure account."] });
+  });
   it("never substitutes a command from another platform", () => {
     const selected = resolveCommand(technique(), scope({ commandPlatform: "linux" }));
     expect(selected).toMatchObject({ unsupported: true, platform: "linux" });
@@ -70,6 +88,22 @@ describe("scopeModel", () => {
     const allowed = resolveCommand(risky, scope({ allowNetwork: true, allowAdmin: true, allowHighRisk: true }));
     expect(allowed.command).toBe("whoami");
     expect(allowed.unsupported).not.toBe(true);
+  });
+
+  it("keeps elevated, network-active, and high-risk guardrails off by default", () => {
+    expect(defaultScope()).toMatchObject({ allowNetwork: false, allowAdmin: false, allowHighRisk: false });
+  });
+
+  it("treats a loopback-only block as runnable under the default guardrails", () => {
+    const loopback: Command = {
+      ...baseCommand,
+      requires_network: false,
+      network_targets: ["127.0.0.1"],
+      side_effects: ["loopback_network_activity"],
+    };
+    const resolved = resolveCommand(technique({ commands: [loopback] }), scope());
+    expect(resolved.unsupported).not.toBe(true);
+    expect(resolved.availability_status).toBe("runnable");
   });
 
   it("updates the live preview for pre-compromise and curated-only filters", () => {

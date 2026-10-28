@@ -75,15 +75,15 @@ class CatalogIntegrityTests(unittest.TestCase):
                 self.assertFalse(command["requires_admin"])
                 self.assertFalse(command["cleanup_required"])
                 self.assertEqual(command["telemetry_acceptance"]["technique_id"], technique_id)
-        self.assertEqual(len(exercises), 146)
+        self.assertEqual(len(exercises), 320)
         self.assertEqual(set(exercises), set(TECHNIQUE_SCENARIOS))
-        self.assertEqual(len({command["command"] for command in exercises.values()}), 146)
+        self.assertEqual(len({command["command"] for command in exercises.values()}), 320)
         for technique_id in exercises:
             records = [command for command in command_catalog.CURATED[technique_id] if command.get("exercise_kind")]
             self.assertEqual({command["platform"] for command in records}, {"windows", "linux", "macos"})
 
     def test_catalog_record_counts_are_explicit(self):
-        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 856)
+        self.assertEqual(sum(len(commands) for commands in command_catalog.CURATED.values()), 1576)
 
     def test_first_poc_lab_commands_are_copyable_on_each_os(self):
         """The getting-started one-liner must exist as a low-risk lab proxy on every OS."""
