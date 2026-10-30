@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools==84.0.0", "wheel==0.48.0"]
+requires = ["setuptools==84.2.1", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -31,7 +31,7 @@ dependencies = [
   "rfc3339-validator==0.1.4",
   "rfc3986-validator==0.1.1",
   "rpds-py==0.30.0",
-  "reportlab==5.0.1",
+  "reportlab==5.1.0",
   "typing_extensions==4.16.0",
   "waitress==3.0.2",
   "Werkzeug==3.1.9",
